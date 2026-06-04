@@ -197,9 +197,9 @@ groups:
 - name: slokit-slo-sli-recordings-myservice-requests-latency
   rules:
   - record: slo:sli_error:ratio_rate5m
-    expr: |
+    expr: |-
       1 - (
-        sum(rate(http_request_duration_seconds_bucket{job="myservice",le="0.3"}[5m]))
+        sum(rate(http_request_duration_seconds_bucket{job="myservice", le="0.3"}[5m]))
         /
         sum(rate(http_request_duration_seconds_count{job="myservice"}[5m]))
       )
@@ -210,9 +210,9 @@ groups:
       sloth_slo: requests-latency
       sloth_window: 5m
   - record: slo:sli_error:ratio_rate30m
-    expr: |
+    expr: |-
       1 - (
-        sum(rate(http_request_duration_seconds_bucket{job="myservice",le="0.3"}[30m]))
+        sum(rate(http_request_duration_seconds_bucket{job="myservice", le="0.3"}[30m]))
         /
         sum(rate(http_request_duration_seconds_count{job="myservice"}[30m]))
       )
@@ -223,9 +223,9 @@ groups:
       sloth_slo: requests-latency
       sloth_window: 30m
   - record: slo:sli_error:ratio_rate1h
-    expr: |
+    expr: |-
       1 - (
-        sum(rate(http_request_duration_seconds_bucket{job="myservice",le="0.3"}[1h]))
+        sum(rate(http_request_duration_seconds_bucket{job="myservice", le="0.3"}[1h]))
         /
         sum(rate(http_request_duration_seconds_count{job="myservice"}[1h]))
       )
@@ -236,9 +236,9 @@ groups:
       sloth_slo: requests-latency
       sloth_window: 1h
   - record: slo:sli_error:ratio_rate2h
-    expr: |
+    expr: |-
       1 - (
-        sum(rate(http_request_duration_seconds_bucket{job="myservice",le="0.3"}[2h]))
+        sum(rate(http_request_duration_seconds_bucket{job="myservice", le="0.3"}[2h]))
         /
         sum(rate(http_request_duration_seconds_count{job="myservice"}[2h]))
       )
@@ -249,9 +249,9 @@ groups:
       sloth_slo: requests-latency
       sloth_window: 2h
   - record: slo:sli_error:ratio_rate6h
-    expr: |
+    expr: |-
       1 - (
-        sum(rate(http_request_duration_seconds_bucket{job="myservice",le="0.3"}[6h]))
+        sum(rate(http_request_duration_seconds_bucket{job="myservice", le="0.3"}[6h]))
         /
         sum(rate(http_request_duration_seconds_count{job="myservice"}[6h]))
       )
@@ -262,9 +262,9 @@ groups:
       sloth_slo: requests-latency
       sloth_window: 6h
   - record: slo:sli_error:ratio_rate1d
-    expr: |
+    expr: |-
       1 - (
-        sum(rate(http_request_duration_seconds_bucket{job="myservice",le="0.3"}[1d]))
+        sum(rate(http_request_duration_seconds_bucket{job="myservice", le="0.3"}[1d]))
         /
         sum(rate(http_request_duration_seconds_count{job="myservice"}[1d]))
       )
@@ -275,9 +275,9 @@ groups:
       sloth_slo: requests-latency
       sloth_window: 1d
   - record: slo:sli_error:ratio_rate3d
-    expr: |
+    expr: |-
       1 - (
-        sum(rate(http_request_duration_seconds_bucket{job="myservice",le="0.3"}[3d]))
+        sum(rate(http_request_duration_seconds_bucket{job="myservice", le="0.3"}[3d]))
         /
         sum(rate(http_request_duration_seconds_count{job="myservice"}[3d]))
       )

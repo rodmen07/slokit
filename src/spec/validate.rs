@@ -62,6 +62,21 @@ pub fn validate(spec: &Spec) -> Result<()> {
             }
             Err(e) => errors.push(format!("{where_}: {e}")),
         }
+
+        if let Some(lat) = &slo.sli.latency {
+            if lat.histogram_metric.trim().is_empty() {
+                errors.push(format!(
+                    "{where_}: latency `histogram_metric` must not be empty"
+                ));
+            }
+            match lat.threshold.trim().parse::<f64>() {
+                Ok(v) if v.is_finite() && v > 0.0 => {}
+                _ => errors.push(format!(
+                    "{where_}: latency `threshold` must be a positive number, got '{}'",
+                    lat.threshold
+                )),
+            }
+        }
     }
 
     if errors.is_empty() {
@@ -113,6 +128,24 @@ slos:
         assert!(msg.contains("not a percentage")); // objective 150
         assert!(msg.contains("missing the")); // error_query has no token
         assert!(msg.contains("duplicate SLO name"));
-        assert!(msg.contains("no `events` or `raw` SLI"));
+        assert!(msg.contains("has no `events`, `raw`, or `latency` SLI"));
+    }
+
+    #[test]
+    fn reports_bad_latency_fields() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.0
+    sli:
+      latency:
+        histogram_metric: ""
+        threshold: abc
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let msg = spec.validate().unwrap_err().to_string();
+        assert!(msg.contains("`histogram_metric` must not be empty"));
+        assert!(msg.contains("`threshold` must be a positive number"));
     }
 }

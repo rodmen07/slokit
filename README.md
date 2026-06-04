@@ -78,8 +78,9 @@ Burn-rate alert thresholds (error ratio that fires each window):
 
 ## Spec format
 
-`slokit` reads the `sloth` `prometheus/v1` spec, plus one extension: an optional
-per-SLO `period` (sloth only offers this as a global flag).
+`slokit` reads the `sloth` `prometheus/v1` spec, plus slokit extensions: an
+optional per-SLO `period` (sloth only offers this as a global flag) and a
+`latency` SLI (see below).
 
 ```yaml
 version: "prometheus/v1"
@@ -101,6 +102,35 @@ slos:
       ticket_alert:
         labels: { severity: ticket }
 ```
+
+Each SLO has exactly one of three SLI shapes:
+
+- `events` (`error_query` / `total_query`): bad events over total events.
+- `raw` (`error_ratio_query`): a query that already yields an error ratio.
+- `latency` (slokit extension): the fraction of requests slower than a
+  histogram bucket threshold. slokit generates the bucket math so you do not
+  hand-write it:
+
+  ```yaml
+  sli:
+    latency:
+      histogram_metric: http_request_duration_seconds  # base name, no _bucket/_count suffix
+      threshold: "0.3"                                  # the `le` bucket boundary
+      selector: job="myservice"                         # optional label matchers, no braces
+  ```
+
+  This generates, at every window:
+
+  ```promql
+  1 - (
+    sum(rate(http_request_duration_seconds_bucket{job="myservice", le="0.3"}[{{.window}}]))
+    /
+    sum(rate(http_request_duration_seconds_count{job="myservice"}[{{.window}}]))
+  )
+  ```
+
+The `events` and `raw` query strings must contain the `{{.window}}` template
+token; `latency` is generated and needs none.
 
 ## Library
 

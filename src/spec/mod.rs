@@ -3,8 +3,9 @@
 //!
 //! The model deserializes existing `sloth` `prometheus/v1` specs unchanged
 //! (unknown fields are ignored, so newer `sloth` keys do not break parsing) and
-//! adds an optional per-SLO [`SloSpec::period`] override, which `sloth` only
-//! exposes as a global CLI flag.
+//! adds slokit extensions: an optional per-SLO [`SloSpec::period`] override
+//! (which `sloth` only exposes as a global CLI flag) and a [`LatencySli`] SLI
+//! shape that generates the histogram bucket query for latency SLOs.
 
 mod parse;
 mod validate;
@@ -66,7 +67,7 @@ pub struct SloSpec {
     pub period: Option<String>,
 }
 
-/// The SLI definition: exactly one of `events` or `raw`.
+/// The SLI definition: exactly one of `events`, `raw`, or `latency`.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 pub struct SliSpec {
     /// Events-based SLI (bad events over total events).
@@ -75,6 +76,9 @@ pub struct SliSpec {
     /// Raw error-ratio SLI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub raw: Option<RawSli>,
+    /// Latency SLI generated from a Prometheus histogram (slokit extension).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency: Option<LatencySli>,
 }
 
 /// An events-based SLI.
@@ -91,6 +95,21 @@ pub struct EventsSli {
 pub struct RawSli {
     /// Query yielding an error ratio over `{{.window}}`.
     pub error_ratio_query: String,
+}
+
+/// A latency SLI generated from a Prometheus histogram.
+///
+/// Produces the error ratio "fraction of requests slower than `threshold`",
+/// i.e. `1 - (bucket(le=threshold) / count)`, so callers do not hand-write it.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct LatencySli {
+    /// Histogram base metric, without the `_bucket`/`_count` suffix.
+    pub histogram_metric: String,
+    /// The `le` bucket boundary, as a string (e.g. `"0.3"`).
+    pub threshold: String,
+    /// Optional label matchers, written without braces (e.g. `job="api"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selector: Option<String>,
 }
 
 /// Alerting metadata shared and per-severity.
@@ -165,24 +184,43 @@ impl SloSpec {
         Ok(Slo::new(objective, period))
     }
 
-    /// Build a core [`Sli`] from this spec's SLI definition.
+    /// Build a core [`Sli`] from this spec's SLI definition. Exactly one of
+    /// `events`, `raw`, or `latency` must be set.
     pub fn to_sli(&self) -> Result<Sli> {
-        match (&self.sli.events, &self.sli.raw) {
-            (Some(events), None) => Ok(Sli::Events {
+        let set_count = [
+            self.sli.events.is_some(),
+            self.sli.raw.is_some(),
+            self.sli.latency.is_some(),
+        ]
+        .iter()
+        .filter(|x| **x)
+        .count();
+        if set_count > 1 {
+            return Err(SlokitError::Spec(format!(
+                "SLO '{}' sets multiple SLIs; pick one of `events`, `raw`, or `latency`",
+                self.name
+            )));
+        }
+        if let Some(events) = &self.sli.events {
+            Ok(Sli::Events {
                 error_query: events.error_query.clone(),
                 total_query: events.total_query.clone(),
-            }),
-            (None, Some(raw)) => Ok(Sli::Raw {
+            })
+        } else if let Some(raw) = &self.sli.raw {
+            Ok(Sli::Raw {
                 error_ratio_query: raw.error_ratio_query.clone(),
-            }),
-            (Some(_), Some(_)) => Err(SlokitError::Spec(format!(
-                "SLO '{}' sets both `events` and `raw` SLIs; pick one",
+            })
+        } else if let Some(latency) = &self.sli.latency {
+            Ok(Sli::Latency {
+                histogram_metric: latency.histogram_metric.clone(),
+                threshold: latency.threshold.clone(),
+                selector: latency.selector.clone(),
+            })
+        } else {
+            Err(SlokitError::Spec(format!(
+                "SLO '{}' has no `events`, `raw`, or `latency` SLI",
                 self.name
-            ))),
-            (None, None) => Err(SlokitError::Spec(format!(
-                "SLO '{}' has no `events` or `raw` SLI",
-                self.name
-            ))),
+            )))
         }
     }
 
@@ -274,5 +312,45 @@ slos:
         error_ratio_query: my_ratio[{{.window}}]
 "#;
         assert!(Spec::from_yaml(yaml).is_ok());
+    }
+
+    #[test]
+    fn latency_sli_converts_to_core() {
+        let yaml = r#"
+service: s
+slos:
+  - name: latency
+    objective: 99.0
+    sli:
+      latency:
+        histogram_metric: http_request_duration_seconds
+        threshold: "0.3"
+        selector: job="api"
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let sli = spec.slos[0].to_sli().unwrap();
+        assert!(matches!(sli, Sli::Latency { .. }));
+        assert!(sli
+            .error_ratio_expr(Window::minutes(5))
+            .contains("le=\"0.3\""));
+    }
+
+    #[test]
+    fn multiple_slis_is_an_error() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.0
+    sli:
+      raw:
+        error_ratio_query: r[{{.window}}]
+      latency:
+        histogram_metric: m
+        threshold: "1"
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let err = spec.slos[0].to_sli().unwrap_err();
+        assert!(err.to_string().contains("multiple SLIs"));
     }
 }

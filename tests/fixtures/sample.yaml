@@ -24,13 +24,10 @@ slos:
     objective: 99.5
     description: "99.5% of requests are served under 300ms"
     sli:
-      raw:
-        error_ratio_query: |
-          1 - (
-            sum(rate(http_request_duration_seconds_bucket{job="myservice",le="0.3"}[{{.window}}]))
-            /
-            sum(rate(http_request_duration_seconds_count{job="myservice"}[{{.window}}]))
-          )
+      latency:
+        histogram_metric: http_request_duration_seconds
+        threshold: "0.3"
+        selector: job="myservice"
     alerting:
       page_alert:
         labels:
