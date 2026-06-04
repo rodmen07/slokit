@@ -40,6 +40,20 @@ slokit validate -i slos.yaml
 
 # Do the error-budget math from the terminal
 slokit calc --objective 99.9 --period 30d --total 1000000 --bad 250
+
+# Check a live Prometheus and report current budget/burn (exits 1 if any SLO breaches)
+slokit check -i slos.yaml --url http://localhost:9090 --window 1h
+```
+
+`check` evaluates each SLO's SLI directly against Prometheus (no deployed
+recording rules required) and prints a status table:
+
+```text
+service 'myservice' against http://localhost:9090 (current window 1h)
+
+STATUS  SLO                               CONSUMED  REMAINING      BURN
+OK      requests-availability               12.30%     87.70%     0.50x
+BREACH  requests-latency                   120.00%    -20.00%    15.00x
 ```
 
 `calc` output:
@@ -122,8 +136,9 @@ println!("{}", ruleset.to_prometheus_yaml()?);
 
 | Feature | Default | Pulls in | Enables |
 |---------|---------|----------|---------|
-| `cli`   | yes     | `clap`, `anyhow`, `spec` | the `slokit` binary |
+| `cli`   | yes     | `clap`, `anyhow`, `spec`, `check` | the `slokit` binary |
 | `spec`  | yes     | `serde`, `serde_norway`  | spec parsing and rule generation |
+| `check` | yes     | `reqwest`, `serde_json`  | live Prometheus querying (`PrometheusClient`, `check_spec`) |
 
 For the lean math-only core: `slokit = { version = "0.1", default-features = false }`.
 

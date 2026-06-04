@@ -68,3 +68,7 @@ pub mod spec;
 #[cfg(feature = "spec")]
 #[cfg_attr(docsrs, doc(cfg(feature = "spec")))]
 pub mod generate;
+
+#[cfg(feature = "check")]
+#[cfg_attr(docsrs, doc(cfg(feature = "check")))]
+pub mod check;

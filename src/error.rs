@@ -23,6 +23,11 @@ pub enum SlokitError {
     /// line per problem found.
     #[error("validation failed:\n{0}")]
     Validation(String),
+
+    /// A live Prometheus query failed (transport, HTTP status, or response
+    /// shape). Only produced with the `check` feature.
+    #[error("prometheus query failed: {0}")]
+    Query(String),
 }
 
 /// Convenience alias used throughout the crate.

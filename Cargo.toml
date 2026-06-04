@@ -1,6 +1,6 @@
 [package]
 name = "slokit"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.82"
 description = "SLO and error-budget engine for Rust: compute error budgets and burn rates, and generate multi-window multi-burn-rate Prometheus alert rules from sloth-compatible specs."
@@ -17,15 +17,23 @@ exclude = ["/.github"]
 default = ["cli"]
 # Spec parsing + Prometheus rule generation (pulls in serde/yaml).
 spec = ["dep:serde", "dep:serde_norway"]
+# Live querying of a Prometheus HTTP API to report current budget/burn.
+check = ["spec", "dep:reqwest", "dep:serde_json"]
 # The CLI binary. Library consumers can disable it with `default-features = false`.
-cli = ["dep:clap", "dep:anyhow", "spec"]
+cli = ["dep:clap", "dep:anyhow", "spec", "check"]
 
 [dependencies]
 thiserror = "2"
 serde = { version = "1", features = ["derive"], optional = true }
 serde_norway = { version = "0.9", optional = true }
+serde_json = { version = "1", optional = true }
 clap = { version = "4", features = ["derive"], optional = true }
 anyhow = { version = "1", optional = true }
+reqwest = { version = "0.12", default-features = false, features = [
+    "blocking",
+    "json",
+    "rustls-tls",
+], optional = true }
 
 [dev-dependencies]
 insta = { version = "1", features = ["yaml"] }

@@ -7,6 +7,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
 use slokit::generate::{generate_rules_with, GenerateOptions};
 use slokit::spec::Spec;
 use slokit::{BurnRate, MwmbrConfig, Objective, Slo, Window};
@@ -30,6 +31,8 @@ enum Command {
     Validate(ValidateArgs),
     /// Compute error budget and burn-rate thresholds from the command line.
     Calc(CalcArgs),
+    /// Query a live Prometheus and report current budget and burn rate.
+    Check(CheckArgs),
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -67,6 +70,28 @@ struct ValidateArgs {
 }
 
 #[derive(Args)]
+struct CheckArgs {
+    /// Input spec file (YAML).
+    #[arg(short, long)]
+    input: PathBuf,
+    /// Prometheus base URL, e.g. http://localhost:9090.
+    #[arg(short, long)]
+    url: String,
+    /// Short window for the "current" burn rate.
+    #[arg(long, default_value = "1h")]
+    window: String,
+    /// Default SLO period for SLOs that do not set their own.
+    #[arg(long, default_value = "30d")]
+    period: String,
+    /// Bearer token sent with each request.
+    #[arg(long)]
+    bearer_token: Option<String>,
+    /// Per-request timeout in seconds.
+    #[arg(long, default_value_t = 30)]
+    timeout: u64,
+}
+
+#[derive(Args)]
 struct CalcArgs {
     /// Objective as a percentage, e.g. 99.9.
     #[arg(long)]
@@ -88,6 +113,7 @@ fn main() -> Result<()> {
         Command::Generate(args) => run_generate(args),
         Command::Validate(args) => run_validate(args),
         Command::Calc(args) => run_calc(args),
+        Command::Check(args) => run_check(args),
     }
 }
 
@@ -178,6 +204,64 @@ fn run_calc(args: CalcArgs) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn run_check(args: CheckArgs) -> Result<()> {
+    let spec = Spec::from_path(&args.input)
+        .with_context(|| format!("loading spec from {}", args.input.display()))?;
+    let default_period = Window::parse(&args.period)?;
+    let current_window = Window::parse(&args.window)?;
+
+    let mut client = PrometheusClient::with_timeout(&args.url, Duration::from_secs(args.timeout))?;
+    if let Some(token) = args.bearer_token {
+        client = client.with_bearer_token(token);
+    }
+
+    let statuses = check_spec(&client, &spec, default_period, current_window)?;
+
+    println!(
+        "service '{}' against {} (current window {})\n",
+        spec.service, args.url, current_window
+    );
+    println!(
+        "{:<7} {:<32} {:>9} {:>10} {:>9}",
+        "STATUS", "SLO", "CONSUMED", "REMAINING", "BURN"
+    );
+    let mut breaching = false;
+    for s in &statuses {
+        breaching |= s.level == StatusLevel::Breaching;
+        print_status_row(s);
+    }
+
+    if breaching {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+fn print_status_row(s: &SloStatus) {
+    println!(
+        "{:<7} {:<32} {:>9} {:>10} {:>9}",
+        s.level.label(),
+        s.name,
+        opt_pct(s.budget_consumed_ratio),
+        opt_pct(s.budget_remaining_ratio),
+        opt_burn(s.current_burn_rate),
+    );
+}
+
+fn opt_pct(v: Option<f64>) -> String {
+    match v {
+        Some(x) => format!("{:.2}%", x * 100.0),
+        None => "n/a".to_string(),
+    }
+}
+
+fn opt_burn(v: Option<f64>) -> String {
+    match v {
+        Some(x) => format!("{x:.2}x"),
+        None => "n/a".to_string(),
+    }
 }
 
 /// Render a ratio as a percentage with a sensible number of digits.
