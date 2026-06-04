@@ -1,0 +1,5 @@
+/target
+# rustfmt leaves these behind on interrupted/locked runs
+*.rs.tmp.*
+# insta rejected snapshots
+*.snap.new

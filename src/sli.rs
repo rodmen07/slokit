@@ -1,0 +1,95 @@
+//! Service Level Indicators: how the "error ratio" for an SLO is measured.
+
+use crate::window::Window;
+
+/// The template token replaced with each lookback window when rendering
+/// queries. Matches `sloth`'s Go-template convention.
+pub const WINDOW_TOKEN: &str = "{{.window}}";
+
+/// How an SLO's error ratio is computed from Prometheus.
+///
+/// Mirrors `sloth`'s two SLI shapes: an events-based SLI (bad events over total
+/// events) or a raw error-ratio query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Sli {
+    /// Bad events divided by total events. Both queries should contain the
+    /// [`WINDOW_TOKEN`].
+    Events {
+        /// Query counting failing events over the window.
+        error_query: String,
+        /// Query counting all events over the window.
+        total_query: String,
+    },
+    /// A query that already yields an error ratio in `[0, 1]`. Should contain
+    /// the [`WINDOW_TOKEN`].
+    Raw {
+        /// Query yielding the error ratio over the window.
+        error_ratio_query: String,
+    },
+}
+
+impl Sli {
+    /// Render the SLI's error-ratio PromQL expression for a given window,
+    /// substituting [`WINDOW_TOKEN`] with the Prometheus duration.
+    ///
+    /// For [`Sli::Events`] this is `(error) / (total)`; for [`Sli::Raw`] it is
+    /// the raw query as written.
+    pub fn error_ratio_expr(&self, window: Window) -> String {
+        match self {
+            Sli::Events {
+                error_query,
+                total_query,
+            } => {
+                format!(
+                    "({})\n/\n({})",
+                    substitute_window(error_query, window),
+                    substitute_window(total_query, window)
+                )
+            }
+            Sli::Raw { error_ratio_query } => substitute_window(error_ratio_query, window),
+        }
+    }
+
+    /// Every query string this SLI carries, for validation.
+    pub fn queries(&self) -> Vec<&str> {
+        match self {
+            Sli::Events {
+                error_query,
+                total_query,
+            } => vec![error_query, total_query],
+            Sli::Raw { error_ratio_query } => vec![error_ratio_query],
+        }
+    }
+}
+
+/// Replace the window template token (with or without surrounding spaces) by the
+/// Prometheus duration string for `window`.
+pub fn substitute_window(query: &str, window: Window) -> String {
+    let replacement = window.prometheus();
+    query
+        .replace("{{ .window }}", &replacement)
+        .replace(WINDOW_TOKEN, &replacement)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn events_expr_divides_error_by_total() {
+        let sli = Sli::Events {
+            error_query: "sum(rate(errors[{{.window}}]))".to_string(),
+            total_query: "sum(rate(total[{{.window}}]))".to_string(),
+        };
+        let expr = sli.error_ratio_expr(Window::minutes(5));
+        assert_eq!(expr, "(sum(rate(errors[5m])))\n/\n(sum(rate(total[5m])))");
+    }
+
+    #[test]
+    fn raw_expr_substitutes_window() {
+        let sli = Sli::Raw {
+            error_ratio_query: "my_ratio[{{ .window }}]".to_string(),
+        };
+        assert_eq!(sli.error_ratio_expr(Window::hours(1)), "my_ratio[1h]");
+    }
+}

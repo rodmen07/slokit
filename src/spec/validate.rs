@@ -1,0 +1,118 @@
+//! Semantic validation for [`Spec`](super::Spec).
+//!
+//! Parsing only guarantees the YAML shape is right. Validation catches the
+//! mistakes that would otherwise produce broken or misleading Prometheus rules:
+//! out-of-range objectives, missing SLIs, duplicate names, and queries that
+//! forgot the `{{.window}}` template token.
+
+use std::collections::HashSet;
+
+use crate::error::{Result, SlokitError};
+use crate::sli::WINDOW_TOKEN;
+use crate::slo::Objective;
+use crate::window::Window;
+
+use super::Spec;
+
+/// Validate a spec. Returns [`SlokitError::Validation`] with one line per
+/// problem, or `Ok(())` when the spec is sound.
+pub fn validate(spec: &Spec) -> Result<()> {
+    let mut errors: Vec<String> = Vec::new();
+
+    if spec.service.trim().is_empty() {
+        errors.push("`service` must not be empty".to_string());
+    }
+    if spec.slos.is_empty() {
+        errors.push("`slos` must contain at least one SLO".to_string());
+    }
+
+    let mut seen: HashSet<&str> = HashSet::new();
+    for (i, slo) in spec.slos.iter().enumerate() {
+        let where_ = if slo.name.is_empty() {
+            format!("slos[{i}]")
+        } else {
+            format!("slo '{}'", slo.name)
+        };
+
+        if slo.name.trim().is_empty() {
+            errors.push(format!("{where_}: `name` must not be empty"));
+        } else if !seen.insert(slo.name.as_str()) {
+            errors.push(format!("{where_}: duplicate SLO name"));
+        }
+
+        if let Err(e) = Objective::percent(slo.objective) {
+            errors.push(format!("{where_}: {e}"));
+        }
+
+        if let Some(period) = &slo.period {
+            if let Err(e) = Window::parse(period) {
+                errors.push(format!("{where_}: {e}"));
+            }
+        }
+
+        match slo.to_sli() {
+            Ok(sli) => {
+                for query in sli.queries() {
+                    if !query.contains(WINDOW_TOKEN) && !query.contains("{{ .window }}") {
+                        errors.push(format!(
+                            "{where_}: query is missing the {WINDOW_TOKEN} template token: {query}"
+                        ));
+                    }
+                }
+            }
+            Err(e) => errors.push(format!("{where_}: {e}")),
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(SlokitError::Validation(errors.join("\n")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_a_sound_spec() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      events:
+        error_query: sum(rate(err[{{.window}}]))
+        total_query: sum(rate(tot[{{.window}}]))
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        assert!(spec.validate().is_ok());
+    }
+
+    #[test]
+    fn reports_multiple_problems() {
+        let yaml = r#"
+service: ""
+slos:
+  - name: a
+    objective: 150
+    sli:
+      events:
+        error_query: sum(rate(err[5m]))
+        total_query: sum(rate(tot[{{.window}}]))
+  - name: a
+    objective: 99.0
+    sli: {}
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let err = spec.validate().unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("`service` must not be empty"));
+        assert!(msg.contains("not a percentage")); // objective 150
+        assert!(msg.contains("missing the")); // error_query has no token
+        assert!(msg.contains("duplicate SLO name"));
+        assert!(msg.contains("no `events` or `raw` SLI"));
+    }
+}

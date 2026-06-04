@@ -1,0 +1,43 @@
+[package]
+name = "slokit"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "SLO and error-budget engine for Rust: compute error budgets and burn rates, and generate multi-window multi-burn-rate Prometheus alert rules from sloth-compatible specs."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rodmen07/slokit"
+homepage = "https://github.com/rodmen07/slokit"
+documentation = "https://docs.rs/slokit"
+readme = "README.md"
+keywords = ["slo", "sre", "prometheus", "error-budget", "observability"]
+categories = ["command-line-utilities", "development-tools"]
+exclude = ["/.github"]
+
+[features]
+default = ["cli"]
+# Spec parsing + Prometheus rule generation (pulls in serde/yaml).
+spec = ["dep:serde", "dep:serde_norway"]
+# The CLI binary. Library consumers can disable it with `default-features = false`.
+cli = ["dep:clap", "dep:anyhow", "spec"]
+
+[dependencies]
+thiserror = "2"
+serde = { version = "1", features = ["derive"], optional = true }
+serde_norway = { version = "0.9", optional = true }
+clap = { version = "4", features = ["derive"], optional = true }
+anyhow = { version = "1", optional = true }
+
+[dev-dependencies]
+insta = { version = "1", features = ["yaml"] }
+
+[lib]
+name = "slokit"
+path = "src/lib.rs"
+
+[[bin]]
+name = "slokit"
+path = "src/bin/slokit.rs"
+required-features = ["cli"]
+
+[package.metadata.docs.rs]
+all-features = true

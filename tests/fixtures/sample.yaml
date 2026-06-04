@@ -1,0 +1,40 @@
+version: "prometheus/v1"
+service: myservice
+labels:
+  owner: team-platform
+slos:
+  - name: requests-availability
+    objective: 99.9
+    description: "99.9% of HTTP requests succeed"
+    sli:
+      events:
+        error_query: sum(rate(http_request_duration_seconds_count{job="myservice",code=~"5.."}[{{.window}}]))
+        total_query: sum(rate(http_request_duration_seconds_count{job="myservice"}[{{.window}}]))
+    alerting:
+      name: MyServiceHighErrorRate
+      annotations:
+        runbook: https://runbooks.example.com/myservice
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket
+  - name: requests-latency
+    objective: 99.5
+    description: "99.5% of requests are served under 300ms"
+    sli:
+      raw:
+        error_ratio_query: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{job="myservice",le="0.3"}[{{.window}}]))
+            /
+            sum(rate(http_request_duration_seconds_count{job="myservice"}[{{.window}}]))
+          )
+    alerting:
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket
