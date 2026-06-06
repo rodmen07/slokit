@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
+use slokit::dashboard::dashboard_json;
 use slokit::generate::{generate_rules_with, GenerateOptions};
 use slokit::spec::Spec;
 use slokit::{BurnRate, MwmbrConfig, Objective, Slo, Window};
@@ -33,6 +34,8 @@ enum Command {
     Calc(CalcArgs),
     /// Query a live Prometheus and report current budget and burn rate.
     Check(CheckArgs),
+    /// Generate a Grafana dashboard (JSON) from a spec.
+    Dashboard(DashboardArgs),
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -67,6 +70,16 @@ struct ValidateArgs {
     /// Input spec file (YAML).
     #[arg(short, long)]
     input: PathBuf,
+}
+
+#[derive(Args)]
+struct DashboardArgs {
+    /// Input spec file (YAML).
+    #[arg(short, long)]
+    input: PathBuf,
+    /// Output file. Defaults to stdout.
+    #[arg(short, long)]
+    output: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -114,7 +127,26 @@ fn main() -> Result<()> {
         Command::Validate(args) => run_validate(args),
         Command::Calc(args) => run_calc(args),
         Command::Check(args) => run_check(args),
+        Command::Dashboard(args) => run_dashboard(args),
     }
+}
+
+fn run_dashboard(args: DashboardArgs) -> Result<()> {
+    let spec = Spec::from_path(&args.input)
+        .with_context(|| format!("loading spec from {}", args.input.display()))?;
+    spec.validate()?;
+    let rendered = dashboard_json(&spec)?;
+    match args.output {
+        Some(path) => {
+            std::fs::write(&path, rendered)
+                .with_context(|| format!("writing dashboard to {}", path.display()))?;
+            eprintln!("wrote dashboard to {}", path.display());
+        }
+        None => {
+            std::io::stdout().write_all(rendered.as_bytes())?;
+        }
+    }
+    Ok(())
 }
 
 fn run_generate(args: GenerateArgs) -> Result<()> {

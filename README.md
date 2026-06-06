@@ -43,7 +43,16 @@ slokit calc --objective 99.9 --period 30d --total 1000000 --bad 250
 
 # Check a live Prometheus and report current budget/burn (exits 1 if any SLO breaches)
 slokit check -i slos.yaml --url http://localhost:9090 --window 1h
+
+# Generate a Grafana dashboard (JSON) from a spec
+slokit dashboard -i slos.yaml -o dashboard.json
 ```
+
+`dashboard` emits Grafana dashboard JSON with a block per SLO (error budget
+remaining, current burn rate, objective, and the SLI error ratio over time),
+querying the same `slo:...` metrics the generator produces. It declares a
+`datasource` template variable, so it imports into any Grafana with a Prometheus
+data source.
 
 `check` evaluates each SLO's SLI directly against Prometheus (no deployed
 recording rules required) and prints a status table:
@@ -166,9 +175,10 @@ println!("{}", ruleset.to_prometheus_yaml()?);
 
 | Feature | Default | Pulls in | Enables |
 |---------|---------|----------|---------|
-| `cli`   | yes     | `clap`, `anyhow`, `spec`, `check` | the `slokit` binary |
+| `cli`   | yes     | `clap`, `anyhow`, `spec`, `check`, `dashboard` | the `slokit` binary |
 | `spec`  | yes     | `serde`, `serde_norway`  | spec parsing and rule generation |
 | `check` | yes     | `reqwest`, `serde_json`  | live Prometheus querying (`PrometheusClient`, `check_spec`) |
+| `dashboard` | yes | `serde_json`             | Grafana dashboard generation (`dashboard_json`) |
 
 For the lean math-only core: `slokit = { version = "0.1", default-features = false }`.
 

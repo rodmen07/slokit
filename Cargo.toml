@@ -1,6 +1,6 @@
 [package]
 name = "slokit"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.82"
 description = "SLO and error-budget engine for Rust: compute error budgets and burn rates, and generate multi-window multi-burn-rate Prometheus alert rules from sloth-compatible specs."
@@ -19,8 +19,10 @@ default = ["cli"]
 spec = ["dep:serde", "dep:serde_norway"]
 # Live querying of a Prometheus HTTP API to report current budget/burn.
 check = ["spec", "dep:reqwest", "dep:serde_json"]
+# Grafana dashboard JSON generation from a spec.
+dashboard = ["spec", "dep:serde_json"]
 # The CLI binary. Library consumers can disable it with `default-features = false`.
-cli = ["dep:clap", "dep:anyhow", "spec", "check"]
+cli = ["dep:clap", "dep:anyhow", "spec", "check", "dashboard"]
 
 [dependencies]
 thiserror = "2"

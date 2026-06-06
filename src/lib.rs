@@ -72,3 +72,7 @@ pub mod generate;
 #[cfg(feature = "check")]
 #[cfg_attr(docsrs, doc(cfg(feature = "check")))]
 pub mod check;
+
+#[cfg(feature = "dashboard")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dashboard")))]
+pub mod dashboard;
