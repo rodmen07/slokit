@@ -7,6 +7,8 @@
 
 use std::time::Duration;
 
+use serde::Serialize;
+
 use crate::burn_rate::BurnRate;
 use crate::error::{Result, SlokitError};
 use crate::spec::{SloSpec, Spec};
@@ -108,7 +110,8 @@ fn parse_query_value(body: &serde_json::Value) -> Result<Option<f64>> {
 }
 
 /// How an SLO is doing right now.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum StatusLevel {
     /// Comfortably within budget.
     Ok,
@@ -146,16 +149,25 @@ fn level_for(remaining: Option<f64>, burn: Option<f64>) -> StatusLevel {
     }
 }
 
+/// Serialize a [`Window`] as its Prometheus duration string (e.g. `30d`).
+fn ser_window<S: serde::Serializer>(w: &Window, s: S) -> std::result::Result<S::Ok, S::Error> {
+    s.serialize_str(&w.prometheus())
+}
+
 /// A point-in-time status report for a single SLO.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SloStatus {
+    /// The service this SLO belongs to.
+    pub service: String,
     /// SLO name.
     pub name: String,
     /// Objective as a percentage.
     pub objective_percent: f64,
     /// SLO period.
+    #[serde(serialize_with = "ser_window")]
     pub period: Window,
     /// The short window used for the "current" burn rate.
+    #[serde(serialize_with = "ser_window")]
     pub current_window: Window,
     /// Average error ratio over the whole period, if data was returned.
     pub period_error_ratio: Option<f64>,
@@ -174,6 +186,7 @@ pub struct SloStatus {
 /// Check a single SLO against a live Prometheus.
 pub fn check_slo(
     client: &PrometheusClient,
+    service: &str,
     slo_spec: &SloSpec,
     default_period: Window,
     current_window: Window,
@@ -198,6 +211,7 @@ pub fn check_slo(
     let level = level_for(budget_remaining_ratio, current_burn_rate);
 
     Ok(SloStatus {
+        service: service.to_string(),
         name: slo_spec.name.clone(),
         objective_percent: slo.objective.as_percent(),
         period: slo.period,
@@ -223,7 +237,7 @@ pub fn check_spec(
     spec.validate()?;
     spec.slos
         .iter()
-        .map(|slo| check_slo(client, slo, default_period, current_window))
+        .map(|slo| check_slo(client, &spec.service, slo, default_period, current_window))
         .collect()
 }
 
@@ -264,6 +278,27 @@ mod tests {
             serde_json::from_str(r#"{"status":"error","error":"bad query"}"#).unwrap();
         let err = parse_query_value(&body).unwrap_err();
         assert!(err.to_string().contains("bad query"));
+    }
+
+    #[test]
+    fn slostatus_serializes_to_json() {
+        let status = SloStatus {
+            service: "svc".to_string(),
+            name: "slo".to_string(),
+            objective_percent: 99.9,
+            period: Window::days(30),
+            current_window: Window::hours(1),
+            period_error_ratio: Some(0.0005),
+            current_error_ratio: Some(0.001),
+            current_burn_rate: Some(1.0),
+            budget_consumed_ratio: Some(0.5),
+            budget_remaining_ratio: Some(0.5),
+            level: StatusLevel::Ok,
+        };
+        let json = serde_json::to_string(&status).unwrap();
+        assert!(json.contains("\"service\":\"svc\""));
+        assert!(json.contains("\"period\":\"30d\"")); // Window serialized as a string
+        assert!(json.contains("\"level\":\"ok\"")); // rename_all = lowercase
     }
 
     #[test]

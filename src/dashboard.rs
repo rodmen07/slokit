@@ -85,6 +85,16 @@ pub fn dashboard_json(spec: &Spec) -> Result<String> {
         .map_err(|e| SlokitError::Spec(e.to_string()))
 }
 
+/// Build dashboards for one or many specs: a single spec renders one dashboard
+/// object, multiple specs render a JSON array of dashboards.
+pub fn dashboards_json(specs: &[Spec]) -> Result<String> {
+    let out = match specs {
+        [one] => dashboard_value(one),
+        many => Value::Array(many.iter().map(dashboard_value).collect()),
+    };
+    serde_json::to_string_pretty(&out).map_err(|e| SlokitError::Spec(e.to_string()))
+}
+
 fn datasource() -> Value {
     json!({ "type": "prometheus", "uid": "${datasource}" })
 }

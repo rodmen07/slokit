@@ -1,17 +1,22 @@
 //! `slokit` command-line interface.
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
-use slokit::dashboard::dashboard_json;
-use slokit::generate::{generate_rules_with, GenerateOptions};
+use slokit::dashboard::dashboards_json;
+use slokit::generate::{generate_all, generate_rules_with, GenerateOptions};
 use slokit::spec::Spec;
 use slokit::{BurnRate, MwmbrConfig, Objective, Slo, Window};
+
+/// Load one spec (file) or many (directory of `*.yaml`/`*.yml`).
+fn load_specs(input: &Path) -> Result<Vec<Spec>> {
+    Spec::load(input).with_context(|| format!("loading specs from {}", input.display()))
+}
 
 #[derive(Parser)]
 #[command(
@@ -46,9 +51,27 @@ enum Format {
     Operator,
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum OutputFormat {
+    /// Human-readable status table.
+    Table,
+    /// Machine-readable JSON array of statuses.
+    Json,
+}
+
+#[derive(Clone, Copy, ValueEnum, PartialEq)]
+enum FailOn {
+    /// Exit non-zero only when an SLO is breaching (default).
+    Breach,
+    /// Exit non-zero when any SLO is warning or breaching.
+    Warning,
+    /// Never exit non-zero from status (only on errors).
+    Never,
+}
+
 #[derive(Args)]
 struct GenerateArgs {
-    /// Input spec file (YAML).
+    /// Input spec file or directory of specs (YAML).
     #[arg(short, long)]
     input: PathBuf,
     /// Output file. Defaults to stdout.
@@ -67,14 +90,14 @@ struct GenerateArgs {
 
 #[derive(Args)]
 struct ValidateArgs {
-    /// Input spec file (YAML).
+    /// Input spec file or directory of specs (YAML).
     #[arg(short, long)]
     input: PathBuf,
 }
 
 #[derive(Args)]
 struct DashboardArgs {
-    /// Input spec file (YAML).
+    /// Input spec file or directory of specs (YAML).
     #[arg(short, long)]
     input: PathBuf,
     /// Output file. Defaults to stdout.
@@ -84,12 +107,18 @@ struct DashboardArgs {
 
 #[derive(Args)]
 struct CheckArgs {
-    /// Input spec file (YAML).
+    /// Input spec file or directory of specs (YAML).
     #[arg(short, long)]
     input: PathBuf,
     /// Prometheus base URL, e.g. http://localhost:9090.
     #[arg(short, long)]
     url: String,
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+    output: OutputFormat,
+    /// Exit non-zero when a status reaches this level.
+    #[arg(long, value_enum, default_value_t = FailOn::Breach)]
+    fail_on: FailOn,
     /// Short window for the "current" burn rate.
     #[arg(long, default_value = "1h")]
     window: String,
@@ -131,65 +160,62 @@ fn main() -> Result<()> {
     }
 }
 
-fn run_dashboard(args: DashboardArgs) -> Result<()> {
-    let spec = Spec::from_path(&args.input)
-        .with_context(|| format!("loading spec from {}", args.input.display()))?;
-    spec.validate()?;
-    let rendered = dashboard_json(&spec)?;
-    match args.output {
+fn write_output(rendered: String, output: Option<PathBuf>, what: &str) -> Result<()> {
+    match output {
         Some(path) => {
             std::fs::write(&path, rendered)
-                .with_context(|| format!("writing dashboard to {}", path.display()))?;
-            eprintln!("wrote dashboard to {}", path.display());
+                .with_context(|| format!("writing {what} to {}", path.display()))?;
+            eprintln!("wrote {what} to {}", path.display());
         }
-        None => {
-            std::io::stdout().write_all(rendered.as_bytes())?;
-        }
+        None => std::io::stdout().write_all(rendered.as_bytes())?,
     }
     Ok(())
 }
 
-fn run_generate(args: GenerateArgs) -> Result<()> {
-    let spec = Spec::from_path(&args.input)
-        .with_context(|| format!("loading spec from {}", args.input.display()))?;
+fn run_dashboard(args: DashboardArgs) -> Result<()> {
+    let specs = load_specs(&args.input)?;
+    for spec in &specs {
+        spec.validate()?;
+    }
+    write_output(dashboards_json(&specs)?, args.output, "dashboard")
+}
 
+fn run_generate(args: GenerateArgs) -> Result<()> {
+    let specs = load_specs(&args.input)?;
     let opts = GenerateOptions {
         default_period: Window::parse(&args.period)?,
         mwmbr: MwmbrConfig::sre_default(),
     };
-    let ruleset = generate_rules_with(&spec, &opts)?;
 
     let rendered = match args.format {
-        Format::Prometheus => ruleset.to_prometheus_yaml()?,
+        // All specs merge into one rules document.
+        Format::Prometheus => generate_all(&specs, &opts)?.to_prometheus_yaml()?,
+        // One PrometheusRule resource per spec, joined as a multi-document YAML.
         Format::Operator => {
-            let name = args.name.as_deref().unwrap_or(&spec.service);
-            ruleset.to_operator_yaml(name, &spec.labels)?
+            let mut docs = Vec::with_capacity(specs.len());
+            for spec in &specs {
+                let name = args.name.clone().unwrap_or_else(|| spec.service.clone());
+                docs.push(generate_rules_with(spec, &opts)?.to_operator_yaml(&name, &spec.labels)?);
+            }
+            docs.join("---\n")
         }
     };
 
-    match args.output {
-        Some(path) => {
-            std::fs::write(&path, rendered)
-                .with_context(|| format!("writing rules to {}", path.display()))?;
-            eprintln!("wrote rules to {}", path.display());
-        }
-        None => {
-            std::io::stdout().write_all(rendered.as_bytes())?;
-        }
-    }
-    Ok(())
+    write_output(rendered, args.output, "rules")
 }
 
 fn run_validate(args: ValidateArgs) -> Result<()> {
-    let spec = Spec::from_path(&args.input)
-        .with_context(|| format!("loading spec from {}", args.input.display()))?;
-    spec.validate()?;
-    let slo_count = spec.slos.len();
-    println!(
-        "ok: '{}' is valid ({slo_count} SLO{})",
-        args.input.display(),
-        if slo_count == 1 { "" } else { "s" }
-    );
+    let specs = load_specs(&args.input)?;
+    for spec in &specs {
+        spec.validate()
+            .with_context(|| format!("service '{}'", spec.service))?;
+        println!(
+            "ok: '{}' is valid ({} SLO{})",
+            spec.service,
+            spec.slos.len(),
+            if spec.slos.len() == 1 { "" } else { "s" }
+        );
+    }
     Ok(())
 }
 
@@ -239,47 +265,66 @@ fn run_calc(args: CalcArgs) -> Result<()> {
 }
 
 fn run_check(args: CheckArgs) -> Result<()> {
-    let spec = Spec::from_path(&args.input)
-        .with_context(|| format!("loading spec from {}", args.input.display()))?;
-    let default_period = Window::parse(&args.period)?;
-    let current_window = Window::parse(&args.window)?;
+    // Distinguish exit codes: runtime errors exit 2, a fail-on hit exits 1.
+    let result = (|| -> Result<bool> {
+        let specs = load_specs(&args.input)?;
+        let default_period = Window::parse(&args.period)?;
+        let current_window = Window::parse(&args.window)?;
 
-    let mut client = PrometheusClient::with_timeout(&args.url, Duration::from_secs(args.timeout))?;
-    if let Some(token) = args.bearer_token {
-        client = client.with_bearer_token(token);
+        let mut client =
+            PrometheusClient::with_timeout(&args.url, Duration::from_secs(args.timeout))?;
+        if let Some(token) = &args.bearer_token {
+            client = client.with_bearer_token(token.clone());
+        }
+
+        let mut statuses = Vec::new();
+        for spec in &specs {
+            statuses.extend(check_spec(&client, spec, default_period, current_window)?);
+        }
+
+        match args.output {
+            OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&statuses)?),
+            OutputFormat::Table => print_status_table(&statuses, &args.url, current_window),
+        }
+
+        Ok(fail_threshold_hit(&statuses, args.fail_on))
+    })();
+
+    match result {
+        Ok(true) => std::process::exit(1),
+        Ok(false) => Ok(()),
+        Err(e) => {
+            eprintln!("Error: {e:#}");
+            std::process::exit(2);
+        }
     }
-
-    let statuses = check_spec(&client, &spec, default_period, current_window)?;
-
-    println!(
-        "service '{}' against {} (current window {})\n",
-        spec.service, args.url, current_window
-    );
-    println!(
-        "{:<7} {:<32} {:>9} {:>10} {:>9}",
-        "STATUS", "SLO", "CONSUMED", "REMAINING", "BURN"
-    );
-    let mut breaching = false;
-    for s in &statuses {
-        breaching |= s.level == StatusLevel::Breaching;
-        print_status_row(s);
-    }
-
-    if breaching {
-        std::process::exit(1);
-    }
-    Ok(())
 }
 
-fn print_status_row(s: &SloStatus) {
+fn fail_threshold_hit(statuses: &[SloStatus], fail_on: FailOn) -> bool {
+    statuses.iter().any(|s| match fail_on {
+        FailOn::Never => false,
+        FailOn::Warning => matches!(s.level, StatusLevel::Warning | StatusLevel::Breaching),
+        FailOn::Breach => s.level == StatusLevel::Breaching,
+    })
+}
+
+fn print_status_table(statuses: &[SloStatus], url: &str, current_window: Window) {
+    println!("checked against {url} (current window {current_window})\n");
     println!(
-        "{:<7} {:<32} {:>9} {:>10} {:>9}",
-        s.level.label(),
-        s.name,
-        opt_pct(s.budget_consumed_ratio),
-        opt_pct(s.budget_remaining_ratio),
-        opt_burn(s.current_burn_rate),
+        "{:<7} {:<14} {:<28} {:>9} {:>10} {:>9}",
+        "STATUS", "SERVICE", "SLO", "CONSUMED", "REMAINING", "BURN"
     );
+    for s in statuses {
+        println!(
+            "{:<7} {:<14} {:<28} {:>9} {:>10} {:>9}",
+            s.level.label(),
+            s.service,
+            s.name,
+            opt_pct(s.budget_consumed_ratio),
+            opt_pct(s.budget_remaining_ratio),
+            opt_burn(s.current_burn_rate),
+        );
+    }
 }
 
 fn opt_pct(v: Option<f64>) -> String {

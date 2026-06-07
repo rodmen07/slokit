@@ -44,9 +44,21 @@ slokit calc --objective 99.9 --period 30d --total 1000000 --bad 250
 # Check a live Prometheus and report current budget/burn (exits 1 if any SLO breaches)
 slokit check -i slos.yaml --url http://localhost:9090 --window 1h
 
+# Check machine-readably, failing the build on warnings too
+slokit check -i slos/ --url http://localhost:9090 --output json --fail-on warning
+
 # Generate a Grafana dashboard (JSON) from a spec
 slokit dashboard -i slos.yaml -o dashboard.json
 ```
+
+Every command's `-i` accepts a **single spec file or a directory** of
+`*.yaml`/`*.yml` specs. With a directory, `generate` merges all rules into one
+document, `check` reports across every service, and `dashboard` emits a JSON
+array of dashboards.
+
+`check` exit codes: `0` healthy, `1` the `--fail-on` level was reached
+(`breach` by default, or `warning`/`never`), `2` a runtime error. `--output
+json` prints the statuses as a JSON array for piping into other tools.
 
 `dashboard` emits Grafana dashboard JSON with a block per SLO (error budget
 remaining, current burn rate, objective, and the SLI error ratio over time),

@@ -183,6 +183,16 @@ pub fn generate_rules(spec: &Spec) -> Result<RuleSet> {
     generate_rules_with(spec, &GenerateOptions::default())
 }
 
+/// Generate one merged rule set covering several specs (their rule groups are
+/// concatenated), using explicit options.
+pub fn generate_all(specs: &[Spec], opts: &GenerateOptions) -> Result<RuleSet> {
+    let mut groups = Vec::new();
+    for spec in specs {
+        groups.extend(generate_rules_with(spec, opts)?.groups);
+    }
+    Ok(RuleSet { groups })
+}
+
 /// Generate the full rule set for a spec using explicit options.
 pub fn generate_rules_with(spec: &Spec, opts: &GenerateOptions) -> Result<RuleSet> {
     spec.validate()?;

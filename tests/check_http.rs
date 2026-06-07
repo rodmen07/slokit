@@ -62,8 +62,16 @@ slos:
     )
     .unwrap();
 
-    let status = check_slo(&client, &spec.slos[0], Window::days(30), Window::hours(1)).unwrap();
+    let status = check_slo(
+        &client,
+        &spec.service,
+        &spec.slos[0],
+        Window::days(30),
+        Window::hours(1),
+    )
+    .unwrap();
 
+    assert_eq!(status.service, "s");
     // Budget ratio is 0.001; an observed 0.0005 ratio consumes half the budget.
     assert!((status.budget_consumed_ratio.unwrap() - 0.5).abs() < 1e-9);
     assert!((status.budget_remaining_ratio.unwrap() - 0.5).abs() < 1e-9);

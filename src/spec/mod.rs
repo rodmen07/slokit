@@ -157,6 +157,17 @@ impl Spec {
         parse::from_path(path.as_ref())
     }
 
+    /// Read and parse every `*.yaml`/`*.yml` spec in a directory, sorted by path.
+    pub fn from_dir(dir: impl AsRef<std::path::Path>) -> Result<Vec<Self>> {
+        parse::from_dir(dir.as_ref())
+    }
+
+    /// Load one or many specs from a path: a file yields one spec, a directory
+    /// yields every `*.yaml`/`*.yml` spec it contains.
+    pub fn load(path: impl AsRef<std::path::Path>) -> Result<Vec<Self>> {
+        parse::load(path.as_ref())
+    }
+
     /// Validate the spec, returning [`SlokitError::Validation`] on any problem.
     pub fn validate(&self) -> Result<()> {
         validate(self)
