@@ -38,6 +38,10 @@ slokit generate -i slos.yaml --format operator
 # Validate a spec without generating
 slokit validate -i slos.yaml
 
+# Lint a spec for advisory issues (100% objective, period shorter than the
+# burn-rate windows, alerts missing routing labels, ...). --strict fails CI.
+slokit lint -i slos.yaml --strict
+
 # Do the error-budget math from the terminal
 slokit calc --objective 99.9 --period 30d --total 1000000 --bad 250
 

@@ -7,9 +7,11 @@
 //! (which `sloth` only exposes as a global CLI flag) and a [`LatencySli`] SLI
 //! shape that generates the histogram bucket query for latency SLOs.
 
+mod lint;
 mod parse;
 mod validate;
 
+pub use lint::{lint, Lint, LintLevel};
 pub use validate::validate;
 
 use std::collections::BTreeMap;
@@ -171,6 +173,14 @@ impl Spec {
     /// Validate the spec, returning [`SlokitError::Validation`] on any problem.
     pub fn validate(&self) -> Result<()> {
         validate(self)
+    }
+
+    /// Run advisory [`lint`] checks and return every finding (never fails).
+    ///
+    /// Unlike [`Spec::validate`], this reports legal-but-questionable
+    /// configurations rather than hard errors. An empty vec means no advisories.
+    pub fn lint(&self) -> Vec<Lint> {
+        lint(self)
     }
 }
 

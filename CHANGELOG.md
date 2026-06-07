@@ -1,0 +1,49 @@
+# Changelog
+
+All notable changes to slokit are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+slokit is pre-1.0; minor versions may include additive changes and, where noted,
+small breaking changes.
+
+## [0.6.0] - 2026-06-07
+
+### Added
+
+- `slokit lint` command and `Spec::lint` / `slokit::spec::lint` API: advisory
+  checks that complement `validate`. Where `validate` reports errors that make
+  generation wrong or impossible, `lint` reports legal-but-questionable
+  configuration:
+  - `OBJECTIVE_100` - objective of 100% leaves no error budget, so burn-rate
+    alerts can never fire.
+  - `OBJECTIVE_LOW` - objective below 50% is implausibly low.
+  - `PERIOD_TOO_SHORT` - SLO period is not longer than the longest burn-rate
+    window (3d in the default MWMBR model), so long-window alerts are meaningless.
+  - `NO_ALERT_LABELS` - a page/ticket alert has no labels (e.g. `severity`), so
+    Alertmanager routing may not match it.
+  - `ALL_ALERTS_DISABLED` - both alerts are disabled; no burn-rate alerts will be
+    generated for the SLO.
+  - `NO_DESCRIPTION` (info) - the SLO has no description.
+- `slokit lint --strict` exits non-zero when any warning-level finding is present
+  (CI gate); `--output json` emits the findings as a JSON array.
+
+## [0.5.0]
+
+- Multi-spec (directory) loading and richer `check` output.
+
+## [0.4.0]
+
+- Grafana dashboard generation (`slokit dashboard`).
+
+## [0.3.0]
+
+- Latency SLI helpers (histogram-bucket based latency SLOs).
+
+## [0.2.0]
+
+- Live `check` command querying a Prometheus HTTP API.
+
+## [0.1.0]
+
+- Initial release: error-budget and burn-rate core, sloth-compatible spec
+  parsing, and Prometheus MWMBR rule generation.

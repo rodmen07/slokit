@@ -10,7 +10,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
 use slokit::dashboard::dashboards_json;
 use slokit::generate::{generate_all, generate_rules_with, GenerateOptions};
-use slokit::spec::Spec;
+use slokit::spec::{Lint, LintLevel, Spec};
 use slokit::{BurnRate, MwmbrConfig, Objective, Slo, Window};
 
 /// Load one spec (file) or many (directory of `*.yaml`/`*.yml`).
@@ -35,6 +35,8 @@ enum Command {
     Generate(GenerateArgs),
     /// Validate an SLO spec without generating rules.
     Validate(ValidateArgs),
+    /// Report advisory lint findings for an SLO spec (legal but questionable config).
+    Lint(LintArgs),
     /// Compute error budget and burn-rate thresholds from the command line.
     Calc(CalcArgs),
     /// Query a live Prometheus and report current budget and burn rate.
@@ -96,6 +98,19 @@ struct ValidateArgs {
 }
 
 #[derive(Args)]
+struct LintArgs {
+    /// Input spec file or directory of specs (YAML).
+    #[arg(short, long)]
+    input: PathBuf,
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+    output: OutputFormat,
+    /// Exit non-zero when any warning-level finding is present.
+    #[arg(long)]
+    strict: bool,
+}
+
+#[derive(Args)]
 struct DashboardArgs {
     /// Input spec file or directory of specs (YAML).
     #[arg(short, long)]
@@ -154,6 +169,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Generate(args) => run_generate(args),
         Command::Validate(args) => run_validate(args),
+        Command::Lint(args) => run_lint(args),
         Command::Calc(args) => run_calc(args),
         Command::Check(args) => run_check(args),
         Command::Dashboard(args) => run_dashboard(args),
@@ -217,6 +233,70 @@ fn run_validate(args: ValidateArgs) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn run_lint(args: LintArgs) -> Result<()> {
+    let specs = load_specs(&args.input)?;
+
+    // Surface structural errors first; advisory findings only make sense for a
+    // spec that is otherwise valid.
+    for spec in &specs {
+        spec.validate()
+            .with_context(|| format!("service '{}'", spec.service))?;
+    }
+
+    let findings: Vec<(String, Lint)> = specs
+        .iter()
+        .flat_map(|spec| spec.lint().into_iter().map(|l| (spec.service.clone(), l)))
+        .collect();
+
+    match args.output {
+        OutputFormat::Json => {
+            let arr: Vec<_> = findings
+                .iter()
+                .map(|(service, l)| {
+                    serde_json::json!({
+                        "service": service,
+                        "level": l.level.label(),
+                        "code": l.code,
+                        "location": l.location,
+                        "message": l.message,
+                    })
+                })
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&arr)?);
+        }
+        OutputFormat::Table => print_lint_table(&findings),
+    }
+
+    let has_warning = findings
+        .iter()
+        .any(|(_, l)| l.level == LintLevel::Warning);
+    if args.strict && has_warning {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+fn print_lint_table(findings: &[(String, Lint)]) {
+    if findings.is_empty() {
+        println!("no lint findings");
+        return;
+    }
+    println!(
+        "{:<5} {:<14} {:<28} {:<20} {}",
+        "LEVEL", "SERVICE", "LOCATION", "CODE", "MESSAGE"
+    );
+    for (service, l) in findings {
+        println!(
+            "{:<5} {:<14} {:<28} {:<20} {}",
+            l.level.label(),
+            service,
+            l.location,
+            l.code,
+            l.message
+        );
+    }
 }
 
 fn run_calc(args: CalcArgs) -> Result<()> {
