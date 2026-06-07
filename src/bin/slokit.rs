@@ -282,8 +282,8 @@ fn print_lint_table(findings: &[(String, Lint)]) {
         return;
     }
     println!(
-        "{:<5} {:<14} {:<28} {:<20} {}",
-        "LEVEL", "SERVICE", "LOCATION", "CODE", "MESSAGE"
+        "{:<5} {:<14} {:<28} {:<20} MESSAGE",
+        "LEVEL", "SERVICE", "LOCATION", "CODE"
     );
     for (service, l) in findings {
         println!(
