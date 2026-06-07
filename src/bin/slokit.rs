@@ -269,9 +269,7 @@ fn run_lint(args: LintArgs) -> Result<()> {
         OutputFormat::Table => print_lint_table(&findings),
     }
 
-    let has_warning = findings
-        .iter()
-        .any(|(_, l)| l.level == LintLevel::Warning);
+    let has_warning = findings.iter().any(|(_, l)| l.level == LintLevel::Warning);
     if args.strict && has_warning {
         std::process::exit(1);
     }
