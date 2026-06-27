@@ -6,6 +6,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 slokit is pre-1.0; minor versions may include additive changes and, where noted,
 small breaking changes.
 
+## [0.6.1] - 2026-06-27
+
+### Fixed
+
+- Hardened live Prometheus checking to reject non-finite sample values (`NaN`,
+  `+Inf`, `-Inf`) instead of allowing misleading status computations.
+- Status-level evaluation now treats non-finite budget/burn inputs as
+  non-healthy.
+
+### Added
+
+- Integration coverage for bearer-token authentication in Prometheus client
+  HTTP requests.
+- Regression tests for non-finite sample parsing and status classification
+  behavior.
+
+### Changed
+
+- Formatting-only cleanup to satisfy strict `cargo fmt --check` CI enforcement.
+
 ## [0.6.0] - 2026-06-07
 
 ### Added
