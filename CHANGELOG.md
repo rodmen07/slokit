@@ -8,6 +8,18 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-06-27
+
+### Changed
+
+- Prometheus `status: error` responses now include `errorType` in query
+  diagnostics when available, improving operator-facing failure context.
+
+### Added
+
+- Parser regression coverage for `errorType` + `error` propagation in live
+  query response handling.
+
 ## [0.6.3] - 2026-06-27
 
 ### Changed

@@ -90,7 +90,13 @@ fn parse_query_value(body: &serde_json::Value) -> Result<Option<f64>> {
             .get("error")
             .and_then(|e| e.as_str())
             .unwrap_or("unknown error");
-        return Err(SlokitError::Query(msg.to_string()));
+        let err_type = body.get("errorType").and_then(|e| e.as_str()).unwrap_or("");
+        let full = if err_type.is_empty() {
+            msg.to_string()
+        } else {
+            format!("{err_type}: {msg}")
+        };
+        return Err(SlokitError::Query(full));
     }
     let data = body
         .get("data")
@@ -306,6 +312,16 @@ mod tests {
             serde_json::from_str(r#"{"status":"error","error":"bad query"}"#).unwrap();
         let err = parse_query_value(&body).unwrap_err();
         assert!(err.to_string().contains("bad query"));
+    }
+
+    #[test]
+    fn error_status_includes_error_type_when_present() {
+        let body: serde_json::Value = serde_json::from_str(
+            r#"{"status":"error","errorType":"bad_data","error":"parse failure"}"#,
+        )
+        .unwrap();
+        let err = parse_query_value(&body).unwrap_err().to_string();
+        assert!(err.contains("bad_data: parse failure"));
     }
 
     #[test]
