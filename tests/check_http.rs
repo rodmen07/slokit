@@ -5,6 +5,7 @@
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::sync::mpsc;
 use std::thread;
 
 use slokit::check::{check_slo, PrometheusClient, StatusLevel};
@@ -31,6 +32,32 @@ fn spawn_mock(body: &'static str, conns: usize) -> u16 {
         }
     });
     port
+}
+
+/// Serve one connection, return the raw request bytes to the caller, and
+/// respond with the provided JSON body.
+fn spawn_mock_capture_request(body: &'static str) -> (u16, mpsc::Receiver<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buf = [0u8; 2048];
+        let n = stream.read(&mut buf).unwrap_or(0);
+        let request = String::from_utf8_lossy(&buf[..n]).to_string();
+        let _ = tx.send(request);
+
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        );
+        let _ = stream.write_all(resp.as_bytes());
+        let _ = stream.flush();
+    });
+
+    (port, rx)
 }
 
 const VECTOR_0_0005: &str = r#"{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1719000000,"0.0005"]}]}}"#;
@@ -77,4 +104,19 @@ slos:
     assert!((status.budget_remaining_ratio.unwrap() - 0.5).abs() < 1e-9);
     assert!((status.current_burn_rate.unwrap() - 0.5).abs() < 1e-9);
     assert_eq!(status.level, StatusLevel::Ok);
+}
+
+#[test]
+fn query_scalar_sends_bearer_auth_header() {
+    let body = r#"{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1719000000,"0.0042"]}]}}"#;
+    let (port, rx) = spawn_mock_capture_request(body);
+    let client = PrometheusClient::new(format!("http://127.0.0.1:{port}"))
+        .unwrap()
+        .with_bearer_token("top-secret-token");
+
+    let value = client.query_scalar("up").unwrap();
+    assert_eq!(value, Some(0.0042));
+
+    let request = rx.recv().unwrap().to_ascii_lowercase();
+    assert!(request.contains("authorization: bearer top-secret-token"));
 }
