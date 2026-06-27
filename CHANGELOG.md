@@ -8,6 +8,8 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-06-27
+
 ### Changed
 
 - Prometheus HTTP non-success responses in `check` now include both status and
