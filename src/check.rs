@@ -105,6 +105,9 @@ fn parse_query_value(body: &serde_json::Value) -> Result<Option<f64>> {
         .get("resultType")
         .and_then(|s| s.as_str())
         .unwrap_or("");
+    if result_type.is_empty() {
+        return Err(SlokitError::Query("response missing `data.resultType`".into()));
+    }
     let value_str = match result_type {
         "scalar" => data
             .get("result")
@@ -342,6 +345,14 @@ mod tests {
         .unwrap();
         let err = parse_query_value(&body).unwrap_err().to_string();
         assert!(err.contains("unexpected resultType 'matrix'"));
+    }
+
+    #[test]
+    fn missing_result_type_is_reported() {
+        let body: serde_json::Value =
+            serde_json::from_str(r#"{"status":"success","data":{"result":[]}}"#).unwrap();
+        let err = parse_query_value(&body).unwrap_err().to_string();
+        assert!(err.contains("response missing `data.resultType`"));
     }
 
     #[test]

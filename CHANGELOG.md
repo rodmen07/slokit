@@ -8,6 +8,17 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.6.8] - 2026-06-27
+
+### Changed
+
+- Prometheus parsing now returns an explicit diagnostic when
+  `data.resultType` is missing from a successful query payload.
+
+### Added
+
+- Regression coverage for missing `data.resultType` response handling.
+
 ## [0.6.7] - 2026-06-27
 
 ### Added
