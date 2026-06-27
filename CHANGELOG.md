@@ -8,6 +8,13 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-06-27
+
+### Added
+
+- Integration coverage for Prometheus HTTP non-success responses with empty
+  bodies, confirming diagnostics still include the HTTP status line.
+
 ## [0.6.4] - 2026-06-27
 
 ### Changed

@@ -1,6 +1,6 @@
 [package]
 name = "slokit"
-version = "0.6.4"
+version = "0.6.5"
 edition = "2021"
 rust-version = "1.82"
 description = "SLO and error-budget engine for Rust: compute error budgets and burn rates, and generate multi-window multi-burn-rate Prometheus alert rules from sloth-compatible specs."

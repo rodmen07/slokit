@@ -197,3 +197,12 @@ fn query_scalar_http_error_includes_status_and_response_body() {
     assert!(err.contains("HTTP 503 Service Unavailable"));
     assert!(err.contains("prometheus upstream unavailable"));
 }
+
+#[test]
+fn query_scalar_http_error_with_empty_body_reports_status_only() {
+    let port = spawn_mock_status("", "502 Bad Gateway", 1);
+    let client = PrometheusClient::new(format!("http://127.0.0.1:{port}")).unwrap();
+
+    let err = client.query_scalar("up").unwrap_err().to_string();
+    assert!(err.contains("HTTP 502 Bad Gateway"));
+}
