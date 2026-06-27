@@ -57,11 +57,28 @@ impl PrometheusClient {
         }
         let resp = req.send().map_err(|e| SlokitError::Query(e.to_string()))?;
         if !resp.status().is_success() {
-            return Err(SlokitError::Query(format!("HTTP {}", resp.status())));
+            let status = resp.status();
+            let body = resp.text().unwrap_or_default();
+            return Err(SlokitError::Query(format_http_error(status, &body)));
         }
         let body: serde_json::Value = resp.json().map_err(|e| SlokitError::Query(e.to_string()))?;
         parse_query_value(&body)
     }
+}
+
+fn format_http_error(status: reqwest::StatusCode, body: &str) -> String {
+    let compact = body.replace(['\n', '\r'], " ");
+    let compact = compact.trim();
+    if compact.is_empty() {
+        return format!("HTTP {}", status);
+    }
+
+    let mut snippet: String = compact.chars().take(180).collect();
+    if compact.chars().count() > 180 {
+        snippet.push_str("...");
+    }
+
+    format!("HTTP {}: {}", status, snippet)
 }
 
 /// Extract the first sample value from a Prometheus instant-query response,
@@ -349,5 +366,21 @@ mod tests {
             level_for(Some(0.8), Some(f64::INFINITY)),
             StatusLevel::Warning
         );
+    }
+
+    #[test]
+    fn http_error_formatter_includes_status_and_body_snippet() {
+        let msg = format_http_error(
+            reqwest::StatusCode::BAD_GATEWAY,
+            "{\"error\":\"upstream timeout\"}",
+        );
+        assert!(msg.contains("HTTP 502 Bad Gateway"));
+        assert!(msg.contains("upstream timeout"));
+    }
+
+    #[test]
+    fn http_error_formatter_handles_empty_body() {
+        let msg = format_http_error(reqwest::StatusCode::INTERNAL_SERVER_ERROR, "   \n");
+        assert_eq!(msg, "HTTP 500 Internal Server Error");
     }
 }

@@ -8,6 +8,16 @@ small breaking changes.
 
 ## [Unreleased]
 
+### Changed
+
+- Prometheus HTTP non-success responses in `check` now include both status and
+  a trimmed response-body snippet in query errors for faster diagnosis.
+
+### Added
+
+- Integration coverage that validates HTTP status + response body propagation in
+  live check errors.
+
 ## [0.6.2] - 2026-06-27
 
 ### Added

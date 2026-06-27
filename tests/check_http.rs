@@ -34,6 +34,29 @@ fn spawn_mock(body: &'static str, conns: usize) -> u16 {
     port
 }
 
+/// Serve `conns` connections with a configurable non-200 status and JSON/text
+/// body, then stop.
+fn spawn_mock_status(body: &'static str, status: &str, conns: usize) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let status = status.to_string();
+    thread::spawn(move || {
+        for _ in 0..conns {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 2048];
+            let _ = stream.read(&mut buf);
+            let resp = format!(
+                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = stream.write_all(resp.as_bytes());
+            let _ = stream.flush();
+        }
+    });
+    port
+}
+
 /// Serve one connection, return the raw request bytes to the caller, and
 /// respond with the provided JSON body.
 fn spawn_mock_capture_request(body: &'static str) -> (u16, mpsc::Receiver<String>) {
@@ -159,4 +182,18 @@ slos:
     )
     .unwrap_err();
     assert!(err.to_string().contains("non-finite sample value"));
+}
+
+#[test]
+fn query_scalar_http_error_includes_status_and_response_body() {
+    let port = spawn_mock_status(
+        "{\"error\":\"prometheus upstream unavailable\"}",
+        "503 Service Unavailable",
+        1,
+    );
+    let client = PrometheusClient::new(format!("http://127.0.0.1:{port}")).unwrap();
+
+    let err = client.query_scalar("up").unwrap_err().to_string();
+    assert!(err.contains("HTTP 503 Service Unavailable"));
+    assert!(err.contains("prometheus upstream unavailable"));
 }
