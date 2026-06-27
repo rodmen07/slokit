@@ -8,6 +8,13 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.6.7] - 2026-06-27
+
+### Added
+
+- Parser regression coverage for unsupported Prometheus `resultType` values,
+  locking in actionable error messaging for unexpected API response shapes.
+
 ## [0.6.6] - 2026-06-27
 
 ### Added

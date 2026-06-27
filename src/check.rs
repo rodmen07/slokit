@@ -335,6 +335,16 @@ mod tests {
     }
 
     #[test]
+    fn unexpected_result_type_is_reported() {
+        let body: serde_json::Value = serde_json::from_str(
+            r#"{"status":"success","data":{"resultType":"matrix","result":[]}}"#,
+        )
+        .unwrap();
+        let err = parse_query_value(&body).unwrap_err().to_string();
+        assert!(err.contains("unexpected resultType 'matrix'"));
+    }
+
+    #[test]
     fn http_error_format_compacts_newlines() {
         let formatted = format_http_error(
             reqwest::StatusCode::BAD_GATEWAY,
