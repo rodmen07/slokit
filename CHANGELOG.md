@@ -8,6 +8,13 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-06-27
+
+### Added
+
+- Regression coverage for HTTP diagnostics formatting that verifies newline
+  compaction and truncation behavior for long non-success response bodies.
+
 ## [0.6.5] - 2026-06-27
 
 ### Added

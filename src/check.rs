@@ -335,6 +335,24 @@ mod tests {
     }
 
     #[test]
+    fn http_error_format_compacts_newlines() {
+        let formatted = format_http_error(
+            reqwest::StatusCode::BAD_GATEWAY,
+            "upstream\nfailed\rwith timeout",
+        );
+        assert!(formatted.contains("HTTP 502 Bad Gateway"));
+        assert!(formatted.contains("upstream failed with timeout"));
+    }
+
+    #[test]
+    fn http_error_format_truncates_long_body_with_ellipsis() {
+        let long_body = "x".repeat(220);
+        let formatted = format_http_error(reqwest::StatusCode::SERVICE_UNAVAILABLE, &long_body);
+        assert!(formatted.starts_with("HTTP 503 Service Unavailable: "));
+        assert!(formatted.ends_with("..."));
+    }
+
+    #[test]
     fn non_finite_vector_is_rejected() {
         let body: serde_json::Value = serde_json::from_str(
             r#"{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1719000000,"+Inf"]}]}}"#,
