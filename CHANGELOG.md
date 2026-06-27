@@ -8,6 +8,8 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-06-27
+
 ### Added
 
 - Integration coverage for live HTTP check paths that now explicitly rejects
