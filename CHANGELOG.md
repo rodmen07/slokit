@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 slokit is pre-1.0; minor versions may include additive changes and, where noted,
 small breaking changes.
 
+## [Unreleased]
+
+### Added
+
+- Integration coverage for live HTTP check paths that now explicitly rejects
+  non-finite Prometheus values (`NaN`, `+Inf`) before budget/burn calculations.
+
 ## [0.6.1] - 2026-06-27
 
 ### Fixed

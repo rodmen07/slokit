@@ -61,6 +61,8 @@ fn spawn_mock_capture_request(body: &'static str) -> (u16, mpsc::Receiver<String
 }
 
 const VECTOR_0_0005: &str = r#"{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1719000000,"0.0005"]}]}}"#;
+const VECTOR_NAN: &str = r#"{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1719000000,"NaN"]}]}}"#;
+const VECTOR_POS_INF: &str = r#"{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[1719000000,"+Inf"]}]}}"#;
 
 #[test]
 fn query_scalar_reads_value_over_http() {
@@ -119,4 +121,42 @@ fn query_scalar_sends_bearer_auth_header() {
 
     let request = rx.recv().unwrap().to_ascii_lowercase();
     assert!(request.contains("authorization: bearer top-secret-token"));
+}
+
+#[test]
+fn query_scalar_rejects_nan_from_http_response() {
+    let port = spawn_mock(VECTOR_NAN, 1);
+    let client = PrometheusClient::new(format!("http://127.0.0.1:{port}")).unwrap();
+
+    let err = client.query_scalar("up").unwrap_err();
+    assert!(err.to_string().contains("non-finite sample value"));
+}
+
+#[test]
+fn check_slo_rejects_infinite_sample_from_http_response() {
+    let port = spawn_mock(VECTOR_POS_INF, 2);
+    let client = PrometheusClient::new(format!("http://127.0.0.1:{port}")).unwrap();
+
+    let spec = Spec::from_yaml(
+        r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      raw:
+        error_ratio_query: my_ratio[{{.window}}]
+"#,
+    )
+    .unwrap();
+
+    let err = check_slo(
+        &client,
+        &spec.service,
+        &spec.slos[0],
+        Window::days(30),
+        Window::hours(1),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("non-finite sample value"));
 }
