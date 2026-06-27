@@ -106,9 +106,7 @@ fn parse_query_value(body: &serde_json::Value) -> Result<Option<f64>> {
                 .parse::<f64>()
                 .map_err(|_| SlokitError::Query(format!("could not parse sample value '{s}'")))?;
             if !value.is_finite() {
-                return Err(SlokitError::Query(format!(
-                    "non-finite sample value '{s}'"
-                )));
+                return Err(SlokitError::Query(format!("non-finite sample value '{s}'")));
             }
             Ok(Some(value))
         }
@@ -145,7 +143,8 @@ impl StatusLevel {
 /// current burn rate exceeds 1.0 (faster than the budget can sustain).
 fn level_for(remaining: Option<f64>, burn: Option<f64>) -> StatusLevel {
     // Non-finite values should never be considered healthy.
-    let non_finite = remaining.is_some_and(|r| !r.is_finite()) || burn.is_some_and(|b| !b.is_finite());
+    let non_finite =
+        remaining.is_some_and(|r| !r.is_finite()) || burn.is_some_and(|b| !b.is_finite());
     if non_finite {
         return StatusLevel::Warning;
     }
@@ -346,6 +345,9 @@ mod tests {
         assert_eq!(level_for(Some(0.8), Some(0.3)), StatusLevel::Ok);
         // Non-finite values are never healthy.
         assert_eq!(level_for(Some(f64::NAN), Some(0.3)), StatusLevel::Warning);
-        assert_eq!(level_for(Some(0.8), Some(f64::INFINITY)), StatusLevel::Warning);
+        assert_eq!(
+            level_for(Some(0.8), Some(f64::INFINITY)),
+            StatusLevel::Warning
+        );
     }
 }
