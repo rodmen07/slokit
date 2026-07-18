@@ -4,8 +4,9 @@
 //! The model deserializes existing `sloth` `prometheus/v1` specs unchanged
 //! (unknown fields are ignored, so newer `sloth` keys do not break parsing) and
 //! adds slokit extensions: an optional per-SLO [`SloSpec::period`] override
-//! (which `sloth` only exposes as a global CLI flag) and a [`LatencySli`] SLI
-//! shape that generates the histogram bucket query for latency SLOs.
+//! (which `sloth` only exposes as a global CLI flag), a [`LatencySli`] SLI
+//! shape that generates the histogram bucket query for latency SLOs, and
+//! per-SLO custom burn-rate conditions via [`Alerting::windows`].
 
 mod lint;
 mod parse;
@@ -132,6 +133,48 @@ pub struct Alerting {
     /// Ticket-alert overrides.
     #[serde(default)]
     pub ticket_alert: AlertMeta,
+    /// slokit extension: custom burn-rate conditions replacing the default
+    /// MWMBR window table for this SLO. When empty, the defaults apply (scaled
+    /// to the SLO period unless period scaling is disabled).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub windows: Vec<AlertWindowSpec>,
+}
+
+/// One custom burn-rate condition (slokit extension): the alert for `severity`
+/// fires when the error ratio exceeds `factor` times the budget over both the
+/// `long` and `short` windows.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct AlertWindowSpec {
+    /// Which alert this condition belongs to: `page` or `ticket`.
+    pub severity: String,
+    /// The long lookback window, e.g. `1h`.
+    pub long: String,
+    /// The short confirmation window, e.g. `5m`.
+    pub short: String,
+    /// The burn-rate multiplier that triggers this condition.
+    pub factor: f64,
+}
+
+impl AlertWindowSpec {
+    /// Convert to a core [`AlertWindow`], failing on an unknown severity or an
+    /// unparseable duration.
+    pub fn to_alert_window(&self) -> Result<crate::burn_rate::AlertWindow> {
+        let severity = match self.severity.as_str() {
+            "page" => crate::burn_rate::Severity::Page,
+            "ticket" => crate::burn_rate::Severity::Ticket,
+            other => {
+                return Err(SlokitError::Spec(format!(
+                    "unknown alert window severity '{other}' (expected `page` or `ticket`)"
+                )))
+            }
+        };
+        Ok(crate::burn_rate::AlertWindow {
+            severity,
+            long: Window::parse(&self.long)?,
+            short: Window::parse(&self.short)?,
+            factor: self.factor,
+        })
+    }
 }
 
 /// Per-severity alert overrides.
@@ -245,6 +288,23 @@ impl SloSpec {
         }
     }
 
+    /// Build the custom MWMBR configuration from `alerting.windows`, if any.
+    ///
+    /// Returns `Ok(None)` when the SLO defines no custom windows, so callers
+    /// fall back to the (period-scaled) default table.
+    pub fn custom_mwmbr(&self) -> Result<Option<crate::burn_rate::MwmbrConfig>> {
+        if self.alerting.windows.is_empty() {
+            return Ok(None);
+        }
+        let windows = self
+            .alerting
+            .windows
+            .iter()
+            .map(|w| w.to_alert_window())
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Some(crate::burn_rate::MwmbrConfig { windows }))
+    }
+
     /// The effective alert rule name (the configured name, or the SLO name).
     pub fn alert_name(&self) -> &str {
         if self.alerting.name.is_empty() {
@@ -354,6 +414,63 @@ slos:
         assert!(sli
             .error_ratio_expr(Window::minutes(5))
             .contains("le=\"0.3\""));
+    }
+
+    #[test]
+    fn custom_alert_windows_convert_to_mwmbr() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.0
+    sli:
+      raw:
+        error_ratio_query: r[{{.window}}]
+    alerting:
+      windows:
+        - severity: page
+          long: 30m
+          short: 5m
+          factor: 10
+        - severity: ticket
+          long: 6h
+          short: 30m
+          factor: 2
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let cfg = spec.slos[0].custom_mwmbr().unwrap().expect("custom config");
+        assert_eq!(cfg.windows.len(), 2);
+        assert_eq!(cfg.windows[0].long, Window::minutes(30));
+        assert_eq!(cfg.windows[0].factor, 10.0);
+        assert_eq!(cfg.windows[1].severity, crate::burn_rate::Severity::Ticket);
+    }
+
+    #[test]
+    fn no_custom_windows_means_none() {
+        let spec = Spec::from_yaml(SAMPLE).unwrap();
+        assert!(spec.slos[0].custom_mwmbr().unwrap().is_none());
+    }
+
+    #[test]
+    fn bad_custom_window_severity_is_an_error() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.0
+    sli:
+      raw:
+        error_ratio_query: r[{{.window}}]
+    alerting:
+      windows:
+        - severity: critical
+          long: 30m
+          short: 5m
+          factor: 10
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let err = spec.slos[0].custom_mwmbr().unwrap_err();
+        assert!(err.to_string().contains("unknown alert window severity"));
     }
 
     #[test]

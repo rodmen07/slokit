@@ -29,8 +29,13 @@ use crate::window::Window;
 pub struct GenerateOptions {
     /// Period used for SLOs that do not set their own `period`.
     pub default_period: Window,
-    /// The burn-rate alert configuration.
+    /// The burn-rate alert configuration, calibrated for the standard 30-day
+    /// period. Per-SLO `alerting.windows` in the spec override it entirely.
     pub mwmbr: MwmbrConfig,
+    /// Scale `mwmbr`'s lookback windows to each SLO's resolved period (on by
+    /// default). With scaling off, every SLO uses `mwmbr`'s windows verbatim,
+    /// which are only meaningful for 30-day periods.
+    pub period_aware: bool,
 }
 
 impl Default for GenerateOptions {
@@ -38,6 +43,7 @@ impl Default for GenerateOptions {
         Self {
             default_period: DEFAULT_PERIOD,
             mwmbr: MwmbrConfig::sre_default(),
+            period_aware: true,
         }
     }
 }
@@ -154,7 +160,7 @@ struct SloContext<'a> {
     slo: Slo,
     sli: Sli,
     id: String,
-    mwmbr: &'a MwmbrConfig,
+    mwmbr: MwmbrConfig,
 }
 
 impl SloContext<'_> {
@@ -199,14 +205,22 @@ pub fn generate_rules_with(spec: &Spec, opts: &GenerateOptions) -> Result<RuleSe
 
     let mut groups = Vec::with_capacity(spec.slos.len() * 3);
     for slo_spec in &spec.slos {
+        let slo = slo_spec.to_slo(opts.default_period)?;
+        // Effective burn-rate config for this SLO: explicit spec windows win,
+        // then the option table scaled to the SLO period, then the table as-is.
+        let mwmbr = match slo_spec.custom_mwmbr()? {
+            Some(custom) => custom,
+            None if opts.period_aware => opts.mwmbr.scaled(DEFAULT_PERIOD, slo.period),
+            None => opts.mwmbr.clone(),
+        };
         let ctx = SloContext {
             service: &spec.service,
             spec_labels: &spec.labels,
             slo_spec,
-            slo: slo_spec.to_slo(opts.default_period)?,
+            slo,
             sli: slo_spec.to_sli()?,
             id: slo_spec.sloth_id(&spec.service),
-            mwmbr: &opts.mwmbr,
+            mwmbr,
         };
         groups.push(recording::rules(&ctx));
         groups.push(metadata::rules(&ctx));

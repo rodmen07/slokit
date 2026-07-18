@@ -104,8 +104,9 @@ Burn-rate alert thresholds (error ratio that fires each window):
 ## Spec format
 
 `slokit` reads the `sloth` `prometheus/v1` spec, plus slokit extensions: an
-optional per-SLO `period` (sloth only offers this as a global flag) and a
-`latency` SLI (see below).
+optional per-SLO `period` (sloth only offers this as a global flag), a
+`latency` SLI, and custom burn-rate windows via `alerting.windows` (both
+described below).
 
 ```yaml
 version: "prometheus/v1"
@@ -209,6 +210,43 @@ For the lean math-only core: `slokit = { version = "0.1", default-features = fal
 | Page     | 6h          | 30m          | 6         | 5%              |
 | Ticket   | 1d          | 2h           | 3         | 10%             |
 | Ticket   | 3d          | 6h           | 1         | 10%             |
+
+### Period-aware windows
+
+The table above is calibrated for a 30-day period. When an SLO uses a different
+`period`, slokit scales every lookback window proportionally (rounded to whole
+minutes, never below 1m) while keeping the burn-rate factors, so each condition
+still fires after consuming the same fraction of the budget. A 90d SLO pages on
+3h/15m and 18h/90m windows, and tickets on 3d/6h and 9d/18h.
+
+Pass `--no-period-scaling` to `slokit generate` (or set
+`GenerateOptions::period_aware = false`) to use the 30d table verbatim for
+every SLO.
+
+### Custom burn-rate windows
+
+Per SLO, `alerting.windows` (a slokit extension) replaces the default table
+entirely:
+
+```yaml
+alerting:
+  labels: { team: platform }
+  windows:
+    - severity: page      # `page` or `ticket`
+      long: 30m
+      short: 5m
+      factor: 10          # burn-rate multiplier that fires this condition
+    - severity: ticket
+      long: 12h
+      short: 1h
+      factor: 2
+```
+
+Recording rules, the Grafana dashboard's SLI panel, and the current-burn-rate
+metadata rule all follow the effective windows, so the generated rule set stays
+self-consistent. `slokit lint` warns when custom windows leave an enabled
+severity with no conditions (`NO_SEVERITY_WINDOWS`) or outgrow the SLO period
+(`PERIOD_TOO_SHORT`).
 
 ## License
 

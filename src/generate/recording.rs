@@ -1,12 +1,23 @@
 //! SLI recording rules: the error ratio at each lookback window, plus the SLO
-//! period computed as an average over the recorded 5m metric.
+//! period computed as an average over the shortest recorded window's metric.
 
 use crate::window::Window;
 
 use super::{Rule, RuleGroup, SloContext};
 
-/// The short window the period aggregation averages over, matching `sloth`.
+/// Fallback base window when the MWMBR config has no windows at all.
 const BASE_WINDOW: Window = Window::minutes(5);
+
+/// The shortest recorded lookback window: the period aggregation must average
+/// over a metric that actually exists, which for the default config is the
+/// sloth-compatible 5m recording.
+pub(super) fn base_window(ctx: &SloContext<'_>) -> Window {
+    ctx.mwmbr
+        .lookback_windows()
+        .first()
+        .copied()
+        .unwrap_or(BASE_WINDOW)
+}
 
 pub(super) fn rules(ctx: &SloContext<'_>) -> RuleGroup {
     let mut rules = Vec::new();
@@ -16,10 +27,10 @@ pub(super) fn rules(ctx: &SloContext<'_>) -> RuleGroup {
         rules.push(sli_rule(ctx, window, ctx.sli.error_ratio_expr(window)));
     }
 
-    // The period (e.g. 30d) error ratio, averaged over the recorded 5m metric
-    // so Prometheus never has to scan the full period of raw data.
+    // The period (e.g. 30d) error ratio, averaged over the shortest recorded
+    // metric so Prometheus never has to scan the full period of raw data.
     let period = ctx.slo.period;
-    let base = BASE_WINDOW.prometheus();
+    let base = base_window(ctx).prometheus();
     let sel = ctx.selector();
     let period_expr = format!(
         "sum_over_time(slo:sli_error:ratio_rate{base}{sel}[{p}])\n/\ncount_over_time(slo:sli_error:ratio_rate{base}{sel}[{p}])",

@@ -106,7 +106,9 @@ fn parse_query_value(body: &serde_json::Value) -> Result<Option<f64>> {
         .and_then(|s| s.as_str())
         .unwrap_or("");
     if result_type.is_empty() {
-        return Err(SlokitError::Query("response missing `data.resultType`".into()));
+        return Err(SlokitError::Query(
+            "response missing `data.resultType`".into(),
+        ));
     }
     let value_str = match result_type {
         "scalar" => data

@@ -63,6 +63,37 @@ pub fn validate(spec: &Spec) -> Result<()> {
             Err(e) => errors.push(format!("{where_}: {e}")),
         }
 
+        for (wi, w) in slo.alerting.windows.iter().enumerate() {
+            let where_w = format!("{where_}: alerting.windows[{wi}]");
+            if !matches!(w.severity.as_str(), "page" | "ticket") {
+                errors.push(format!(
+                    "{where_w}: unknown severity '{}' (expected `page` or `ticket`)",
+                    w.severity
+                ));
+            }
+            if !w.factor.is_finite() || w.factor <= 0.0 {
+                errors.push(format!(
+                    "{where_w}: `factor` must be a positive number, got {}",
+                    w.factor
+                ));
+            }
+            let long = Window::parse(&w.long);
+            let short = Window::parse(&w.short);
+            if let Err(e) = &long {
+                errors.push(format!("{where_w}: `long`: {e}"));
+            }
+            if let Err(e) = &short {
+                errors.push(format!("{where_w}: `short`: {e}"));
+            }
+            if let (Ok(long), Ok(short)) = (long, short) {
+                if short >= long {
+                    errors.push(format!(
+                        "{where_w}: `short` ({short}) must be shorter than `long` ({long})"
+                    ));
+                }
+            }
+        }
+
         if let Some(lat) = &slo.sli.latency {
             if lat.histogram_metric.trim().is_empty() {
                 errors.push(format!(
@@ -129,6 +160,56 @@ slos:
         assert!(msg.contains("missing the")); // error_query has no token
         assert!(msg.contains("duplicate SLO name"));
         assert!(msg.contains("has no `events`, `raw`, or `latency` SLI"));
+    }
+
+    #[test]
+    fn reports_bad_custom_alert_windows() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.0
+    sli:
+      raw:
+        error_ratio_query: r[{{.window}}]
+    alerting:
+      windows:
+        - severity: critical
+          long: 30m
+          short: 1h
+          factor: 0
+        - severity: page
+          long: nonsense
+          short: 5m
+          factor: 10
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let msg = spec.validate().unwrap_err().to_string();
+        assert!(msg.contains("unknown severity 'critical'"));
+        assert!(msg.contains("`factor` must be a positive number"));
+        assert!(msg.contains("must be shorter than"));
+        assert!(msg.contains("`long`:"));
+    }
+
+    #[test]
+    fn accepts_sound_custom_alert_windows() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.0
+    sli:
+      raw:
+        error_ratio_query: r[{{.window}}]
+    alerting:
+      windows:
+        - severity: page
+          long: 1h
+          short: 5m
+          factor: 14.4
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        assert!(spec.validate().is_ok());
     }
 
     #[test]

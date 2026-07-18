@@ -9,6 +9,7 @@ pub(super) fn rules(ctx: &SloContext<'_>) -> RuleGroup {
     let sel = ctx.selector();
     let base = ctx.base_labels();
     let period = ctx.slo.period.prometheus();
+    let base_window = super::recording::base_window(ctx).prometheus();
 
     let mut rules = vec![
         Rule::record(
@@ -28,7 +29,9 @@ pub(super) fn rules(ctx: &SloContext<'_>) -> RuleGroup {
         ),
         Rule::record(
             "slo:current_burn_rate:ratio",
-            format!("slo:sli_error:ratio_rate5m{sel}\n/ {GROUPING}\nslo:error_budget:ratio{sel}"),
+            format!(
+                "slo:sli_error:ratio_rate{base_window}{sel}\n/ {GROUPING}\nslo:error_budget:ratio{sel}"
+            ),
             base.clone(),
         ),
         Rule::record(

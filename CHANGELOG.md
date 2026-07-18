@@ -8,6 +8,42 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-18
+
+Configurable alerting: the burn-rate window table is no longer fixed.
+
+### Added
+
+- **Custom burn-rate windows** (slokit spec extension): per-SLO
+  `alerting.windows` replaces the default MWMBR table with explicit
+  `severity`/`long`/`short`/`factor` conditions. Validation rejects unknown
+  severities, non-positive factors, unparseable durations, and `short >= long`.
+- **Period-aware default windows**: SLOs with a non-30d `period` now get the
+  SRE Workbook table scaled proportionally to their period (rounded to whole
+  minutes, 1m floor), so each condition still fires after consuming the same
+  budget fraction. A 90d SLO pages on 3h/15m instead of 30d-calibrated windows.
+  Library API: `MwmbrConfig::scaled` and `MwmbrConfig::sre_default_for_period`.
+- `slokit generate --no-period-scaling` and `GenerateOptions::period_aware`
+  opt out of scaling and use the 30d table verbatim.
+- New lint `NO_SEVERITY_WINDOWS`: custom windows that leave an enabled severity
+  with no conditions would silently drop that alert.
+
+### Changed
+
+- **Generated output changes for SLOs with a non-30d `period`** (behavioral
+  change): recording and alert windows are now scaled to the period. Output for
+  30d-period SLOs is byte-identical to 0.6.x. Use `--no-period-scaling` to keep
+  the old behavior.
+- The SLO-period recording, the `slo:current_burn_rate:ratio` metadata rule,
+  and the dashboard SLI panel now derive their base window from the effective
+  window set (still 5m for the default table) instead of hardcoding 5m.
+- `slokit calc` scales the printed threshold table to `--period`.
+- Lint `PERIOD_TOO_SHORT` now evaluates the SLO's effective windows (custom or
+  period-scaled), so it no longer fires for short-period SLOs that scaling
+  already handles.
+- `GenerateOptions` gained the `period_aware` field (breaking for struct
+  literals; use `..Default::default()`).
+
 ## [0.6.8] - 2026-06-27
 
 ### Changed

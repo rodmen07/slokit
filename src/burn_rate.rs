@@ -145,6 +145,47 @@ impl MwmbrConfig {
         }
     }
 
+    /// The canonical SRE Workbook configuration scaled to `period`.
+    ///
+    /// Equivalent to `sre_default().scaled(Window::days(30), period)`: the same
+    /// burn-rate factors, with every lookback window scaled proportionally so
+    /// each condition still consumes the same fraction of the error budget
+    /// before it fires.
+    pub fn sre_default_for_period(period: Window) -> Self {
+        Self::sre_default().scaled(Window::days(30), period)
+    }
+
+    /// Scale every lookback window by `to / from`, keeping the burn-rate
+    /// factors.
+    ///
+    /// Because a condition's budget consumption is `factor * (window / period)`,
+    /// scaling the windows with the period preserves how much budget each
+    /// condition allows before firing. Scaled windows are rounded to the
+    /// nearest whole minute and never drop below one minute. When `from == to`
+    /// the configuration is returned unchanged.
+    pub fn scaled(&self, from: Window, to: Window) -> Self {
+        if from == to {
+            return self.clone();
+        }
+        let ratio = to.as_secs_f64() / from.as_secs_f64();
+        let scale = |w: Window| {
+            let minutes = (w.as_secs_f64() * ratio / 60.0).round().max(1.0);
+            Window::minutes(minutes as u64)
+        };
+        Self {
+            windows: self
+                .windows
+                .iter()
+                .map(|w| AlertWindow {
+                    severity: w.severity,
+                    long: scale(w.long),
+                    short: scale(w.short),
+                    factor: w.factor,
+                })
+                .collect(),
+        }
+    }
+
     /// The conditions for a given severity, in order.
     pub fn for_severity(&self, severity: Severity) -> impl Iterator<Item = &AlertWindow> {
         self.windows.iter().filter(move |w| w.severity == severity)
@@ -236,5 +277,59 @@ mod tests {
         let cfg = MwmbrConfig::sre_default();
         assert_eq!(cfg.for_severity(Severity::Page).count(), 2);
         assert_eq!(cfg.for_severity(Severity::Ticket).count(), 2);
+    }
+
+    #[test]
+    fn scaling_to_the_same_period_is_identity() {
+        let cfg = MwmbrConfig::sre_default();
+        assert_eq!(cfg.scaled(Window::days(30), Window::days(30)), cfg);
+        assert_eq!(MwmbrConfig::sre_default_for_period(Window::days(30)), cfg);
+    }
+
+    #[test]
+    fn scaling_to_90d_triples_every_window() {
+        let cfg = MwmbrConfig::sre_default_for_period(Window::days(90));
+        let expected = [
+            (Window::hours(3), Window::minutes(15), 14.4),
+            (Window::hours(18), Window::minutes(90), 6.0),
+            (Window::days(3), Window::hours(6), 3.0),
+            (Window::days(9), Window::hours(18), 1.0),
+        ];
+        for (w, (long, short, factor)) in cfg.windows.iter().zip(expected) {
+            assert_eq!(w.long, long);
+            assert_eq!(w.short, short);
+            assert_eq!(w.factor, factor);
+        }
+    }
+
+    #[test]
+    fn scaling_preserves_budget_consumed_per_condition() {
+        // factor * (window / period) must stay (approximately) constant when
+        // period and windows scale together; rounding to minutes may nudge it.
+        let period = Window::days(7);
+        let cfg = MwmbrConfig::sre_default_for_period(period);
+        let base = MwmbrConfig::sre_default();
+        for (scaled, orig) in cfg.windows.iter().zip(&base.windows) {
+            let consumed = BurnRate::new(scaled.factor).budget_consumed_over(scaled.long, period);
+            let orig_consumed =
+                BurnRate::new(orig.factor).budget_consumed_over(orig.long, Window::days(30));
+            assert!(
+                (consumed - orig_consumed).abs() / orig_consumed < 0.05,
+                "budget consumed drifted: {consumed} vs {orig_consumed}"
+            );
+        }
+    }
+
+    #[test]
+    fn scaling_rounds_to_minutes_and_never_hits_zero() {
+        // 1d period: ratio 1/30. The 5m short window would be 10s; it must
+        // clamp to the 1m floor.
+        let cfg = MwmbrConfig::sre_default_for_period(Window::days(1));
+        assert!(cfg.windows.iter().all(|w| w.short >= Window::minutes(1)));
+        assert!(cfg
+            .windows
+            .iter()
+            .flat_map(|w| [w.long, w.short])
+            .all(|w| w.as_secs() % 60 == 0));
     }
 }

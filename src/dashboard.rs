@@ -8,8 +8,25 @@
 
 use serde_json::{json, Value};
 
+use crate::burn_rate::MwmbrConfig;
 use crate::error::{Result, SlokitError};
-use crate::spec::Spec;
+use crate::spec::{SloSpec, Spec, DEFAULT_PERIOD};
+use crate::window::Window;
+
+/// The shortest lookback window this SLO's rules record, which is the metric
+/// the SLI timeseries panel must query. Mirrors the generator's resolution:
+/// custom `alerting.windows` win, else the default table scaled to the period.
+fn sli_panel_window(slo: &SloSpec) -> Window {
+    let mwmbr = slo.custom_mwmbr().ok().flatten().unwrap_or_else(|| {
+        let period = slo.resolve_period(DEFAULT_PERIOD).unwrap_or(DEFAULT_PERIOD);
+        MwmbrConfig::sre_default_for_period(period)
+    });
+    mwmbr
+        .lookback_windows()
+        .first()
+        .copied()
+        .unwrap_or(Window::minutes(5))
+}
 
 /// Build the Grafana dashboard as a [`serde_json::Value`].
 pub fn dashboard_value(spec: &Spec) -> Value {
@@ -20,6 +37,7 @@ pub fn dashboard_value(spec: &Spec) -> Value {
     for slo in &spec.slos {
         let sloth_id = slo.sloth_id(&spec.service);
         let sel = format!("{{sloth_id=\"{sloth_id}\"}}");
+        let sli_window = sli_panel_window(slo).prometheus();
 
         panels.push(row_panel(id, &slo.name, y));
         id += 1;
@@ -56,8 +74,8 @@ pub fn dashboard_value(spec: &Spec) -> Value {
 
         panels.push(timeseries_panel(
             id,
-            "SLI error ratio (5m)",
-            format!("slo:sli_error:ratio_rate5m{sel}"),
+            &format!("SLI error ratio ({sli_window})"),
+            format!("slo:sli_error:ratio_rate{sli_window}{sel}"),
             "percentunit",
             y,
         ));
@@ -208,5 +226,50 @@ slos:
     #[test]
     fn uid_is_sanitized() {
         assert_eq!(dashboard_uid("my service/app"), "slokit-my-service-app");
+    }
+
+    #[test]
+    fn sli_panel_follows_custom_windows() {
+        let spec = Spec::from_yaml(
+            r#"
+service: myservice
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      raw:
+        error_ratio_query: r[{{.window}}]
+    alerting:
+      windows:
+        - severity: page
+          long: 1h
+          short: 10m
+          factor: 10
+"#,
+        )
+        .unwrap();
+        let json = dashboard_json(&spec).unwrap();
+        assert!(json.contains("slo:sli_error:ratio_rate10m{sloth_id="));
+        assert!(json.contains("SLI error ratio (10m)"));
+    }
+
+    #[test]
+    fn sli_panel_follows_scaled_period() {
+        // 90d period scales the default 5m short window to 15m.
+        let spec = Spec::from_yaml(
+            r#"
+service: myservice
+slos:
+  - name: a
+    objective: 99.9
+    period: 90d
+    sli:
+      raw:
+        error_ratio_query: r[{{.window}}]
+"#,
+        )
+        .unwrap();
+        let json = dashboard_json(&spec).unwrap();
+        assert!(json.contains("slo:sli_error:ratio_rate15m{sloth_id="));
     }
 }

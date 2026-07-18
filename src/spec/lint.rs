@@ -11,7 +11,7 @@
 //! [`lint`] never fails; it returns every finding and lets the caller decide
 //! whether to treat them as fatal (the CLI's `--strict` flag does).
 
-use crate::burn_rate::MwmbrConfig;
+use crate::burn_rate::{MwmbrConfig, Severity};
 
 use super::{Spec, DEFAULT_PERIOD};
 
@@ -56,17 +56,19 @@ pub struct Lint {
 pub fn lint(spec: &Spec) -> Vec<Lint> {
     let mut out = Vec::new();
 
-    // The longest burn-rate "long" window from the default MWMBR model. An SLO
-    // period at or below this makes the long-window alerts meaningless.
-    let longest_window = MwmbrConfig::sre_default()
-        .windows
-        .iter()
-        .map(|w| w.long)
-        .max()
-        .unwrap_or(DEFAULT_PERIOD);
-
     for slo in &spec.slos {
         let loc = format!("slo '{}'", slo.name);
+
+        // The effective MWMBR configuration for this SLO: custom windows when
+        // set, else the default table scaled to the SLO period (mirroring what
+        // generation does). Unparseable custom windows are validate's problem;
+        // window-based checks are skipped for them here.
+        let custom = slo.custom_mwmbr().ok().flatten();
+        let effective_mwmbr = slo.resolve_period(DEFAULT_PERIOD).ok().map(|period| {
+            custom
+                .clone()
+                .unwrap_or_else(|| MwmbrConfig::sre_default_for_period(period))
+        });
 
         // Objective with no — or implausibly little — error budget.
         if slo.objective >= 100.0 {
@@ -90,17 +92,21 @@ pub fn lint(spec: &Spec) -> Vec<Lint> {
             });
         }
 
-        // SLO period shorter than (or equal to) the longest burn-rate window.
-        if let Ok(period) = slo.resolve_period(DEFAULT_PERIOD) {
-            if period <= longest_window {
-                out.push(Lint {
-                    level: LintLevel::Warning,
-                    code: "PERIOD_TOO_SHORT",
-                    location: loc.clone(),
-                    message: format!(
-                        "period {period} is not longer than the longest burn-rate window ({longest_window}); long-window alerts will not be meaningful"
-                    ),
-                });
+        // SLO period shorter than (or equal to) the longest effective
+        // burn-rate window. With period-aware scaling the default table always
+        // fits; this mostly catches custom windows that outgrow the period.
+        if let (Ok(period), Some(mwmbr)) = (slo.resolve_period(DEFAULT_PERIOD), &effective_mwmbr) {
+            if let Some(longest_window) = mwmbr.windows.iter().map(|w| w.long).max() {
+                if period <= longest_window {
+                    out.push(Lint {
+                        level: LintLevel::Warning,
+                        code: "PERIOD_TOO_SHORT",
+                        location: loc.clone(),
+                        message: format!(
+                            "period {period} is not longer than the longest burn-rate window ({longest_window}); long-window alerts will not be meaningful"
+                        ),
+                    });
+                }
             }
         }
 
@@ -138,6 +144,28 @@ pub fn lint(spec: &Spec) -> Vec<Lint> {
                         "ticket alert has no labels (e.g. `severity`); Alertmanager routing may not match it"
                             .to_string(),
                 });
+            }
+
+            // Custom windows that leave an enabled severity with no conditions
+            // silently drop that alert.
+            if let Some(custom) = &custom {
+                for (disabled, severity) in [
+                    (page_disabled, Severity::Page),
+                    (ticket_disabled, Severity::Ticket),
+                ] {
+                    if !disabled && custom.for_severity(severity).next().is_none() {
+                        out.push(Lint {
+                            level: LintLevel::Warning,
+                            code: "NO_SEVERITY_WINDOWS",
+                            location: loc.clone(),
+                            message: format!(
+                                "custom `alerting.windows` has no {} conditions, so no {} alert will be generated; add one or disable the alert",
+                                severity.label(),
+                                severity.label(),
+                            ),
+                        });
+                    }
+                }
             }
         }
 
@@ -216,7 +244,9 @@ slos:
     }
 
     #[test]
-    fn short_period_warns() {
+    fn short_period_with_scaled_defaults_does_not_warn() {
+        // Default windows scale with the period, so even a 1d period gets
+        // windows that fit inside it.
         let yaml = r#"
 service: api
 slos:
@@ -228,7 +258,103 @@ slos:
     alerting: { labels: { severity: page } }
 "#;
         let spec = Spec::from_yaml(yaml).unwrap();
+        assert!(!codes(&spec).contains(&"PERIOD_TOO_SHORT"));
+    }
+
+    #[test]
+    fn custom_window_longer_than_period_warns() {
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.0
+    period: 1d
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting:
+      labels: { severity: page }
+      windows:
+        - severity: page
+          long: 3d
+          short: 6h
+          factor: 1
+        - severity: ticket
+          long: 1h
+          short: 5m
+          factor: 2
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
         assert!(codes(&spec).contains(&"PERIOD_TOO_SHORT"));
+    }
+
+    #[test]
+    fn custom_windows_missing_a_severity_warn() {
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.0
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting:
+      labels: { severity: page }
+      windows:
+        - severity: page
+          long: 1h
+          short: 5m
+          factor: 14.4
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let c = codes(&spec);
+        assert!(c.contains(&"NO_SEVERITY_WINDOWS"));
+    }
+
+    #[test]
+    fn custom_windows_for_both_severities_are_clean() {
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.0
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting:
+      labels: { severity: page }
+      windows:
+        - severity: page
+          long: 1h
+          short: 5m
+          factor: 14.4
+        - severity: ticket
+          long: 1d
+          short: 2h
+          factor: 3
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        assert!(!codes(&spec).contains(&"NO_SEVERITY_WINDOWS"));
+        assert!(!codes(&spec).contains(&"PERIOD_TOO_SHORT"));
+    }
+
+    #[test]
+    fn disabled_severity_needs_no_custom_windows() {
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.0
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting:
+      labels: { severity: page }
+      ticket_alert: { disable: true }
+      windows:
+        - severity: page
+          long: 1h
+          short: 5m
+          factor: 14.4
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        assert!(!codes(&spec).contains(&"NO_SEVERITY_WINDOWS"));
     }
 
     #[test]

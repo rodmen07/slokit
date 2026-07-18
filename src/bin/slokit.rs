@@ -88,6 +88,10 @@ struct GenerateArgs {
     /// metadata.name for the operator format. Defaults to the spec's service.
     #[arg(long)]
     name: Option<String>,
+    /// Use the 30d-calibrated burn-rate windows verbatim instead of scaling
+    /// them to each SLO's period.
+    #[arg(long)]
+    no_period_scaling: bool,
 }
 
 #[derive(Args)]
@@ -201,6 +205,7 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
     let opts = GenerateOptions {
         default_period: Window::parse(&args.period)?,
         mwmbr: MwmbrConfig::sre_default(),
+        period_aware: !args.no_period_scaling,
     };
 
     let rendered = match args.format {
@@ -329,7 +334,7 @@ fn run_calc(args: CalcArgs) -> Result<()> {
 
     println!("\nBurn-rate alert thresholds (error ratio that fires each window):");
     let budget_ratio = slo.error_budget_ratio();
-    for w in MwmbrConfig::sre_default().windows {
+    for w in MwmbrConfig::sre_default_for_period(period).windows {
         println!(
             "  {:<6} long={:<4} short={:<4} factor={:<5} threshold={}",
             w.severity.label(),
