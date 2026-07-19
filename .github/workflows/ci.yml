@@ -38,6 +38,35 @@ jobs:
       - name: Test lean core
         run: cargo test --no-default-features --lib
 
+  promtool:
+    name: promtool check generated rules
+    runs-on: ubuntu-latest
+    env:
+      # Pinned Prometheus release providing promtool (3.5.x is the LTS line).
+      PROMETHEUS_VERSION: 3.5.0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install promtool
+        run: |
+          curl -sSfL -o prometheus.tar.gz \
+            "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+          tar -xzf prometheus.tar.gz
+          echo "${PWD}/prometheus-${PROMETHEUS_VERSION}.linux-amd64" >> "$GITHUB_PATH"
+
+      - name: Verify promtool
+        run: promtool --version
+
+      - name: Promtool-validate generated rules
+        run: cargo test --test promtool
+        env:
+          SLOKIT_REQUIRE_PROMTOOL: "1"
+
   coverage:
     name: coverage
     runs-on: ubuntu-latest
