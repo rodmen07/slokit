@@ -10,10 +10,18 @@ small breaking changes.
 
 Spec hardening: a validation gap audit, with real gaps split into hard errors
 (where the old behavior generated broken or misleading Prometheus rules) and
-new advisory lints (where the output loads but is probably not intended).
+new advisory lints (where the output loads but is probably not intended); plus
+external validation of generated output with promtool.
 
 ### Added
 
+- **promtool integration**: the test suite now validates generated rule files
+  with `promtool check rules` (the sample fixture, merged multi-spec directory
+  output, and a spec covering both custom `alerting.windows` and period-scaled
+  default windows). The tests skip with a clear message when promtool is not
+  on PATH; setting `SLOKIT_REQUIRE_PROMTOOL=1` turns absence into a failure.
+  A new CI job downloads a pinned Prometheus release (v3.5.0), puts promtool
+  on PATH, and runs these tests with that variable set on every push and PR.
 - **Cross-spec validation**: `spec::validate_all` validates a set of specs
   together, prefixing each finding with its service, and rejects a service/SLO
   pair that appears in more than one spec (merged output would repeat
