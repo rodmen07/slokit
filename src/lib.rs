@@ -44,7 +44,8 @@
 //! ```
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![warn(missing_docs)]
+#![deny(missing_docs)]
+#![deny(rustdoc::broken_intra_doc_links)]
 
 pub mod error;
 

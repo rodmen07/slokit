@@ -143,8 +143,12 @@ fn parse_query_value(body: &serde_json::Value) -> Result<Option<f64>> {
 }
 
 /// How an SLO is doing right now.
+///
+/// The enum is `#[non_exhaustive]`: new levels (for example an explicit
+/// no-data state) may be added, so matches need a wildcard arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum StatusLevel {
     /// Comfortably within budget.
     Ok,
@@ -194,7 +198,12 @@ fn ser_window<S: serde::Serializer>(w: &Window, s: S) -> std::result::Result<S::
 }
 
 /// A point-in-time status report for a single SLO.
+///
+/// The struct is `#[non_exhaustive]`: it is an output type readers consume
+/// (produced by [`check_slo`]/[`check_spec`]), and the report has a history
+/// of gaining fields, so new ones must not be breaking changes.
 #[derive(Debug, Clone, Serialize)]
+#[non_exhaustive]
 pub struct SloStatus {
     /// The service this SLO belongs to.
     pub service: String,

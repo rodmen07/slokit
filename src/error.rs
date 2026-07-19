@@ -5,7 +5,12 @@
 /// I/O and CLI-level concerns are handled by the binary (via `anyhow`); this
 /// enum stays focused on domain and parsing failures so library consumers get
 /// precise, matchable variants.
+///
+/// The enum is `#[non_exhaustive]`: new failure domains have been added before
+/// (the `Plugin` variant arrived with the SLI plugin system) and more may
+/// follow, so matches need a wildcard arm.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum SlokitError {
     /// An objective was outside the open interval that makes it a valid SLO.
     #[error("invalid objective: {0}")]

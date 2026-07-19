@@ -87,13 +87,12 @@ fn plugin_spec_matches_its_hand_written_twin_byte_for_byte() {
 /// A minimal embedder plugin: a pre-recorded error-ratio metric.
 struct StaticRatio;
 
-const STATIC_RATIO_OPTIONS: &[OptionSpec] = &[OptionSpec {
-    name: "metric",
-    kind: OptionKind::String,
-    required: true,
-    default: None,
-    help: "name of the recorded error-ratio metric",
-}];
+const STATIC_RATIO_OPTIONS: &[OptionSpec] = &[OptionSpec::new(
+    "metric",
+    OptionKind::String,
+    "name of the recorded error-ratio metric",
+)
+.required()];
 
 impl SliPlugin for StaticRatio {
     fn id(&self) -> &str {
@@ -181,10 +180,8 @@ fn embedder_plugin_flows_through_to_sli_validate_and_generate() {
     spec.validate_with(&registry)
         .expect("validates with the embedder registry");
 
-    let opts = GenerateOptions {
-        plugins: Arc::new(registry),
-        ..GenerateOptions::default()
-    };
+    let mut opts = GenerateOptions::default();
+    opts.plugins = Arc::new(registry);
     let yaml = generate_rules_with(&spec, &opts)
         .unwrap()
         .to_prometheus_yaml()

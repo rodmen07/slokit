@@ -11,7 +11,12 @@ pub const WINDOW_TOKEN: &str = "{{.window}}";
 /// Covers `sloth`'s two SLI shapes (events-based and raw) plus a slokit
 /// extension, [`Sli::Latency`], that generates the histogram bucket query for
 /// the common "fraction of requests slower than a threshold" SLO.
+///
+/// The enum is `#[non_exhaustive]`: SLI shapes have grown before (`Latency`
+/// arrived in 0.3) and may grow again, so matches need a wildcard arm.
+/// Constructing the existing variants remains supported.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Sli {
     /// Bad events divided by total events. Both queries should contain the
     /// [`WINDOW_TOKEN`].

@@ -27,7 +27,20 @@ use crate::spec::{SloSpec, Spec, DEFAULT_PERIOD};
 use crate::window::Window;
 
 /// Options controlling rule generation.
+///
+/// The struct is `#[non_exhaustive]`: options have grown minor over minor
+/// (`period_aware` in 0.7, `plugins` in 0.9) and will keep growing. Start
+/// from [`GenerateOptions::default`] and set the fields you need:
+///
+/// ```
+/// use slokit::generate::GenerateOptions;
+///
+/// let mut opts = GenerateOptions::default();
+/// opts.period_aware = false;
+/// assert!(!opts.period_aware);
+/// ```
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct GenerateOptions {
     /// Period used for SLOs that do not set their own `period`.
     pub default_period: Window,
@@ -108,7 +121,13 @@ impl Rule {
 }
 
 /// A named group of rules.
+///
+/// The struct is `#[non_exhaustive]`: it is an output type readers consume,
+/// and Prometheus group-level keys (for example `interval`) may be added
+/// without a breaking change. The fields stay public for reading and
+/// mutation (for example filtering `rules`).
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[non_exhaustive]
 pub struct RuleGroup {
     /// Group name.
     pub name: String,
@@ -117,7 +136,13 @@ pub struct RuleGroup {
 }
 
 /// A complete set of rule groups, ready to render as Prometheus rules.
+///
+/// The struct is `#[non_exhaustive]`: it is an output type produced by the
+/// generators ([`generate_rules`], [`generate_all`]). The `groups` field
+/// stays public for reading and mutation (for example filtering or
+/// re-ordering groups before rendering).
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[non_exhaustive]
 pub struct RuleSet {
     /// The rule groups.
     pub groups: Vec<RuleGroup>,

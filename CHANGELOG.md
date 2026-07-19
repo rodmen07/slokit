@@ -8,6 +8,60 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-19
+
+1.0 freeze prep: the public API is finalized for the 1.0.0 freeze. This is
+the deliberate **last breaking-change window** before 1.0; the (small)
+breaking changes below exist precisely so that post-1.0 growth will not be
+breaking.
+
+### Changed (breaking, the last planned window before 1.0)
+
+- **`#[non_exhaustive]` audit across the public API.** Enums that classify or
+  report (`SlokitError`, `Sli`, `LintLevel`, `StatusLevel`, `OptionKind`) and
+  structs that are configured or consumed (`Spec`, `SloSpec`, `SliSpec`,
+  `EventsSli`, `RawSli`, `LatencySli`, `PluginSli`, `Alerting`, `AlertMeta`,
+  `AlertWindowSpec`, `AlertWindow`, `MwmbrConfig`, `GenerateOptions`,
+  `RuleGroup`, `RuleSet`, `Lint`, `SloStatus`, `Import`, `ImportNote`,
+  `OptionSpec`) are now `#[non_exhaustive]`. Downstream impact: matches on
+  these enums need a wildcard arm, and struct-literal construction (including
+  `..Default::default()` functional update) no longer compiles outside the
+  crate. Fields stay public for reading and mutation. `Severity` and `Slo`
+  stay deliberately exhaustive: the page/ticket split and the
+  objective-over-period pair are the model itself, and changing either should
+  be loudly breaking.
+- **`OptionSpec` is now built with a `const` builder** instead of a struct
+  literal: `OptionSpec::new(name, kind, help)` plus `.required()` and
+  `.with_default(value)`, usable in the `const` option tables plugin authors
+  write. The built-in plugins and docs use it.
+
+### Added
+
+- Constructors for everything users build now that literals are closed:
+  `Spec::new`, `SloSpec::new`, `SliSpec::events`/`raw`/`latency`/`plugin`,
+  `EventsSli::new`, `RawSli::new`, `LatencySli::new`, `PluginSli::new`,
+  `AlertWindowSpec::new`, `AlertWindow::new` (const), `MwmbrConfig::new`.
+  `GenerateOptions`, `Alerting`, `AlertMeta`, and `SliSpec` keep `Default`;
+  mutate the public fields after construction for optional settings.
+- **[docs/SEMVER.md](docs/SEMVER.md)**: the written 1.x semver contract.
+  Public API surface, patch/minor guarantees, byte-stability of generated
+  rules within a minor line, spec format and JSON Schema growth rules with
+  the tag-pinned URL contract, the MSRV bump policy (minor version, CHANGELOG
+  announcement), `#[non_exhaustive]` and `SliPlugin` extension-point rules,
+  and the explicit non-guarantees (message wording, `Debug` output,
+  human-readable CLI text). Linked from the README's new "Stability and
+  MSRV" section.
+- **MSRV 1.82 CI job**: builds default, all-features, and no-default-features
+  configurations on the pinned 1.82 toolchain, against an MSRV-compatible
+  dependency resolution (rust-version-aware fallback resolver plus the
+  upstream-supported `idna_adapter` 1.1.0 pin; see docs/SEMVER.md).
+  Build-only and without dev-dependencies (`cargo hack --no-dev-deps`) on
+  purpose, so test tooling stays out of the MSRV contract.
+  `rust-version = "1.82"` was already declared; it is now enforced.
+- `#![deny(missing_docs)]` and `#![deny(rustdoc::broken_intra_doc_links)]` at
+  the crate root (upgraded from `warn`; the surface was already fully
+  documented, this locks it for 1.x).
+
 ## [0.11.0] - 2026-07-19
 
 Spec JSON Schema: editor autocomplete and validation for the sloth-compatible
