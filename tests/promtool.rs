@@ -16,6 +16,7 @@ use slokit::generate::{generate_all, generate_rules, GenerateOptions};
 use slokit::spec::Spec;
 
 const SAMPLE: &str = include_str!("fixtures/sample.yaml");
+const OPENSLO_RATIO: &str = include_str!("fixtures/openslo/ratio.yaml");
 
 /// A spec exercising the 0.7.0 alerting extensions: one SLO with custom
 /// `alerting.windows` and one non-30d-period SLO whose default windows get
@@ -257,6 +258,22 @@ fn plugin_generated_rules_pass_promtool() {
         "grpc plugin expansion missing"
     );
     check_rules_with_promtool("plugin", &yaml);
+}
+
+#[test]
+fn openslo_imported_rules_pass_promtool() {
+    let import = slokit::spec::openslo::from_yaml(OPENSLO_RATIO).expect("openslo fixture imports");
+    assert_eq!(import.specs.len(), 1);
+    let yaml = generate_rules(&import.specs[0])
+        .unwrap()
+        .to_prometheus_yaml()
+        .unwrap();
+    // Sanity: the rewritten window token reached the rendered rules.
+    assert!(
+        yaml.contains("sum(rate(http_requests_total{job=\"myservice\",code=~\"5..\"}[5m]))"),
+        "imported query missing from the output promtool sees"
+    );
+    check_rules_with_promtool("openslo", &yaml);
 }
 
 #[test]

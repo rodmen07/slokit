@@ -1,0 +1,24 @@
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: search-latency
+spec:
+  description: "99% of searches complete within 300ms"
+  service: search
+  budgetingMethod: Occurrences
+  timeWindow:
+    - duration: 30d
+      isRolling: true
+  indicator:
+    metadata:
+      name: search-latency-sli
+    spec:
+      thresholdMetric:
+        metricSource:
+          type: Prometheus
+          spec:
+            query: search_request_duration_seconds{job="search", handler="/search"}
+  objectives:
+    - op: lte
+      value: 0.3
+      target: 0.99

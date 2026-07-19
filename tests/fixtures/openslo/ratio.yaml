@@ -1,0 +1,31 @@
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: requests-availability
+  labels:
+    owner: team-platform
+spec:
+  description: "99.9% of HTTP requests succeed"
+  service: myservice
+  budgetingMethod: Occurrences
+  timeWindow:
+    - duration: 30d
+      isRolling: true
+  indicator:
+    metadata:
+      name: requests-availability-sli
+    spec:
+      ratioMetric:
+        counter: true
+        bad:
+          metricSource:
+            type: Prometheus
+            spec:
+              query: sum(rate(http_requests_total{job="myservice",code=~"5.."}[5m]))
+        total:
+          metricSource:
+            type: Prometheus
+            spec:
+              query: sum(rate(http_requests_total{job="myservice"}[5m]))
+  objectives:
+    - target: 0.999

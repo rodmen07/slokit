@@ -1,0 +1,32 @@
+# Unrepresentable in slokit: a calendar-aligned monthly time window. slokit
+# periods are fixed-length rolling windows, so importing this document is a
+# hard error naming spec.timeWindow[0].calendar.
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: monthly-report-freshness
+spec:
+  description: "Reports build successfully each calendar month"
+  service: reporting
+  budgetingMethod: Occurrences
+  timeWindow:
+    - duration: 1M
+      calendar:
+        startTime: "2026-01-01 00:00:00"
+        timeZone: "America/New_York"
+      isRolling: false
+  indicator:
+    spec:
+      ratioMetric:
+        bad:
+          metricSource:
+            type: Prometheus
+            spec:
+              query: sum(rate(report_build_failures_total[5m]))
+        total:
+          metricSource:
+            type: Prometheus
+            spec:
+              query: sum(rate(report_builds_total[5m]))
+  objectives:
+    - target: 0.99

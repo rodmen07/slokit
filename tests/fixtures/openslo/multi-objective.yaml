@@ -1,0 +1,29 @@
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: api-latency
+  labels:
+    team: checkout
+spec:
+  description: "Checkout API latency tiers"
+  service: checkout
+  budgetingMethod: Occurrences
+  timeWindow:
+    - duration: 28d
+      isRolling: true
+  indicator:
+    spec:
+      thresholdMetric:
+        metricSource:
+          type: Prometheus
+          spec:
+            query: http_request_duration_seconds{job="checkout"}
+  objectives:
+    - displayName: fast
+      op: lte
+      value: 0.3
+      target: 0.99
+    - displayName: tolerable
+      op: lte
+      value: 1.5
+      target: 0.999
