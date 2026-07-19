@@ -8,6 +8,8 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-19
+
 Spec hardening: a validation gap audit, with real gaps split into hard errors
 (where the old behavior generated broken or misleading Prometheus rules) and
 new advisory lints (where the output loads but is probably not intended); plus
