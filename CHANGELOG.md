@@ -8,6 +8,44 @@ small breaking changes.
 
 ## [Unreleased]
 
+Spec JSON Schema: editor autocomplete and validation for the sloth-compatible
+spec format, completing the interop tranche.
+
+### Added
+
+- **`schema/slokit-spec.schema.json`** (draft 2020-12): the spec shape
+  including every slokit extension (per-SLO `period`, the `latency` SLI,
+  `sli.plugin`, `alerting.windows`). The schema encodes structural rules:
+  required fields, the `page`/`ticket` severity enum, the exclusive
+  events/raw/latency/plugin SLI choice, Prometheus duration and metric-name
+  patterns, objective bounds in the open interval (0, 100), and the window
+  token in hand-written queries (exactly the two spellings generation
+  substitutes, `{{.window}}` and `{{ .window }}`). Cross-field semantics remain
+  owned by `slokit validate` (and the schema description says so): duplicate
+  SLO names, `short` shorter than `long` in custom windows, zero-total
+  durations such as `0s`, latency-selector quote/comma checks, and plugin id
+  resolution against the registry. Unknown properties stay allowed, matching
+  the parser's sloth-forward-compatibility.
+- **`slokit schema` subcommand**: prints the embedded schema verbatim to
+  stdout (or `-o <file>`), so editors and tooling can consume it without the
+  repository. Library consumers get the same string as
+  `slokit::spec::SCHEMA_JSON` (behind the existing `spec` feature).
+- Schema tests (`tests/schema.rs`): every native fixture spec validates
+  against the schema, including the slokit-native twins of the OpenSLO
+  goldens and the plugin worked example plus its hand-written twin; the
+  schema-accepted samples also pass `slokit validate`; negative cases the
+  schema and the tool both reject (unknown window severity, multiple SLIs
+  set, malformed durations, out-of-range objectives, empty label names,
+  missing `{{.window}}` tokens, non-scalar plugin options, and more); OpenSLO
+  documents are rejected as non-native input; and pins that the embedded
+  string matches the repo file byte for byte and that `slokit schema` prints
+  exactly it. The `jsonschema` crate is a dev-dependency only; runtime
+  dependencies and the lean core are unchanged.
+- README: an "Editor integration (JSON Schema)" section covering the VS Code
+  `yaml.schemas` mapping, the `yaml-language-server` modeline, the `slokit
+  schema` subcommand, and the raw GitHub URL pattern (pin a tag to pin a
+  schema version).
+
 ## [0.10.0] - 2026-07-19
 
 OpenSLO import: the input funnel widens beyond sloth-compatible specs.

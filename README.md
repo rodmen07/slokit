@@ -55,6 +55,9 @@ slokit check -i slos/ --url http://localhost:9090 --output json --fail-on warnin
 
 # Generate a Grafana dashboard (JSON) from a spec
 slokit dashboard -i slos.yaml -o dashboard.json
+
+# Print the spec JSON Schema (see "Editor integration" below)
+slokit schema
 ```
 
 Every command's `-i` accepts a **single spec file or a directory** of
@@ -204,6 +207,57 @@ the registry through the `_with` entry points (`Spec::validate_with`,
 `SloSpec::to_sli_with`, `Spec::lint_with`) and `GenerateOptions::plugins`; see
 the `slokit::spec::plugin` module docs for a worked example. External plugin
 definition files (YAML/WASM) are deliberately out of scope for 0.9.
+
+## Editor integration (JSON Schema)
+
+The spec format ships as a JSON Schema (draft 2020-12) at
+[`schema/slokit-spec.schema.json`](schema/slokit-spec.schema.json), covering
+the sloth-compatible shape and every slokit extension (`period`, the `latency`
+SLI, `sli.plugin`, `alerting.windows`). Wiring it into your editor gives
+autocomplete, hover docs, and inline validation while you type. The schema
+encodes structural rules only; `slokit validate` stays authoritative for
+cross-field semantics it cannot express (duplicate SLO names, `short` shorter
+than `long` in custom windows, plugin id resolution, quote balance in latency
+selectors, and so on).
+
+Get the schema without cloning the repo:
+
+```sh
+slokit schema                                # print to stdout
+slokit schema -o slokit-spec.schema.json     # write to a file
+```
+
+or reference it by raw GitHub URL (substitute a release tag for `main` to pin
+a version):
+
+```text
+https://raw.githubusercontent.com/rodmen07/slokit/main/schema/slokit-spec.schema.json
+https://raw.githubusercontent.com/rodmen07/slokit/<tag>/schema/slokit-spec.schema.json
+```
+
+**VS Code** (the YAML extension, powered by `yaml-language-server`), in
+`settings.json`:
+
+```json
+{
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/rodmen07/slokit/main/schema/slokit-spec.schema.json": [
+      "slos.yaml",
+      "slos/*.yaml"
+    ]
+  }
+}
+```
+
+**Any editor running `yaml-language-server`** (Neovim, Helix, Zed, ...): add a
+modeline at the top of the spec file itself:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/rodmen07/slokit/main/schema/slokit-spec.schema.json
+version: "prometheus/v1"
+service: myservice
+slos: [...]
+```
 
 ## Library
 

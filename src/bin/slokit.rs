@@ -10,7 +10,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
 use slokit::dashboard::dashboards_json;
 use slokit::generate::{generate_all, generate_rules_with, GenerateOptions};
-use slokit::spec::{openslo, validate_all, Lint, LintLevel, Spec};
+use slokit::spec::{openslo, validate_all, Lint, LintLevel, Spec, SCHEMA_JSON};
 use slokit::{BurnRate, MwmbrConfig, Objective, Slo, Window};
 
 /// Every spec file under `input`: the file itself, or each `*.yaml`/`*.yml`
@@ -94,6 +94,8 @@ enum Command {
     Check(CheckArgs),
     /// Generate a Grafana dashboard (JSON) from a spec.
     Dashboard(DashboardArgs),
+    /// Print the JSON Schema for the spec format (editor/tooling integration).
+    Schema(SchemaArgs),
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -194,6 +196,13 @@ struct DashboardArgs {
 }
 
 #[derive(Args)]
+struct SchemaArgs {
+    /// Output file. Defaults to stdout.
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+}
+
+#[derive(Args)]
 struct CheckArgs {
     #[command(flatten)]
     input: InputArgs,
@@ -245,6 +254,7 @@ fn main() -> Result<()> {
         Command::Calc(args) => run_calc(args),
         Command::Check(args) => run_check(args),
         Command::Dashboard(args) => run_dashboard(args),
+        Command::Schema(args) => run_schema(args),
     }
 }
 
@@ -264,6 +274,11 @@ fn run_dashboard(args: DashboardArgs) -> Result<()> {
     let specs = load_specs(&args.input)?;
     validate_all(&specs)?;
     write_output(dashboards_json(&specs)?, args.output, "dashboard")
+}
+
+fn run_schema(args: SchemaArgs) -> Result<()> {
+    // Verbatim, so the output is byte-identical to the in-repo schema file.
+    write_output(SCHEMA_JSON.to_string(), args.output, "schema")
 }
 
 fn run_generate(args: GenerateArgs) -> Result<()> {
