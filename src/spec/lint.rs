@@ -11,7 +11,10 @@
 //! [`lint`] never fails; it returns every finding and lets the caller decide
 //! whether to treat them as fatal (the CLI's `--strict` flag does).
 
+use std::collections::{BTreeMap, HashSet};
+
 use crate::burn_rate::{MwmbrConfig, Severity};
+use crate::window::Window;
 
 use super::{Spec, DEFAULT_PERIOD};
 
@@ -47,14 +50,75 @@ pub struct Lint {
     pub message: String,
 }
 
+/// The legacy Prometheus label-name charset (`[a-zA-Z_][a-zA-Z0-9_]*`).
+///
+/// Prometheus 3.0 accepts UTF-8 names by default, so names outside this set
+/// are advisory (older servers and legacy name validation reject them), not
+/// validation errors.
+fn is_legacy_label_name(s: &str) -> bool {
+    let mut chars = s.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// Advisory checks on one label/annotation map: legacy-charset portability for
+/// every name and, for label maps (`reserved`), collisions with the generated
+/// `sloth_*` identity labels.
+fn label_name_lints(
+    out: &mut Vec<Lint>,
+    location: &str,
+    field: &str,
+    map: &BTreeMap<String, String>,
+    reserved: bool,
+) {
+    for key in map.keys() {
+        if !is_legacy_label_name(key) {
+            out.push(Lint {
+                level: LintLevel::Warning,
+                code: "LABEL_NAME_CHARS",
+                location: location.to_string(),
+                message: format!(
+                    "`{field}` name '{key}' is outside [a-zA-Z_][a-zA-Z0-9_]*; Prometheus releases before 3.0 (and legacy name validation) reject rules that use it"
+                ),
+            });
+        }
+        if reserved && key.starts_with("sloth_") {
+            out.push(Lint {
+                level: LintLevel::Warning,
+                code: "RESERVED_LABEL",
+                location: location.to_string(),
+                message: format!(
+                    "`{field}` name '{key}' uses the reserved `sloth_` prefix; slokit's generated identity labels may overwrite it"
+                ),
+            });
+        }
+    }
+}
+
 /// Run every advisory check against `spec` and return all findings, ordered by
 /// SLO and then by check. An empty vec means the spec is clean.
 ///
-/// Linting assumes nothing about structural validity, so it is safe to call on a
-/// spec that would fail [`validate`](super::validate); the checks only read the
-/// objective, period, alerting, and description fields.
+/// Linting assumes nothing about structural validity, so it is safe to call on
+/// a spec that would fail [`validate`](super::validate); the checks only read
+/// the version, objective, period, labels, alerting, and description fields.
 pub fn lint(spec: &Spec) -> Vec<Lint> {
     let mut out = Vec::new();
+
+    // Unknown spec version: parsing ignores the field entirely, so anything
+    // other than prometheus/v1 is treated as prometheus/v1 without notice.
+    if spec.version != "prometheus/v1" {
+        out.push(Lint {
+            level: LintLevel::Warning,
+            code: "SPEC_VERSION",
+            location: "spec".to_string(),
+            message: format!(
+                "version '{}' is not 'prometheus/v1'; slokit ignores the field and generates prometheus/v1 rules regardless",
+                spec.version
+            ),
+        });
+    }
+
+    label_name_lints(&mut out, "spec", "labels", &spec.labels, true);
 
     for slo in &spec.slos {
         let loc = format!("slo '{}'", slo.name);
@@ -90,6 +154,78 @@ pub fn lint(spec: &Spec) -> Vec<Lint> {
                     slo.objective
                 ),
             });
+        }
+
+        // A burn-rate condition whose threshold (factor * error budget) is at
+        // least 1 asks for an error ratio above 100%, which can never happen:
+        // the alert is generated but can never fire.
+        if slo.objective > 0.0 && slo.objective < 100.0 {
+            if let Some(mwmbr) = &effective_mwmbr {
+                let budget = 1.0 - slo.objective / 100.0;
+                for w in &mwmbr.windows {
+                    let threshold = w.factor * budget;
+                    if threshold >= 1.0 {
+                        out.push(Lint {
+                            level: LintLevel::Warning,
+                            code: "THRESHOLD_UNREACHABLE",
+                            location: loc.clone(),
+                            message: format!(
+                                "{} condition (factor {}, long {}) fires at error ratio {threshold}, but an error ratio cannot exceed 1; this condition can never fire",
+                                w.severity.label(),
+                                w.factor,
+                                w.long
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Repeated identical custom conditions (same severity and windows) are
+        // redundant: OR-ed together, only the lowest threshold matters.
+        let mut seen_windows: HashSet<(&str, Window, Window)> = HashSet::new();
+        for w in &slo.alerting.windows {
+            if let (Ok(long), Ok(short)) = (Window::parse(&w.long), Window::parse(&w.short)) {
+                if !seen_windows.insert((w.severity.as_str(), long, short)) {
+                    out.push(Lint {
+                        level: LintLevel::Warning,
+                        code: "DUPLICATE_ALERT_WINDOW",
+                        location: loc.clone(),
+                        message: format!(
+                            "duplicate {} condition with long {long} and short {short} in `alerting.windows`; only the lowest-factor duplicate has any effect",
+                            w.severity
+                        ),
+                    });
+                }
+            }
+        }
+
+        for (field, map, reserved) in [
+            ("labels", &slo.labels, true),
+            ("alerting.labels", &slo.alerting.labels, true),
+            ("alerting.annotations", &slo.alerting.annotations, false),
+            (
+                "alerting.page_alert.labels",
+                &slo.alerting.page_alert.labels,
+                true,
+            ),
+            (
+                "alerting.page_alert.annotations",
+                &slo.alerting.page_alert.annotations,
+                false,
+            ),
+            (
+                "alerting.ticket_alert.labels",
+                &slo.alerting.ticket_alert.labels,
+                true,
+            ),
+            (
+                "alerting.ticket_alert.annotations",
+                &slo.alerting.ticket_alert.annotations,
+                false,
+            ),
+        ] {
+            label_name_lints(&mut out, &loc, field, map, reserved);
         }
 
         // SLO period shorter than (or equal to) the longest effective
@@ -427,5 +563,224 @@ slos:
             .find(|l| l.code == "NO_DESCRIPTION")
             .expect("expected NO_DESCRIPTION");
         assert_eq!(found.level, LintLevel::Info);
+    }
+
+    #[test]
+    fn unknown_spec_version_warns() {
+        let yaml = r#"
+version: "prometheus/v2"
+service: api
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting: { labels: { severity: page } }
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let found = lint(&spec)
+            .into_iter()
+            .find(|l| l.code == "SPEC_VERSION")
+            .expect("expected SPEC_VERSION");
+        assert_eq!(found.location, "spec");
+        assert!(found.message.contains("prometheus/v2"));
+    }
+
+    #[test]
+    fn default_and_explicit_v1_versions_do_not_warn() {
+        let spec = Spec::from_yaml(CLEAN).unwrap();
+        assert!(!codes(&spec).contains(&"SPEC_VERSION"));
+        let explicit = format!("version: \"prometheus/v1\"\n{CLEAN}");
+        let spec = Spec::from_yaml(&explicit).unwrap();
+        assert!(!codes(&spec).contains(&"SPEC_VERSION"));
+    }
+
+    #[test]
+    fn label_names_outside_the_legacy_charset_warn() {
+        let yaml = r#"
+service: api
+labels:
+  "team name": platform
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    labels:
+      foo-bar: x
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting:
+      labels: { severity: page }
+      annotations:
+        "runbook url": https://example.com
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let findings: Vec<_> = lint(&spec)
+            .into_iter()
+            .filter(|l| l.code == "LABEL_NAME_CHARS")
+            .collect();
+        assert_eq!(findings.len(), 3, "{findings:?}");
+        assert!(findings.iter().any(|l| l.location == "spec"));
+        assert!(findings.iter().any(|l| l.message.contains("foo-bar")));
+        assert!(findings.iter().any(|l| l.message.contains("runbook url")));
+    }
+
+    #[test]
+    fn reserved_sloth_label_warns() {
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    labels:
+      sloth_service: impostor
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting: { labels: { severity: page } }
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let found = lint(&spec)
+            .into_iter()
+            .find(|l| l.code == "RESERVED_LABEL")
+            .expect("expected RESERVED_LABEL");
+        assert!(found.message.contains("sloth_service"));
+    }
+
+    #[test]
+    fn sloth_prefixed_annotations_are_not_reserved() {
+        // Annotations never collide with the generated identity labels.
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting:
+      labels: { severity: page }
+      annotations: { sloth_note: fine }
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let c = codes(&spec);
+        assert!(!c.contains(&"RESERVED_LABEL"));
+        assert!(!c.contains(&"LABEL_NAME_CHARS"));
+    }
+
+    #[test]
+    fn unreachable_custom_threshold_warns() {
+        // Objective 99% => budget 0.01; factor 150 => threshold 1.5 (> 1).
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.0
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting:
+      labels: { severity: page }
+      windows:
+        - severity: page
+          long: 1h
+          short: 5m
+          factor: 150
+        - severity: ticket
+          long: 1d
+          short: 2h
+          factor: 2
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let findings: Vec<_> = lint(&spec)
+            .into_iter()
+            .filter(|l| l.code == "THRESHOLD_UNREACHABLE")
+            .collect();
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("can never fire"));
+    }
+
+    #[test]
+    fn low_objective_makes_default_page_thresholds_unreachable() {
+        // Objective 60% => budget 0.4; default factors 14.4, 6, and 3 all give
+        // thresholds >= 1, while factor 1 stays reachable (0.4).
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 60
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting: { labels: { severity: page } }
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let n = lint(&spec)
+            .iter()
+            .filter(|l| l.code == "THRESHOLD_UNREACHABLE")
+            .count();
+        assert_eq!(n, 3);
+    }
+
+    #[test]
+    fn reachable_thresholds_do_not_warn() {
+        let spec = Spec::from_yaml(CLEAN).unwrap();
+        assert!(!codes(&spec).contains(&"THRESHOLD_UNREACHABLE"));
+    }
+
+    #[test]
+    fn duplicate_alert_windows_warn_even_across_spellings() {
+        // 1800s and 30m are the same window; the duplicate must be caught
+        // after parsing, not by raw string comparison.
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.0
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting:
+      labels: { severity: page }
+      windows:
+        - severity: page
+          long: 30m
+          short: 5m
+          factor: 10
+        - severity: page
+          long: 1800s
+          short: 5m
+          factor: 6
+        - severity: ticket
+          long: 12h
+          short: 1h
+          factor: 2
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let findings: Vec<_> = lint(&spec)
+            .into_iter()
+            .filter(|l| l.code == "DUPLICATE_ALERT_WINDOW")
+            .collect();
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(findings[0].message.contains("30m"));
+    }
+
+    #[test]
+    fn distinct_alert_windows_do_not_warn() {
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.0
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting:
+      labels: { severity: page }
+      windows:
+        - severity: page
+          long: 1h
+          short: 5m
+          factor: 14.4
+        - severity: ticket
+          long: 1h
+          short: 5m
+          factor: 3
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        assert!(!codes(&spec).contains(&"DUPLICATE_ALERT_WINDOW"));
     }
 }
