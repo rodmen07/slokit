@@ -8,6 +8,8 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-19
+
 SLI plugins: reusable, named SLI templates referenced from specs via the
 sloth-compatible `sli.plugin` key and expanded to the existing core SLI shapes
 before validation, so all downstream checks, generation, and promtool coverage
