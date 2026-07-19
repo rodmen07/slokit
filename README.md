@@ -19,6 +19,8 @@ It is **drop-in compatible** with the `sloth` `prometheus/v1` spec, so existing
 specs work unchanged, and the generated metrics use the same `slo:...` names and
 `sloth_*` labels, so your Grafana dashboards keep working.
 
+Planned work through the 1.0 API freeze lives in [ROADMAP.md](ROADMAP.md).
+
 ## Install
 
 ```sh
