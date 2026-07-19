@@ -8,6 +8,8 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-19
+
 1.0 freeze prep: the public API is finalized for the 1.0.0 freeze. This is
 the deliberate **last breaking-change window** before 1.0; the (small)
 breaking changes below exist precisely so that post-1.0 growth will not be
