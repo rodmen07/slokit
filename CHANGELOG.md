@@ -8,6 +8,68 @@ small breaking changes.
 
 ## [Unreleased]
 
+SLI plugins: reusable, named SLI templates referenced from specs via the
+sloth-compatible `sli.plugin` key and expanded to the existing core SLI shapes
+before validation, so all downstream checks, generation, and promtool coverage
+apply to plugin output unchanged. Design: `docs/design/SLI_PLUGINS.md`.
+
+### Added
+
+- **`sli.plugin` spec surface** (sloth-compatible shape): a fourth SLI shape,
+  `sli.plugin: {id, options}`, mutually exclusive with `events`, `raw`, and
+  `latency`. `options` values deserialize from any YAML scalar (string,
+  number, bool) and are coerced to strings, so `threshold: 0.5` and
+  `threshold: "0.5"` are equivalent; non-scalar values are a parse error.
+  Only the spec shape is sloth-compatible: slokit resolves ids against its own
+  registry and never loads or executes sloth's Go plugin files, so
+  `sloth-common/...` ids fail validation with a clear unknown-plugin-id error
+  rather than silently generating different rules.
+- **Built-in plugins** (the `slokit/` id namespace):
+  - `slokit/availability/http-requests-total` - availability from an
+    `http_requests_total`-style counter; options `metric` (default
+    `http_requests_total`), `selector`, and `error_code_regex` (default `5..`).
+  - `slokit/availability/grpc-server-handled` - availability from a
+    `grpc_server_handled_total`-style counter where a `grpc_code` outside the
+    `success_code_regex` allowlist (default `OK`) is a bad event; options
+    `metric`, `selector`, `success_code_regex`.
+- **`SliPlugin` trait and `SliPluginRegistry`** (`slokit::spec::plugin`,
+  behind the existing `spec` feature; the lean core is untouched): plugins
+  declare typed options (`OptionSpec` with `OptionKind`
+  String/Number/Bool/Duration, required flags, and defaults), and the registry
+  enforces the contract before expansion (unknown id, missing required option,
+  and kind failures are hard errors; defaults are applied). `register` refuses
+  duplicate ids, so built-ins cannot be shadowed. Registry-loaded external
+  plugin files are out of scope for 0.9; the API accommodates a future loader
+  (a loader just registers plugins).
+- **Registry-aware `_with` siblings** for embedders with custom plugins:
+  `SloSpec::to_sli_with`, `Spec::validate_with` / `spec::validate_with` /
+  `spec::validate_all_with`, and `Spec::lint_with` / `spec::lint_with`. The
+  existing entry points keep their signatures and resolve against the built-in
+  registry.
+- New validation errors (per the 0.8.0 "output impossible or broken"
+  philosophy, all reported through the usual aggregated validation lines):
+  empty `sli.plugin.id`, unknown plugin id, missing required options, option
+  values failing their declared kind, selector-shaped option values failing
+  the 0.8.0 selector checks, metric-name options outside the Prometheus
+  charset, and regex options that would break out of their quoted matcher.
+  A plugin whose expansion forgets `{{.window}}` is caught by the existing
+  post-expansion window-token check.
+- New lint `PLUGIN_UNKNOWN_OPTION` (warning): an option name the plugin does
+  not declare. Generation succeeds (undeclared names are ignored), so this is
+  advisory, catching typos without rejecting forward-compatible specs.
+- New error variant `SlokitError::Plugin` for registry-level failures
+  (duplicate id, unknown id, broken options).
+
+### Changed
+
+- `GenerateOptions` gained the `plugins` field
+  (`Arc<slokit::spec::plugin::SliPluginRegistry>`, default: the built-in
+  registry), used by `generate_rules_with` and `generate_all` to resolve and
+  validate `sli.plugin` SLIs. Breaking for struct literals; use
+  `..Default::default()` (same mitigation as `period_aware` in 0.7.0).
+- The "sets multiple SLIs" and "has no ... SLI" validation messages now name
+  `plugin` alongside `events`, `raw`, and `latency`.
+
 ## [0.8.0] - 2026-07-19
 
 Spec hardening: a validation gap audit, with real gaps split into hard errors

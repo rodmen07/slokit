@@ -14,6 +14,7 @@ mod metadata;
 mod recording;
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use serde::Serialize;
 
@@ -21,6 +22,7 @@ use crate::burn_rate::MwmbrConfig;
 use crate::error::{Result, SlokitError};
 use crate::sli::Sli;
 use crate::slo::Slo;
+use crate::spec::plugin::SliPluginRegistry;
 use crate::spec::{SloSpec, Spec, DEFAULT_PERIOD};
 use crate::window::Window;
 
@@ -36,6 +38,10 @@ pub struct GenerateOptions {
     /// default). With scaling off, every SLO uses `mwmbr`'s windows verbatim,
     /// which are only meaningful for 30-day periods.
     pub period_aware: bool,
+    /// The registry used to resolve `sli.plugin` SLIs (defaults to slokit's
+    /// built-in plugins). Wrapped in an [`Arc`] because `GenerateOptions` is
+    /// `Clone` and a boxed-trait registry is not.
+    pub plugins: Arc<SliPluginRegistry>,
 }
 
 impl Default for GenerateOptions {
@@ -44,6 +50,7 @@ impl Default for GenerateOptions {
             default_period: DEFAULT_PERIOD,
             mwmbr: MwmbrConfig::sre_default(),
             period_aware: true,
+            plugins: Arc::new(SliPluginRegistry::with_builtins()),
         }
     }
 }
@@ -196,7 +203,7 @@ pub fn generate_rules(spec: &Spec) -> Result<RuleSet> {
 /// duplicated across specs would repeat rule-group names in the merged output,
 /// which Prometheus refuses to load.
 pub fn generate_all(specs: &[Spec], opts: &GenerateOptions) -> Result<RuleSet> {
-    crate::spec::validate_all(specs)?;
+    crate::spec::validate_all_with(specs, &opts.plugins)?;
     let mut groups = Vec::new();
     for spec in specs {
         groups.extend(generate_rules_with(spec, opts)?.groups);
@@ -204,9 +211,10 @@ pub fn generate_all(specs: &[Spec], opts: &GenerateOptions) -> Result<RuleSet> {
     Ok(RuleSet { groups })
 }
 
-/// Generate the full rule set for a spec using explicit options.
+/// Generate the full rule set for a spec using explicit options. `sli.plugin`
+/// SLIs are resolved against `opts.plugins`.
 pub fn generate_rules_with(spec: &Spec, opts: &GenerateOptions) -> Result<RuleSet> {
-    spec.validate()?;
+    spec.validate_with(&opts.plugins)?;
 
     let mut groups = Vec::with_capacity(spec.slos.len() * 3);
     for slo_spec in &spec.slos {
@@ -223,7 +231,7 @@ pub fn generate_rules_with(spec: &Spec, opts: &GenerateOptions) -> Result<RuleSe
             spec_labels: &spec.labels,
             slo_spec,
             slo,
-            sli: slo_spec.to_sli()?,
+            sli: slo_spec.to_sli_with(&opts.plugins)?,
             id: slo_spec.sloth_id(&spec.service),
             mwmbr,
         };

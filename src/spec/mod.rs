@@ -5,15 +5,18 @@
 //! (unknown fields are ignored, so newer `sloth` keys do not break parsing) and
 //! adds slokit extensions: an optional per-SLO [`SloSpec::period`] override
 //! (which `sloth` only exposes as a global CLI flag), a [`LatencySli`] SLI
-//! shape that generates the histogram bucket query for latency SLOs, and
-//! per-SLO custom burn-rate conditions via [`Alerting::windows`].
+//! shape that generates the histogram bucket query for latency SLOs, per-SLO
+//! custom burn-rate conditions via [`Alerting::windows`], and the
+//! sloth-compatible [`PluginSli`] shape resolved against an SLI [`plugin`]
+//! registry.
 
 mod lint;
 mod parse;
+pub mod plugin;
 mod validate;
 
-pub use lint::{lint, Lint, LintLevel};
-pub use validate::{validate, validate_all};
+pub use lint::{lint, lint_with, Lint, LintLevel};
+pub use validate::{validate, validate_all, validate_all_with, validate_with};
 
 use std::collections::BTreeMap;
 
@@ -70,7 +73,7 @@ pub struct SloSpec {
     pub period: Option<String>,
 }
 
-/// The SLI definition: exactly one of `events`, `raw`, or `latency`.
+/// The SLI definition: exactly one of `events`, `raw`, `latency`, or `plugin`.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
 pub struct SliSpec {
     /// Events-based SLI (bad events over total events).
@@ -82,6 +85,9 @@ pub struct SliSpec {
     /// Latency SLI generated from a Prometheus histogram (slokit extension).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latency: Option<LatencySli>,
+    /// Plugin-provided SLI (sloth-compatible spec surface).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin: Option<PluginSli>,
 }
 
 /// An events-based SLI.
@@ -113,6 +119,98 @@ pub struct LatencySli {
     /// Optional label matchers, written without braces (e.g. `job="api"`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selector: Option<String>,
+}
+
+/// A plugin-provided SLI: a plugin registry `id` plus option values, expanded
+/// into one of the core SLI shapes during resolution (see
+/// [`SloSpec::to_sli_with`] and the [`plugin`] module).
+///
+/// This is the sloth-compatible `sli.plugin` spec surface. Only the shape is
+/// compatible: slokit resolves ids against its own registry and never loads
+/// sloth's Go plugin files, so `sloth-common/...` ids fail with an
+/// unknown-plugin-id validation error.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct PluginSli {
+    /// The registry key, e.g. `slokit/availability/http-requests-total`.
+    pub id: String,
+    /// Option values passed to the plugin. Scalar YAML values (strings,
+    /// numbers, bools) are coerced to strings, so `threshold: 0.5` and
+    /// `threshold: "0.5"` are equivalent; non-scalar values are a parse error.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_scalar_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub options: BTreeMap<String, String>,
+}
+
+/// Deserialize `sli.plugin.options` as a string map, coercing scalar YAML
+/// values (numbers, bools) to their string form to stay a superset of sloth's
+/// `map[string]string`. Non-scalar values (maps, lists) are a parse error.
+fn deserialize_scalar_map<'de, D>(
+    deserializer: D,
+) -> std::result::Result<BTreeMap<String, String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct ScalarString(String);
+
+    impl<'de> Deserialize<'de> for ScalarString {
+        fn deserialize<D2>(deserializer: D2) -> std::result::Result<Self, D2::Error>
+        where
+            D2: serde::Deserializer<'de>,
+        {
+            struct Visitor;
+
+            impl serde::de::Visitor<'_> for Visitor {
+                type Value = ScalarString;
+
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    f.write_str("a scalar plugin option value (string, number, or bool)")
+                }
+
+                fn visit_str<E: serde::de::Error>(
+                    self,
+                    v: &str,
+                ) -> std::result::Result<Self::Value, E> {
+                    Ok(ScalarString(v.to_string()))
+                }
+
+                fn visit_bool<E: serde::de::Error>(
+                    self,
+                    v: bool,
+                ) -> std::result::Result<Self::Value, E> {
+                    Ok(ScalarString(v.to_string()))
+                }
+
+                fn visit_i64<E: serde::de::Error>(
+                    self,
+                    v: i64,
+                ) -> std::result::Result<Self::Value, E> {
+                    Ok(ScalarString(v.to_string()))
+                }
+
+                fn visit_u64<E: serde::de::Error>(
+                    self,
+                    v: u64,
+                ) -> std::result::Result<Self::Value, E> {
+                    Ok(ScalarString(v.to_string()))
+                }
+
+                fn visit_f64<E: serde::de::Error>(
+                    self,
+                    v: f64,
+                ) -> std::result::Result<Self::Value, E> {
+                    Ok(ScalarString(v.to_string()))
+                }
+            }
+
+            deserializer.deserialize_any(Visitor)
+        }
+    }
+
+    let map = BTreeMap::<String, ScalarString>::deserialize(deserializer)?;
+    Ok(map.into_iter().map(|(k, v)| (k, v.0)).collect())
 }
 
 /// Alerting metadata shared and per-severity.
@@ -214,6 +312,7 @@ impl Spec {
     }
 
     /// Validate the spec, returning [`SlokitError::Validation`] on any problem.
+    /// `plugin` SLIs are resolved against slokit's built-in plugin registry.
     ///
     /// When several specs will be merged into one rules file, prefer
     /// [`validate_all`], which adds cross-spec checks (duplicate service/SLO
@@ -222,12 +321,27 @@ impl Spec {
         validate(self)
     }
 
+    /// Like [`Spec::validate`], but resolving `plugin` SLIs against an
+    /// explicit [`SliPluginRegistry`](plugin::SliPluginRegistry) (for
+    /// embedders with custom plugins).
+    pub fn validate_with(&self, plugins: &plugin::SliPluginRegistry) -> Result<()> {
+        validate_with(self, plugins)
+    }
+
     /// Run advisory [`lint`] checks and return every finding (never fails).
+    /// Plugin option names are checked against slokit's built-in registry.
     ///
     /// Unlike [`Spec::validate`], this reports legal-but-questionable
     /// configurations rather than hard errors. An empty vec means no advisories.
     pub fn lint(&self) -> Vec<Lint> {
         lint(self)
+    }
+
+    /// Like [`Spec::lint`], but checking plugin option names against an
+    /// explicit [`SliPluginRegistry`](plugin::SliPluginRegistry), so
+    /// `PLUGIN_UNKNOWN_OPTION` compares against the right declarations.
+    pub fn lint_with(&self, plugins: &plugin::SliPluginRegistry) -> Vec<Lint> {
+        lint_with(self, plugins)
     }
 }
 
@@ -252,20 +366,31 @@ impl SloSpec {
         Ok(Slo::new(objective, period))
     }
 
-    /// Build a core [`Sli`] from this spec's SLI definition. Exactly one of
-    /// `events`, `raw`, or `latency` must be set.
+    /// Build a core [`Sli`] from this spec's SLI definition, resolving a
+    /// `plugin` SLI against slokit's built-in plugin registry. Exactly one of
+    /// `events`, `raw`, `latency`, or `plugin` must be set.
+    ///
+    /// Use [`SloSpec::to_sli_with`] to resolve against a custom registry.
     pub fn to_sli(&self) -> Result<Sli> {
+        self.to_sli_with(&plugin::SliPluginRegistry::with_builtins())
+    }
+
+    /// Like [`SloSpec::to_sli`], but resolving `plugin` SLIs against an
+    /// explicit [`SliPluginRegistry`](plugin::SliPluginRegistry) (for
+    /// embedders with custom plugins).
+    pub fn to_sli_with(&self, plugins: &plugin::SliPluginRegistry) -> Result<Sli> {
         let set_count = [
             self.sli.events.is_some(),
             self.sli.raw.is_some(),
             self.sli.latency.is_some(),
+            self.sli.plugin.is_some(),
         ]
         .iter()
         .filter(|x| **x)
         .count();
         if set_count > 1 {
             return Err(SlokitError::Spec(format!(
-                "SLO '{}' sets multiple SLIs; pick one of `events`, `raw`, or `latency`",
+                "SLO '{}' sets multiple SLIs; pick one of `events`, `raw`, `latency`, or `plugin`",
                 self.name
             )));
         }
@@ -284,9 +409,17 @@ impl SloSpec {
                 threshold: latency.threshold.clone(),
                 selector: latency.selector.clone(),
             })
+        } else if let Some(plugin_sli) = &self.sli.plugin {
+            if plugin_sli.id.trim().is_empty() {
+                return Err(SlokitError::Spec(format!(
+                    "SLO '{}': `sli.plugin.id` must not be empty",
+                    self.name
+                )));
+            }
+            plugins.resolve(&plugin_sli.id, &plugin_sli.options)
         } else {
             Err(SlokitError::Spec(format!(
-                "SLO '{}' has no `events`, `raw`, or `latency` SLI",
+                "SLO '{}' has no `events`, `raw`, `latency`, or `plugin` SLI",
                 self.name
             )))
         }
@@ -494,5 +627,224 @@ slos:
         let spec = Spec::from_yaml(yaml).unwrap();
         let err = spec.slos[0].to_sli().unwrap_err();
         assert!(err.to_string().contains("multiple SLIs"));
+    }
+
+    #[test]
+    fn plugin_sli_resolves_against_the_builtin_registry() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: slokit/availability/http-requests-total
+        options:
+          selector: job="api"
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let sli = spec.slos[0].to_sli().unwrap();
+        assert_eq!(
+            sli,
+            Sli::Events {
+                error_query:
+                    "sum(rate(http_requests_total{job=\"api\", code=~\"5..\"}[{{.window}}]))"
+                        .to_string(),
+                total_query: "sum(rate(http_requests_total{job=\"api\"}[{{.window}}]))".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn plugin_options_coerce_scalars_to_strings() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: some/plugin
+        options:
+          threshold: 0.5
+          count: 5
+          enabled: true
+          name: plain
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let plugin = spec.slos[0].sli.plugin.as_ref().unwrap();
+        assert_eq!(plugin.options["threshold"], "0.5");
+        assert_eq!(plugin.options["count"], "5");
+        assert_eq!(plugin.options["enabled"], "true");
+        assert_eq!(plugin.options["name"], "plain");
+    }
+
+    #[test]
+    fn non_scalar_plugin_option_values_are_parse_errors() {
+        for value in ["[1, 2]", "{a: b}"] {
+            let yaml = format!(
+                r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: some/plugin
+        options:
+          bad: {value}
+"#
+            );
+            let err = Spec::from_yaml(&yaml).unwrap_err();
+            assert!(
+                err.to_string().contains("scalar plugin option value"),
+                "value {value}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn plugin_options_default_to_empty() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: slokit/availability/http-requests-total
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let plugin = spec.slos[0].sli.plugin.as_ref().unwrap();
+        assert!(plugin.options.is_empty());
+        assert!(spec.slos[0].to_sli().is_ok());
+    }
+
+    #[test]
+    fn empty_plugin_id_is_an_error() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: "  "
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let err = spec.slos[0].to_sli().unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("`sli.plugin.id` must not be empty"));
+    }
+
+    #[test]
+    fn unknown_plugin_id_is_an_error() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: sloth-common/kubernetes/apiserver/availability
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let err = spec.slos[0].to_sli().unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("unknown SLI plugin 'sloth-common/kubernetes/apiserver/availability'"));
+    }
+
+    #[test]
+    fn every_sli_pair_including_plugin_is_mutually_exclusive() {
+        let shapes = [
+            (
+                "events",
+                "events:\n        error_query: e[{{.window}}]\n        total_query: t[{{.window}}]",
+            ),
+            ("raw", "raw:\n        error_ratio_query: r[{{.window}}]"),
+            (
+                "latency",
+                "latency:\n        histogram_metric: m\n        threshold: \"1\"",
+            ),
+            (
+                "plugin",
+                "plugin:\n        id: slokit/availability/http-requests-total",
+            ),
+        ];
+        for (i, (name_a, a)) in shapes.iter().enumerate() {
+            for (name_b, b) in shapes.iter().skip(i + 1) {
+                let yaml = format!(
+                    "service: s\nslos:\n  - name: a\n    objective: 99.0\n    sli:\n      {a}\n      {b}\n"
+                );
+                let spec = Spec::from_yaml(&yaml).unwrap();
+                let err = spec.slos[0].to_sli().unwrap_err();
+                assert!(
+                    err.to_string().contains("multiple SLIs"),
+                    "{name_a}+{name_b}: {err}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn to_sli_with_uses_the_given_registry() {
+        use std::collections::BTreeMap as Map;
+
+        use plugin::{OptionKind, OptionSpec, SliPlugin, SliPluginRegistry};
+
+        struct Toy;
+        impl SliPlugin for Toy {
+            fn id(&self) -> &str {
+                "acme/toy"
+            }
+            fn description(&self) -> &str {
+                "toy"
+            }
+            fn options(&self) -> &[OptionSpec] {
+                const OPTIONS: &[OptionSpec] = &[OptionSpec {
+                    name: "metric",
+                    kind: OptionKind::String,
+                    required: true,
+                    default: None,
+                    help: "ratio metric",
+                }];
+                OPTIONS
+            }
+            fn expand(&self, options: &Map<String, String>) -> Result<Sli> {
+                Ok(Sli::Raw {
+                    error_ratio_query: format!(
+                        "{}[{}]",
+                        options["metric"],
+                        crate::sli::WINDOW_TOKEN
+                    ),
+                })
+            }
+        }
+
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: acme/toy
+        options:
+          metric: app:ratio
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        // Not in the built-in registry.
+        assert!(spec.slos[0].to_sli().is_err());
+        let mut registry = SliPluginRegistry::empty();
+        registry.register(Box::new(Toy)).unwrap();
+        let sli = spec.slos[0].to_sli_with(&registry).unwrap();
+        assert_eq!(
+            sli,
+            Sli::Raw {
+                error_ratio_query: "app:ratio[{{.window}}]".to_string()
+            }
+        );
     }
 }
