@@ -8,6 +8,8 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-19
+
 Spec JSON Schema: editor autocomplete and validation for the sloth-compatible
 spec format, completing the interop tranche.
 
