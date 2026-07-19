@@ -64,6 +64,46 @@ slos:
           severity: ticket
 "#;
 
+/// A spec exercising both built-in SLI plugins, so plugin-expanded queries are
+/// externally validated by promtool end to end.
+const PLUGIN_AVAILABILITY: &str = r#"
+service: pluginsvc
+labels:
+  owner: team-platform
+slos:
+  - name: http-availability
+    objective: 99.9
+    description: "availability via the http built-in plugin"
+    sli:
+      plugin:
+        id: slokit/availability/http-requests-total
+        options:
+          selector: job="api"
+          error_code_regex: "5..|429"
+    alerting:
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket
+  - name: grpc-availability
+    objective: 99.5
+    description: "availability via the grpc built-in plugin"
+    sli:
+      plugin:
+        id: slokit/availability/grpc-server-handled
+        options:
+          selector: job="rpc"
+    alerting:
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket
+"#;
+
 const SPEC_ALPHA: &str = r#"
 service: alpha
 slos:
@@ -201,6 +241,22 @@ fn multi_spec_directory_rules_pass_promtool() {
     let _ = fs::remove_dir_all(&dir);
 
     check_rules_with_promtool("multi", &yaml);
+}
+
+#[test]
+fn plugin_generated_rules_pass_promtool() {
+    let spec = Spec::from_yaml(PLUGIN_AVAILABILITY).expect("plugin spec parses");
+    let yaml = generate_rules(&spec).unwrap().to_prometheus_yaml().unwrap();
+    // Sanity: both plugin expansions are actually in the output promtool sees.
+    assert!(
+        yaml.contains("http_requests_total{job=\"api\", code=~\"5..|429\"}"),
+        "http plugin expansion missing"
+    );
+    assert!(
+        yaml.contains("grpc_server_handled_total{job=\"rpc\", grpc_code!~\"OK\"}"),
+        "grpc plugin expansion missing"
+    );
+    check_rules_with_promtool("plugin", &yaml);
 }
 
 #[test]

@@ -107,8 +107,8 @@ Burn-rate alert thresholds (error ratio that fires each window):
 
 `slokit` reads the `sloth` `prometheus/v1` spec, plus slokit extensions: an
 optional per-SLO `period` (sloth only offers this as a global flag), a
-`latency` SLI, and custom burn-rate windows via `alerting.windows` (both
-described below).
+`latency` SLI, SLI plugins via `sli.plugin`, and custom burn-rate windows via
+`alerting.windows` (all described below).
 
 ```yaml
 version: "prometheus/v1"
@@ -131,7 +131,7 @@ slos:
         labels: { severity: ticket }
 ```
 
-Each SLO has exactly one of three SLI shapes:
+Each SLO has exactly one of four SLI shapes:
 
 - `events` (`error_query` / `total_query`): bad events over total events.
 - `raw` (`error_ratio_query`): a query that already yields an error ratio.
@@ -157,8 +157,53 @@ Each SLO has exactly one of three SLI shapes:
   )
   ```
 
+- `plugin` (`id` / `options`): a reusable SLI template from the plugin
+  registry, expanded to one of the shapes above before validation and
+  generation (see [SLI plugins](#sli-plugins)).
+
 The `events` and `raw` query strings must contain the `{{.window}}` template
 token; `latency` is generated and needs none.
+
+### SLI plugins
+
+Instead of copy-pasting the same availability query with only the `job`
+selector changed, reference a named SLI template by id plus options:
+
+```yaml
+sli:
+  plugin:
+    id: slokit/availability/http-requests-total
+    options:
+      selector: job="api"
+      error_code_regex: "5..|429"
+```
+
+A plugin expands into an ordinary `events`/`raw` SLI before validation, so a
+plugin spec and its hand-written equivalent generate byte-identical rules.
+Unknown plugin ids and broken option values are hard validation errors; option
+names a plugin does not declare are an advisory lint (`PLUGIN_UNKNOWN_OPTION`).
+
+Built-in plugins (the `slokit/` id namespace):
+
+| id | what it measures | options (all optional) |
+|----|------------------|-------------------------|
+| `slokit/availability/http-requests-total` | availability from an `http_requests_total`-style counter; responses matching the error-code regex are bad events | `metric` (default `http_requests_total`), `selector`, `error_code_regex` (default `5..`) |
+| `slokit/availability/grpc-server-handled` | availability from a `grpc_server_handled_total`-style counter; a `grpc_code` outside the success allowlist regex is a bad event | `metric` (default `grpc_server_handled_total`), `selector`, `success_code_regex` (default `OK`) |
+
+**sloth compatibility, honestly:** only the `sli.plugin: {id, options}` spec
+shape is sloth-compatible. sloth SLI plugins are Go source files executed at
+runtime; slokit will never load or execute them, and it does not mirror the
+`sloth-common/...` plugin catalog or its ids (that would imply
+option-for-option behavioral equivalence with Go code slokit does not run). A
+spec written against sloth's plugin catalog therefore fails with a clear
+"unknown SLI plugin" error rather than silently generating different rules.
+
+Rust embedders can register their own plugins by implementing the
+`slokit::spec::plugin::SliPlugin` trait on a `SliPluginRegistry` and passing
+the registry through the `_with` entry points (`Spec::validate_with`,
+`SloSpec::to_sli_with`, `Spec::lint_with`) and `GenerateOptions::plugins`; see
+the `slokit::spec::plugin` module docs for a worked example. External plugin
+definition files (YAML/WASM) are deliberately out of scope for 0.9.
 
 ## Library
 

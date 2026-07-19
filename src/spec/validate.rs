@@ -12,14 +12,16 @@ use crate::sli::WINDOW_TOKEN;
 use crate::slo::Objective;
 use crate::window::Window;
 
+use super::plugin::SliPluginRegistry;
 use super::Spec;
 
 /// The classic Prometheus metric-name charset (`[a-zA-Z_:][a-zA-Z0-9_:]*`).
 ///
 /// The latency SLI embeds `histogram_metric` unquoted in the generated PromQL,
 /// so anything outside this set is a syntax error regardless of the Prometheus
-/// version (UTF-8 metric names would require quoted selector syntax).
-fn is_metric_name(s: &str) -> bool {
+/// version (UTF-8 metric names would require quoted selector syntax). SLI
+/// plugins reuse it for metric-name options.
+pub(super) fn is_metric_name(s: &str) -> bool {
     let mut chars = s.chars();
     matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_' || c == ':')
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ':')
@@ -27,7 +29,7 @@ fn is_metric_name(s: &str) -> bool {
 
 /// True when every double quote in `s` is paired (backslash-escaped quotes
 /// inside a string do not count as delimiters).
-fn quotes_balanced(s: &str) -> bool {
+pub(super) fn quotes_balanced(s: &str) -> bool {
     let mut open = false;
     let mut escaped = false;
     for c in s.chars() {
@@ -61,8 +63,18 @@ fn empty_key_error(
 }
 
 /// Validate a spec. Returns [`SlokitError::Validation`] with one line per
-/// problem, or `Ok(())` when the spec is sound.
+/// problem, or `Ok(())` when the spec is sound. `plugin` SLIs are resolved
+/// against slokit's built-in plugin registry.
 pub fn validate(spec: &Spec) -> Result<()> {
+    validate_with(spec, &SliPluginRegistry::with_builtins())
+}
+
+/// Like [`validate`], but resolving `plugin` SLIs against an explicit
+/// registry (for embedders with custom plugins). A spec referencing an
+/// embedder-registered plugin fails plain [`validate`] with an
+/// unknown-plugin-id error, because without the embedder's registry no output
+/// can be generated for it.
+pub fn validate_with(spec: &Spec, plugins: &SliPluginRegistry) -> Result<()> {
     let mut errors: Vec<String> = Vec::new();
 
     if spec.service.trim().is_empty() {
@@ -127,7 +139,10 @@ pub fn validate(spec: &Spec) -> Result<()> {
             }
         }
 
-        match slo.to_sli() {
+        // Plugin SLIs expand here (unknown id, missing/broken options are
+        // resolution errors), so the window-token check below runs on the
+        // expanded queries exactly as it does for hand-written ones.
+        match slo.to_sli_with(plugins) {
             Ok(sli) => {
                 for query in sli.queries() {
                     if !query.contains(WINDOW_TOKEN) && !query.contains("{{ .window }}") {
@@ -234,10 +249,16 @@ pub fn validate(spec: &Spec) -> Result<()> {
 /// group names. Duplicates within a single spec are reported once, by the
 /// per-spec pass.
 pub fn validate_all(specs: &[Spec]) -> Result<()> {
+    validate_all_with(specs, &SliPluginRegistry::with_builtins())
+}
+
+/// Like [`validate_all`], but resolving `plugin` SLIs against an explicit
+/// registry (for embedders with custom plugins).
+pub fn validate_all_with(specs: &[Spec], plugins: &SliPluginRegistry) -> Result<()> {
     let mut errors: Vec<String> = Vec::new();
 
     for spec in specs {
-        if let Err(e) = validate(spec) {
+        if let Err(e) = validate_with(spec, plugins) {
             match e {
                 SlokitError::Validation(msg) => errors.extend(
                     msg.lines()
@@ -315,7 +336,93 @@ slos:
         assert!(msg.contains("not a percentage")); // objective 150
         assert!(msg.contains("missing the")); // error_query has no token
         assert!(msg.contains("duplicate SLO name"));
-        assert!(msg.contains("has no `events`, `raw`, or `latency` SLI"));
+        assert!(msg.contains("has no `events`, `raw`, `latency`, or `plugin` SLI"));
+    }
+
+    #[test]
+    fn valid_plugin_spec_passes_validation() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: slokit/availability/http-requests-total
+        options:
+          selector: job="api"
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        assert!(spec.validate().is_ok());
+    }
+
+    #[test]
+    fn unknown_plugin_id_is_a_validation_error() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: slokit/availabilty/http
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let msg = spec.validate().unwrap_err().to_string();
+        assert!(
+            msg.contains("slo 'a'") && msg.contains("unknown SLI plugin 'slokit/availabilty/http'"),
+            "{msg}"
+        );
+    }
+
+    #[test]
+    fn broken_plugin_option_values_are_validation_errors() {
+        let cases = [
+            ("selector: '{job=\"x\"}'", "must not contain braces"),
+            ("selector: 'job=\"x'", "unbalanced double quote"),
+            (
+                "metric: 'http requests'",
+                "not a valid Prometheus metric name",
+            ),
+            (
+                "error_code_regex: '5\"..'",
+                "must not contain a double quote",
+            ),
+        ];
+        for (option, needle) in cases {
+            let yaml = format!(
+                r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: slokit/availability/http-requests-total
+        options:
+          {option}
+"#
+            );
+            let spec = Spec::from_yaml(&yaml).unwrap();
+            let msg = spec.validate().unwrap_err().to_string();
+            assert!(msg.contains(needle), "option {option}: {msg}");
+        }
+    }
+
+    #[test]
+    fn empty_plugin_id_is_a_validation_error() {
+        let yaml = r#"
+service: s
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      plugin:
+        id: ""
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let msg = spec.validate().unwrap_err().to_string();
+        assert!(msg.contains("`sli.plugin.id` must not be empty"), "{msg}");
     }
 
     #[test]

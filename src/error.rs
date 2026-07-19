@@ -28,6 +28,12 @@ pub enum SlokitError {
     /// shape). Only produced with the `check` feature.
     #[error("prometheus query failed: {0}")]
     Query(String),
+
+    /// An SLI plugin registry operation failed: a duplicate or unknown plugin
+    /// id, or option values that violate the plugin's declared contract. Only
+    /// produced with the `spec` feature.
+    #[error("plugin error: {0}")]
+    Plugin(String),
 }
 
 /// Convenience alias used throughout the crate.

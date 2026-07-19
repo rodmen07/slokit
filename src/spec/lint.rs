@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::burn_rate::{MwmbrConfig, Severity};
 use crate::window::Window;
 
+use super::plugin::SliPluginRegistry;
 use super::{Spec, DEFAULT_PERIOD};
 
 /// How serious a [`Lint`] finding is.
@@ -96,12 +97,21 @@ fn label_name_lints(
 }
 
 /// Run every advisory check against `spec` and return all findings, ordered by
-/// SLO and then by check. An empty vec means the spec is clean.
+/// SLO and then by check. An empty vec means the spec is clean. Plugin option
+/// names are checked against slokit's built-in plugin registry.
 ///
 /// Linting assumes nothing about structural validity, so it is safe to call on
 /// a spec that would fail [`validate`](super::validate); the checks only read
-/// the version, objective, period, labels, alerting, and description fields.
+/// the version, objective, period, labels, alerting, description, and plugin
+/// option fields.
 pub fn lint(spec: &Spec) -> Vec<Lint> {
+    lint_with(spec, &SliPluginRegistry::with_builtins())
+}
+
+/// Like [`lint`], but checking plugin option names against an explicit
+/// registry, so `PLUGIN_UNKNOWN_OPTION` compares against the right
+/// declarations for embedder-registered plugins.
+pub fn lint_with(spec: &Spec, plugins: &SliPluginRegistry) -> Vec<Lint> {
     let mut out = Vec::new();
 
     // Unknown spec version: parsing ignores the field entirely, so anything
@@ -298,6 +308,34 @@ pub fn lint(spec: &Spec) -> Vec<Lint> {
                                 "custom `alerting.windows` has no {} conditions, so no {} alert will be generated; add one or disable the alert",
                                 severity.label(),
                                 severity.label(),
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Option names a plugin does not declare. Likely a typo of a real
+        // option, but generation succeeds (the registry ignores undeclared
+        // names), so this is advisory rather than a validation error. An
+        // unknown plugin id is validate's problem and reported there.
+        if let Some(plugin_sli) = &slo.sli.plugin {
+            if let Some(plugin) = plugins.get(&plugin_sli.id) {
+                let declared: Vec<&str> = plugin.options().iter().map(|o| o.name).collect();
+                for name in plugin_sli.options.keys() {
+                    if !declared.contains(&name.as_str()) {
+                        let declared_list = if declared.is_empty() {
+                            "the plugin declares no options".to_string()
+                        } else {
+                            format!("declared options: {}", declared.join(", "))
+                        };
+                        out.push(Lint {
+                            level: LintLevel::Warning,
+                            code: "PLUGIN_UNKNOWN_OPTION",
+                            location: loc.clone(),
+                            message: format!(
+                                "`sli.plugin.options` name '{name}' is not declared by plugin '{}' and is ignored ({declared_list})",
+                                plugin_sli.id
                             ),
                         });
                     }
@@ -782,5 +820,139 @@ slos:
 "#;
         let spec = Spec::from_yaml(yaml).unwrap();
         assert!(!codes(&spec).contains(&"DUPLICATE_ALERT_WINDOW"));
+    }
+
+    #[test]
+    fn undeclared_plugin_option_names_warn() {
+        // `selectr` is a typo of the declared `selector`.
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    sli:
+      plugin:
+        id: slokit/availability/http-requests-total
+        options:
+          selectr: job="api"
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let found = lint(&spec)
+            .into_iter()
+            .find(|l| l.code == "PLUGIN_UNKNOWN_OPTION")
+            .expect("expected PLUGIN_UNKNOWN_OPTION");
+        assert_eq!(found.level, LintLevel::Warning);
+        assert_eq!(found.location, "slo 'a'");
+        assert!(found.message.contains("'selectr'"), "{}", found.message);
+        assert!(
+            found.message.contains("metric, selector, error_code_regex"),
+            "{}",
+            found.message
+        );
+    }
+
+    #[test]
+    fn declared_plugin_options_do_not_warn() {
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    sli:
+      plugin:
+        id: slokit/availability/http-requests-total
+        options:
+          metric: nginx_http_requests_total
+          selector: job="api"
+          error_code_regex: "5..|429"
+    alerting:
+      labels: { severity: page }
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        assert!(lint(&spec).is_empty(), "{:?}", lint(&spec));
+    }
+
+    #[test]
+    fn unknown_plugin_id_does_not_lint() {
+        // The unknown id is a hard validation error; lint stays quiet so the
+        // finding is not reported twice.
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    sli:
+      plugin:
+        id: acme/not-registered
+        options:
+          anything: goes
+    alerting:
+      labels: { severity: page }
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        assert!(!codes(&spec).contains(&"PLUGIN_UNKNOWN_OPTION"));
+    }
+
+    #[test]
+    fn lint_with_checks_against_the_given_registry() {
+        use super::super::plugin::{OptionKind, OptionSpec, SliPlugin, SliPluginRegistry};
+        use crate::error::Result;
+        use crate::sli::Sli;
+
+        struct Toy;
+        impl SliPlugin for Toy {
+            fn id(&self) -> &str {
+                "acme/toy"
+            }
+            fn description(&self) -> &str {
+                "toy"
+            }
+            fn options(&self) -> &[OptionSpec] {
+                const OPTIONS: &[OptionSpec] = &[OptionSpec {
+                    name: "metric",
+                    kind: OptionKind::String,
+                    required: true,
+                    default: None,
+                    help: "ratio metric",
+                }];
+                OPTIONS
+            }
+            fn expand(&self, _: &std::collections::BTreeMap<String, String>) -> Result<Sli> {
+                Ok(Sli::Raw {
+                    error_ratio_query: "r[{{.window}}]".to_string(),
+                })
+            }
+        }
+
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    sli:
+      plugin:
+        id: acme/toy
+        options:
+          metric: app:ratio
+          extra: oops
+    alerting:
+      labels: { severity: page }
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        // Built-in registry does not know the plugin: no finding.
+        assert!(!codes(&spec).contains(&"PLUGIN_UNKNOWN_OPTION"));
+        // The embedder registry declares `metric` only, so `extra` warns.
+        let mut registry = SliPluginRegistry::empty();
+        registry.register(Box::new(Toy)).unwrap();
+        let findings = lint_with(&spec, &registry);
+        let found = findings
+            .iter()
+            .find(|l| l.code == "PLUGIN_UNKNOWN_OPTION")
+            .expect("expected PLUGIN_UNKNOWN_OPTION");
+        assert!(found.message.contains("'extra'"), "{}", found.message);
     }
 }

@@ -204,6 +204,8 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
         default_period: Window::parse(&args.period)?,
         mwmbr: MwmbrConfig::sre_default(),
         period_aware: !args.no_period_scaling,
+        // The CLI always resolves `sli.plugin` against the built-in registry.
+        ..GenerateOptions::default()
     };
 
     let rendered = match args.format {
