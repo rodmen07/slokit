@@ -74,6 +74,8 @@ against generated rule fixtures on every push.
 Design-doc-first so the extension surface gets human review before it becomes
 API.
 
+Design doc: [docs/design/SLI_PLUGINS.md](docs/design/SLI_PLUGINS.md).
+
 - agent-doable now (PR 1): short design doc covering the `SliPlugin` registry,
   the `sli.plugin` spec key, and resolution order versus the built-in
   `events`/`raw`/`latency` SLIs. Committed alone for user review.
