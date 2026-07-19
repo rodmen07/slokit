@@ -3,10 +3,24 @@
 All notable changes to slokit are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-slokit is pre-1.0; minor versions may include additive changes and, where noted,
-small breaking changes.
+From 1.0.0, slokit follows the semver guarantees documented in
+[docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-07-19
+
+The stable release. Identical in content to 0.12.0; this release turns the
+0.12 freeze-prep surface into the contract:
+
+- The public API is frozen per [docs/SEMVER.md](docs/SEMVER.md): 1.x changes
+  are additive only (non_exhaustive types grow through constructors, the
+  SliPlugin trait grows through default-bodied methods).
+- Generated Prometheus rule output is byte-stable within a 1.x minor line,
+  enforced by the twin snapshot tests.
+- The spec JSON Schema URL contract holds: tag-pinned raw URLs are immutable.
+- MSRV is 1.82, enforced in CI; raises happen only in a minor release with a
+  changelog announcement.
 
 ## [0.12.0] - 2026-07-19
 
