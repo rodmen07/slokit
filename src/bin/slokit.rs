@@ -10,7 +10,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
 use slokit::dashboard::dashboards_json;
 use slokit::generate::{generate_all, generate_rules_with, GenerateOptions};
-use slokit::spec::{Lint, LintLevel, Spec};
+use slokit::spec::{validate_all, Lint, LintLevel, Spec};
 use slokit::{BurnRate, MwmbrConfig, Objective, Slo, Window};
 
 /// Load one spec (file) or many (directory of `*.yaml`/`*.yml`).
@@ -194,9 +194,7 @@ fn write_output(rendered: String, output: Option<PathBuf>, what: &str) -> Result
 
 fn run_dashboard(args: DashboardArgs) -> Result<()> {
     let specs = load_specs(&args.input)?;
-    for spec in &specs {
-        spec.validate()?;
-    }
+    validate_all(&specs)?;
     write_output(dashboards_json(&specs)?, args.output, "dashboard")
 }
 
@@ -227,9 +225,10 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
 
 fn run_validate(args: ValidateArgs) -> Result<()> {
     let specs = load_specs(&args.input)?;
+    // Per-spec validation plus cross-spec checks (duplicate service/SLO pairs
+    // would collide when the specs' rules are merged into one file).
+    validate_all(&specs)?;
     for spec in &specs {
-        spec.validate()
-            .with_context(|| format!("service '{}'", spec.service))?;
         println!(
             "ok: '{}' is valid ({} SLO{})",
             spec.service,
@@ -243,12 +242,9 @@ fn run_validate(args: ValidateArgs) -> Result<()> {
 fn run_lint(args: LintArgs) -> Result<()> {
     let specs = load_specs(&args.input)?;
 
-    // Surface structural errors first; advisory findings only make sense for a
-    // spec that is otherwise valid.
-    for spec in &specs {
-        spec.validate()
-            .with_context(|| format!("service '{}'", spec.service))?;
-    }
+    // Surface structural errors first; advisory findings only make sense for
+    // specs that are otherwise valid (individually and merged).
+    validate_all(&specs)?;
 
     let findings: Vec<(String, Lint)> = specs
         .iter()

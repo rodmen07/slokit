@@ -13,7 +13,7 @@ mod parse;
 mod validate;
 
 pub use lint::{lint, Lint, LintLevel};
-pub use validate::validate;
+pub use validate::{validate, validate_all};
 
 use std::collections::BTreeMap;
 
@@ -214,6 +214,10 @@ impl Spec {
     }
 
     /// Validate the spec, returning [`SlokitError::Validation`] on any problem.
+    ///
+    /// When several specs will be merged into one rules file, prefer
+    /// [`validate_all`], which adds cross-spec checks (duplicate service/SLO
+    /// identities) on top of this per-spec validation.
     pub fn validate(&self) -> Result<()> {
         validate(self)
     }

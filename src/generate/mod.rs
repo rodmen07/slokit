@@ -191,7 +191,12 @@ pub fn generate_rules(spec: &Spec) -> Result<RuleSet> {
 
 /// Generate one merged rule set covering several specs (their rule groups are
 /// concatenated), using explicit options.
+///
+/// Runs [`validate_all`](crate::spec::validate_all) first: a service/SLO pair
+/// duplicated across specs would repeat rule-group names in the merged output,
+/// which Prometheus refuses to load.
 pub fn generate_all(specs: &[Spec], opts: &GenerateOptions) -> Result<RuleSet> {
+    crate::spec::validate_all(specs)?;
     let mut groups = Vec::new();
     for spec in specs {
         groups.extend(generate_rules_with(spec, opts)?.groups);

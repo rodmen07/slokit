@@ -74,3 +74,20 @@ fn empty_directory_is_an_error() {
     assert!(Spec::from_dir(&dir).is_err());
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn duplicate_service_slo_pair_across_specs_fails_merged_generation() {
+    // Two specs with the same service and SLO name would repeat rule-group
+    // names in the merged output, which Prometheus refuses to load.
+    let specs = vec![
+        Spec::from_yaml(SPEC_A).unwrap(),
+        Spec::from_yaml(SPEC_A).unwrap(),
+    ];
+    let err = generate_all(&specs, &GenerateOptions::default()).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("duplicate service/SLO pair across specs"),
+        "{msg}"
+    );
+    assert!(msg.contains("service 'alpha'"), "{msg}");
+}

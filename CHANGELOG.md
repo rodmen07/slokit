@@ -8,6 +8,54 @@ small breaking changes.
 
 ## [Unreleased]
 
+Spec hardening: a validation gap audit, with real gaps split into hard errors
+(where the old behavior generated broken or misleading Prometheus rules) and
+new advisory lints (where the output loads but is probably not intended).
+
+### Added
+
+- **Cross-spec validation**: `spec::validate_all` validates a set of specs
+  together, prefixing each finding with its service, and rejects a service/SLO
+  pair that appears in more than one spec (merged output would repeat
+  rule-group names, which Prometheus refuses to load). `generate_all` and the
+  CLI `validate`, `lint`, and `dashboard` commands run it automatically.
+- New validation errors for specs whose output was already broken or
+  misleading:
+  - empty label/annotation names anywhere in the spec (rejected by Prometheus
+    under every name-validation scheme);
+  - whitespace-only `alerting.name` (the alert would effectively have no name);
+  - latency `histogram_metric` outside the Prometheus metric-name charset
+    (it is embedded unquoted, so the generated PromQL would not parse);
+  - latency `selector` containing braces, a leading/trailing comma, or an
+    unbalanced double quote (broken PromQL);
+  - latency `threshold` with surrounding whitespace (embedded verbatim in the
+    `le="..."` matcher, it could never match a real bucket label).
+- New lints:
+  - `SPEC_VERSION` - `version` is not `prometheus/v1`; slokit ignores the
+    field and generates prometheus/v1 rules regardless.
+  - `LABEL_NAME_CHARS` - a label/annotation name is outside the legacy
+    `[a-zA-Z_][a-zA-Z0-9_]*` charset; Prometheus releases before 3.0 (and
+    legacy name validation) reject rules that use it.
+  - `RESERVED_LABEL` - a user label uses the reserved `sloth_` prefix, so the
+    generated identity labels may overwrite it.
+  - `THRESHOLD_UNREACHABLE` - a burn-rate condition's threshold
+    (factor x error budget) is >= 1, an error ratio the SLI can never reach,
+    so the condition can never fire.
+  - `DUPLICATE_ALERT_WINDOW` - `alerting.windows` repeats an identical
+    severity/long/short condition (compared after parsing, so `30m` and
+    `1800s` count as duplicates).
+
+### Changed
+
+- `generate_all` now fails on duplicate service/SLO pairs across specs;
+  previously it silently produced a rules file Prometheus would reject.
+- Latency `threshold` values with surrounding whitespace (e.g. `" 0.3 "`) are
+  now validation errors; they previously validated but generated a matcher
+  that could never match.
+- CLI `validate` and `lint` report invalid multi-spec input as one combined
+  validation error with `service '...'` prefixes instead of stopping at the
+  first invalid spec.
+
 ## [0.7.0] - 2026-07-18
 
 Configurable alerting: the burn-rate window table is no longer fixed.
