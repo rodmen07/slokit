@@ -8,6 +8,8 @@ small breaking changes.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-19
+
 OpenSLO import: the input funnel widens beyond sloth-compatible specs.
 `apiVersion: openslo/v1` `kind: SLO` documents (single or multi-document YAML
 streams) now import into the internal spec model, so validate, lint, generate,
