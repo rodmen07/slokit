@@ -10,12 +10,63 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
 use slokit::dashboard::dashboards_json;
 use slokit::generate::{generate_all, generate_rules_with, GenerateOptions};
-use slokit::spec::{validate_all, Lint, LintLevel, Spec};
+use slokit::spec::{openslo, validate_all, Lint, LintLevel, Spec};
 use slokit::{BurnRate, MwmbrConfig, Objective, Slo, Window};
 
-/// Load one spec (file) or many (directory of `*.yaml`/`*.yml`).
-fn load_specs(input: &Path) -> Result<Vec<Spec>> {
-    Spec::load(input).with_context(|| format!("loading specs from {}", input.display()))
+/// Every spec file under `input`: the file itself, or each `*.yaml`/`*.yml`
+/// in the directory, sorted by path.
+fn spec_files(input: &Path) -> Result<Vec<PathBuf>> {
+    if !input.is_dir() {
+        return Ok(vec![input.to_path_buf()]);
+    }
+    let mut files: Vec<PathBuf> = std::fs::read_dir(input)
+        .with_context(|| format!("reading dir {}", input.display()))?
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.is_file()
+                && matches!(
+                    p.extension().and_then(|x| x.to_str()),
+                    Some("yaml") | Some("yml")
+                )
+        })
+        .collect();
+    files.sort();
+    if files.is_empty() {
+        anyhow::bail!("no .yaml/.yml spec files found in {}", input.display());
+    }
+    Ok(files)
+}
+
+/// Load one spec (file) or many (directory of `*.yaml`/`*.yml`), honoring the
+/// input format flag. Without an explicit format, each file is auto-detected:
+/// a first document with a top-level `apiVersion: openslo/...` is imported as
+/// OpenSLO, anything else parses as a native slokit spec. OpenSLO import
+/// notes are printed to stderr.
+fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
+    let mut specs = Vec::new();
+    for file in spec_files(&input.input)? {
+        let contents = std::fs::read_to_string(&file)
+            .with_context(|| format!("reading {}", file.display()))?;
+        let use_openslo = match input.input_format {
+            Some(InputFormat::Openslo) => true,
+            Some(InputFormat::Slokit) => false,
+            None => openslo::is_openslo(&contents),
+        };
+        if use_openslo {
+            let import = openslo::from_yaml(&contents)
+                .with_context(|| format!("importing OpenSLO specs from {}", file.display()))?;
+            for note in &import.notes {
+                eprintln!("note: {}: {note}", file.display());
+            }
+            specs.extend(import.specs);
+        } else {
+            specs.push(
+                Spec::from_yaml(&contents)
+                    .with_context(|| format!("loading spec from {}", file.display()))?,
+            );
+        }
+    }
+    Ok(specs)
 }
 
 #[derive(Parser)]
@@ -61,6 +112,28 @@ enum OutputFormat {
     Json,
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum InputFormat {
+    /// Native slokit spec (sloth-compatible `prometheus/v1` YAML).
+    Slokit,
+    /// OpenSLO v1 `kind: SLO` documents (single or multi-document YAML).
+    Openslo,
+}
+
+/// Input options shared by every command that reads specs.
+#[derive(Args)]
+struct InputArgs {
+    /// Input spec file or directory of specs (YAML).
+    #[arg(short, long)]
+    input: PathBuf,
+    /// Input spec format. Defaults to slokit, except that detection is
+    /// unambiguous when a file's first YAML document sets a top-level
+    /// `apiVersion: openslo/...`: that file is then imported as OpenSLO.
+    /// Pass the flag to override auto-detection either way.
+    #[arg(long, value_enum)]
+    input_format: Option<InputFormat>,
+}
+
 #[derive(Clone, Copy, ValueEnum, PartialEq)]
 enum FailOn {
     /// Exit non-zero only when an SLO is breaching (default).
@@ -73,9 +146,8 @@ enum FailOn {
 
 #[derive(Args)]
 struct GenerateArgs {
-    /// Input spec file or directory of specs (YAML).
-    #[arg(short, long)]
-    input: PathBuf,
+    #[command(flatten)]
+    input: InputArgs,
     /// Output file. Defaults to stdout.
     #[arg(short, long)]
     output: Option<PathBuf>,
@@ -96,16 +168,14 @@ struct GenerateArgs {
 
 #[derive(Args)]
 struct ValidateArgs {
-    /// Input spec file or directory of specs (YAML).
-    #[arg(short, long)]
-    input: PathBuf,
+    #[command(flatten)]
+    input: InputArgs,
 }
 
 #[derive(Args)]
 struct LintArgs {
-    /// Input spec file or directory of specs (YAML).
-    #[arg(short, long)]
-    input: PathBuf,
+    #[command(flatten)]
+    input: InputArgs,
     /// Output format.
     #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
     output: OutputFormat,
@@ -116,9 +186,8 @@ struct LintArgs {
 
 #[derive(Args)]
 struct DashboardArgs {
-    /// Input spec file or directory of specs (YAML).
-    #[arg(short, long)]
-    input: PathBuf,
+    #[command(flatten)]
+    input: InputArgs,
     /// Output file. Defaults to stdout.
     #[arg(short, long)]
     output: Option<PathBuf>,
@@ -126,9 +195,8 @@ struct DashboardArgs {
 
 #[derive(Args)]
 struct CheckArgs {
-    /// Input spec file or directory of specs (YAML).
-    #[arg(short, long)]
-    input: PathBuf,
+    #[command(flatten)]
+    input: InputArgs,
     /// Prometheus base URL, e.g. http://localhost:9090.
     #[arg(short, long)]
     url: String,

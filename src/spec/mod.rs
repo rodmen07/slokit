@@ -9,8 +9,12 @@
 //! custom burn-rate conditions via [`Alerting::windows`], and the
 //! sloth-compatible [`PluginSli`] shape resolved against an SLI [`plugin`]
 //! registry.
+//!
+//! Beyond the native format, the [`openslo`] module imports OpenSLO v1
+//! `kind: SLO` documents into this model.
 
 mod lint;
+pub mod openslo;
 mod parse;
 pub mod plugin;
 mod validate;

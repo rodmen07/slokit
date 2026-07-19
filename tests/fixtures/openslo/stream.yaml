@@ -1,0 +1,65 @@
+# A multi-document OpenSLO stream: a Service document (ignored with a note),
+# a standalone SLI referenced via indicatorRef, and two SLO documents sharing
+# one service (merged into a single slokit spec).
+apiVersion: openslo/v1
+kind: Service
+metadata:
+  name: payments
+spec:
+  description: "Payments API"
+---
+apiVersion: openslo/v1
+kind: SLI
+metadata:
+  name: payments-availability-sli
+spec:
+  ratioMetric:
+    counter: true
+    good:
+      metricSource:
+        type: Prometheus
+        spec:
+          query: sum(rate(payments_requests_total{code!~"5.."}[5m]))
+    total:
+      metricSource:
+        type: Prometheus
+        spec:
+          query: sum(rate(payments_requests_total[5m]))
+---
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: payments-availability
+spec:
+  description: "Availability via a referenced SLI"
+  service: payments
+  budgetingMethod: Occurrences
+  timeWindow:
+    - duration: 30d
+      isRolling: true
+  indicatorRef: payments-availability-sli
+  objectives:
+    - target: 0.999
+---
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: payments-latency
+spec:
+  description: "95% of payments settle within 1s"
+  service: payments
+  budgetingMethod: Occurrences
+  timeWindow:
+    - duration: 30d
+      isRolling: true
+  indicator:
+    spec:
+      thresholdMetric:
+        metricSource:
+          type: Prometheus
+          spec:
+            query: payments_request_duration_seconds
+  objectives:
+    - op: lte
+      value: 1
+      target: 0.95

@@ -8,6 +8,70 @@ small breaking changes.
 
 ## [Unreleased]
 
+OpenSLO import: the input funnel widens beyond sloth-compatible specs.
+`apiVersion: openslo/v1` `kind: SLO` documents (single or multi-document YAML
+streams) now import into the internal spec model, so validate, lint, generate,
+check, and dashboard all work on OpenSLO input unchanged.
+
+### Added
+
+- **`slokit::spec::openslo` module** (behind the existing `spec` feature):
+  `from_yaml` / `from_path` convert OpenSLO v1 documents into slokit `Spec`s,
+  returning an `Import` with the converted specs plus lint-style `ImportNote`s
+  for constructs that were dropped or rewritten. `is_openslo` provides cheap
+  format detection. The mapping (documented in full on the module):
+  - `metadata.name`/`labels`, `spec.description`, `spec.service` (documents
+    sharing a service in one stream merge into one spec, in document order);
+  - `spec.timeWindow[0]` rolling `duration` becomes the per-SLO `period`;
+  - `objectives[i].target` (unit fraction) or `targetPercent` becomes the
+    objective percent; multi-objective documents produce one SLO per
+    objective, suffixed with the objective `displayName` (slugified) or its
+    1-based index;
+  - `ratioMetric` maps to the `events` SLI (`bad`/`total` directly;
+    `good`/`total` derives the error query as `(total) - (good)` with a note)
+    and `ratioMetric.raw` maps to the `raw` SLI (`rawType: failure` as
+    written, `rawType: success` inverted as `1 - (query)`);
+  - `thresholdMetric` maps to the `latency` SLI when the query is a bare
+    histogram base metric (optional `{...}` selector) and the objective op is
+    `lte`/`lt`, with the objective `value` as the `le` threshold;
+  - `spec.indicatorRef` resolves against `kind: SLI` documents in the same
+    input.
+- **Window convention for imported queries**: queries already carrying
+  `{{.window}}` are kept as written; otherwise every fixed range selector
+  whose content is a plain duration (`[5m]`, `[1h30m]`) is rewritten to
+  `[{{.window}}]` and an import note lists the rewritten literals. Subquery
+  ranges (`[1h:5m]`) and brackets inside string literals are untouched. A
+  query with neither the token nor a rewritable range selector is an error.
+- **Clear errors for unrepresentable documents**, each naming the OpenSLO
+  path: unsupported `apiVersion`, calendar-aligned time windows (`calendar`,
+  `isRolling: false`) and calendar duration units (`M`/`Q`/`Y`),
+  `budgetingMethod` other than `Occurrences`, non-Prometheus metric sources
+  and `metricSourceRef` references, threshold objectives with `op: gt`/`gte`,
+  threshold queries that are not a bare histogram base metric, and
+  unresolvable `indicatorRef`s. Ignored-but-representable constructs
+  (`alertPolicies`, `metadata.annotations`, `timeSliceTarget`/`Window`,
+  ratio-SLI `op`/`value`, non-SLO/SLI kinds, multi-value labels) produce
+  notes instead.
+- **CLI `--input-format {slokit|openslo}`** on `generate`, `validate`,
+  `lint`, `check`, and `dashboard`. When omitted the format defaults to
+  slokit, except that detection is unambiguous when a file's first YAML
+  document sets a top-level `apiVersion: openslo/...`; that file is then
+  imported as OpenSLO. Directory inputs respect the flag for every file (and
+  auto-detect per file when it is omitted, so directories may mix formats).
+  Import notes print to stderr.
+- Fixtures under `tests/fixtures/openslo/` (simple ratio, multi-objective
+  thresholds, latency, an unrepresentable calendar window, and a
+  multi-document stream) with mapping tests, a golden snapshot of rules
+  generated from imported OpenSLO, byte-identical equivalence against a
+  hand-written slokit twin spec, promtool validation of OpenSLO-imported
+  output, and round-trip validate/lint coverage.
+
+### Changed
+
+- Imported OpenSLO SLOs carry default (empty) alerting metadata, so `lint`
+  reports `NO_ALERT_LABELS` for them until routing labels are added; this is
+  the documented, intended surface for "OpenSLO alertPolicies do not map".
+
 ## [0.9.0] - 2026-07-19
 
 SLI plugins: reusable, named SLI templates referenced from specs via the
