@@ -20,7 +20,11 @@ use super::plugin::SliPluginRegistry;
 use super::{Spec, DEFAULT_PERIOD};
 
 /// How serious a [`Lint`] finding is.
+///
+/// The enum is `#[non_exhaustive]`: new levels (for example a hint tier) may
+/// be added as the lint set grows, so matches need a wildcard arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LintLevel {
     /// A likely misconfiguration an SRE should review.
     Warning,
@@ -39,7 +43,12 @@ impl LintLevel {
 }
 
 /// A single advisory finding produced by [`lint`].
+///
+/// The struct is `#[non_exhaustive]`: it is an output type readers consume
+/// (callers never build one), and future fields such as a fix suggestion must
+/// not be breaking changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Lint {
     /// How serious the finding is.
     pub level: LintLevel,

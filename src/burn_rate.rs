@@ -55,6 +55,12 @@ impl BurnRate {
 }
 
 /// Alert severity in the MWMBR scheme.
+///
+/// Deliberately exhaustive (not `#[non_exhaustive]`): the page/ticket split is
+/// the MWMBR model itself, and the generated `sloth_severity` label contract
+/// only knows these two values. A third severity would be a semantic redesign
+/// that should be a loud, major-version change, so downstream matches may rely
+/// on exactly these variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {
     /// Fast burn: wake someone up.
@@ -75,7 +81,13 @@ impl Severity {
 
 /// One burn-rate condition: a long and short window that must both be burning
 /// faster than `factor` times the budget for the alert to fire.
+///
+/// The struct is `#[non_exhaustive]` so per-condition options (for example a
+/// `for` duration or per-condition labels) can be added without a breaking
+/// change; build values with [`AlertWindow::new`]. The fields stay public for
+/// reading and mutation.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
 pub struct AlertWindow {
     /// Whether this condition pages or tickets.
     pub severity: Severity,
@@ -89,6 +101,17 @@ pub struct AlertWindow {
 }
 
 impl AlertWindow {
+    /// Build a burn-rate condition from its severity, lookback windows, and
+    /// burn-rate factor.
+    pub const fn new(severity: Severity, long: Window, short: Window, factor: f64) -> Self {
+        Self {
+            severity,
+            long,
+            short,
+            factor,
+        }
+    }
+
     /// The error-ratio threshold for this condition against `slo`:
     /// `factor * (1 - objective)`.
     pub fn threshold(&self, slo: &Slo) -> f64 {
@@ -99,13 +122,24 @@ impl AlertWindow {
 /// A multi-window multi-burn-rate alert configuration: the set of burn-rate
 /// conditions that, OR-ed together per severity, form the page and ticket
 /// alerts.
+///
+/// The struct is `#[non_exhaustive]` so configuration-level options can be
+/// added without a breaking change. Build one with [`MwmbrConfig::new`],
+/// [`MwmbrConfig::sre_default`], or [`MwmbrConfig::sre_default_for_period`];
+/// the `windows` field stays public for reading and mutation.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct MwmbrConfig {
     /// The burn-rate conditions, ordered page-first.
     pub windows: Vec<AlertWindow>,
 }
 
 impl MwmbrConfig {
+    /// Build a configuration from an explicit set of burn-rate conditions.
+    pub fn new(windows: Vec<AlertWindow>) -> Self {
+        Self { windows }
+    }
+
     /// The canonical SRE Workbook configuration for a 30-day SLO period:
     ///
     /// | Severity | Long | Short | Factor |

@@ -39,13 +39,12 @@
 //!         "error ratio from a pre-recorded ratio metric"
 //!     }
 //!     fn options(&self) -> &[OptionSpec] {
-//!         const OPTIONS: &[OptionSpec] = &[OptionSpec {
-//!             name: "metric",
-//!             kind: OptionKind::String,
-//!             required: true,
-//!             default: None,
-//!             help: "name of the recorded error-ratio metric",
-//!         }];
+//!         const OPTIONS: &[OptionSpec] = &[OptionSpec::new(
+//!             "metric",
+//!             OptionKind::String,
+//!             "name of the recorded error-ratio metric",
+//!         )
+//!         .required()];
 //!         OPTIONS
 //!     }
 //!     fn expand(&self, options: &BTreeMap<String, String>) -> Result<Sli> {
@@ -82,7 +81,12 @@ use super::validate::{is_metric_name, quotes_balanced};
 
 /// The kind of value an option accepts. Values arrive as strings
 /// (sloth-compatible); the kind controls how they are checked.
+///
+/// The enum is `#[non_exhaustive]`: new kinds (for example an integer or
+/// choice kind) may be added, so matches need a wildcard arm. Constructing
+/// the existing variants remains supported.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum OptionKind {
     /// Any string, passed through (selector fragments, regexes, metric names).
     String,
@@ -95,7 +99,24 @@ pub enum OptionKind {
 }
 
 /// Declaration of one option a plugin accepts.
+///
+/// The struct is `#[non_exhaustive]` so declarations can gain fields (for
+/// example a deprecation note) without breaking plugin authors. Build one
+/// with the `const` builder, which works in the `const` tables plugins
+/// typically use:
+///
+/// ```
+/// use slokit::spec::plugin::{OptionKind, OptionSpec};
+///
+/// const OPTIONS: &[OptionSpec] = &[
+///     OptionSpec::new("metric", OptionKind::String, "counter metric name")
+///         .with_default("http_requests_total"),
+///     OptionSpec::new("selector", OptionKind::String, "label matchers").required(),
+/// ];
+/// assert!(OPTIONS[1].required);
+/// ```
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct OptionSpec {
     /// Option name as written in the spec.
     pub name: &'static str,
@@ -107,6 +128,32 @@ pub struct OptionSpec {
     pub default: Option<&'static str>,
     /// One-line description for docs and error messages.
     pub help: &'static str,
+}
+
+impl OptionSpec {
+    /// Declare an optional option with no default: its name, the kind checked
+    /// before expansion, and a one-line help string.
+    pub const fn new(name: &'static str, kind: OptionKind, help: &'static str) -> Self {
+        Self {
+            name,
+            kind,
+            required: false,
+            default: None,
+            help,
+        }
+    }
+
+    /// Mark the option required (the spec must provide it).
+    pub const fn required(mut self) -> Self {
+        self.required = true;
+        self
+    }
+
+    /// Give the option a default applied when the spec omits it.
+    pub const fn with_default(mut self, default: &'static str) -> Self {
+        self.default = Some(default);
+        self
+    }
 }
 
 /// A reusable, named SLI template: expands declared options into a core
@@ -363,27 +410,19 @@ fn expand_counter_availability(
 const HTTP_ID: &str = "slokit/availability/http-requests-total";
 
 const HTTP_OPTIONS: &[OptionSpec] = &[
-    OptionSpec {
-        name: "metric",
-        kind: OptionKind::String,
-        required: false,
-        default: Some("http_requests_total"),
-        help: "counter metric name",
-    },
-    OptionSpec {
-        name: "selector",
-        kind: OptionKind::String,
-        required: false,
-        default: None,
-        help: "label matchers without braces, e.g. job=\"api\"",
-    },
-    OptionSpec {
-        name: "error_code_regex",
-        kind: OptionKind::String,
-        required: false,
-        default: Some("5.."),
-        help: "regex for the `code` label identifying bad events",
-    },
+    OptionSpec::new("metric", OptionKind::String, "counter metric name")
+        .with_default("http_requests_total"),
+    OptionSpec::new(
+        "selector",
+        OptionKind::String,
+        "label matchers without braces, e.g. job=\"api\"",
+    ),
+    OptionSpec::new(
+        "error_code_regex",
+        OptionKind::String,
+        "regex for the `code` label identifying bad events",
+    )
+    .with_default("5.."),
 ];
 
 /// Built-in `slokit/availability/http-requests-total`: availability from an
@@ -419,27 +458,19 @@ impl SliPlugin for HttpRequestsAvailability {
 const GRPC_ID: &str = "slokit/availability/grpc-server-handled";
 
 const GRPC_OPTIONS: &[OptionSpec] = &[
-    OptionSpec {
-        name: "metric",
-        kind: OptionKind::String,
-        required: false,
-        default: Some("grpc_server_handled_total"),
-        help: "counter metric name",
-    },
-    OptionSpec {
-        name: "selector",
-        kind: OptionKind::String,
-        required: false,
-        default: None,
-        help: "label matchers without braces, e.g. job=\"rpc\"",
-    },
-    OptionSpec {
-        name: "success_code_regex",
-        kind: OptionKind::String,
-        required: false,
-        default: Some("OK"),
-        help: "regex of `grpc_code` values counted as successes; any other code is a bad event",
-    },
+    OptionSpec::new("metric", OptionKind::String, "counter metric name")
+        .with_default("grpc_server_handled_total"),
+    OptionSpec::new(
+        "selector",
+        OptionKind::String,
+        "label matchers without braces, e.g. job=\"rpc\"",
+    ),
+    OptionSpec::new(
+        "success_code_regex",
+        OptionKind::String,
+        "regex of `grpc_code` values counted as successes; any other code is a bad event",
+    )
+    .with_default("OK"),
 ];
 
 /// Built-in `slokit/availability/grpc-server-handled`: availability from a

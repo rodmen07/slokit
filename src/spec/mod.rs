@@ -51,7 +51,14 @@ fn default_version() -> String {
 }
 
 /// A full SLO spec for one service.
+///
+/// The spec format is slokit's main growth axis (per-SLO `period`,
+/// `alerting.windows`, and `sli.plugin` were all added after 0.1), so every
+/// spec struct is `#[non_exhaustive]`: new optional keys must not be breaking
+/// changes. Parse specs with [`Spec::from_yaml`]/[`Spec::load`], or build them
+/// programmatically with [`Spec::new`] and then mutate the public fields.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct Spec {
     /// Spec version, e.g. `prometheus/v1`.
     #[serde(default = "default_version")]
@@ -66,7 +73,11 @@ pub struct Spec {
 }
 
 /// One SLO within a [`Spec`].
+///
+/// `#[non_exhaustive]`: build one with [`SloSpec::new`] and mutate the public
+/// fields for the optional keys (see [`Spec`] for why).
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct SloSpec {
     /// SLO name, unique within the service.
     pub name: String,
@@ -90,7 +101,14 @@ pub struct SloSpec {
 }
 
 /// The SLI definition: exactly one of `events`, `raw`, `latency`, or `plugin`.
+///
+/// `#[non_exhaustive]`: new SLI shapes must not be breaking changes (this
+/// struct grew `latency` and then `plugin` after 0.1). Build one with the
+/// shape constructors ([`SliSpec::events`], [`SliSpec::raw`],
+/// [`SliSpec::latency`], [`SliSpec::plugin`]) or start from `Default` and set
+/// a field.
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct SliSpec {
     /// Events-based SLI (bad events over total events).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -107,7 +125,10 @@ pub struct SliSpec {
 }
 
 /// An events-based SLI.
+///
+/// `#[non_exhaustive]`: build one with [`EventsSli::new`] (see [`Spec`]).
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct EventsSli {
     /// Query counting failing events over `{{.window}}`.
     pub error_query: String,
@@ -115,18 +136,46 @@ pub struct EventsSli {
     pub total_query: String,
 }
 
+impl EventsSli {
+    /// Build an events SLI from its error and total queries (both should
+    /// contain the `{{.window}}` token).
+    pub fn new(error_query: impl Into<String>, total_query: impl Into<String>) -> Self {
+        Self {
+            error_query: error_query.into(),
+            total_query: total_query.into(),
+        }
+    }
+}
+
 /// A raw error-ratio SLI.
+///
+/// `#[non_exhaustive]`: build one with [`RawSli::new`] (see [`Spec`]).
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct RawSli {
     /// Query yielding an error ratio over `{{.window}}`.
     pub error_ratio_query: String,
+}
+
+impl RawSli {
+    /// Build a raw SLI from a query that already yields an error ratio (it
+    /// should contain the `{{.window}}` token).
+    pub fn new(error_ratio_query: impl Into<String>) -> Self {
+        Self {
+            error_ratio_query: error_ratio_query.into(),
+        }
+    }
 }
 
 /// A latency SLI generated from a Prometheus histogram.
 ///
 /// Produces the error ratio "fraction of requests slower than `threshold`",
 /// i.e. `1 - (bucket(le=threshold) / count)`, so callers do not hand-write it.
+///
+/// `#[non_exhaustive]`: build one with [`LatencySli::new`] and set the
+/// optional `selector` field afterwards (see [`Spec`]).
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct LatencySli {
     /// Histogram base metric, without the `_bucket`/`_count` suffix.
     pub histogram_metric: String,
@@ -137,6 +186,18 @@ pub struct LatencySli {
     pub selector: Option<String>,
 }
 
+impl LatencySli {
+    /// Build a latency SLI from a histogram base metric and an `le` bucket
+    /// boundary, with no selector.
+    pub fn new(histogram_metric: impl Into<String>, threshold: impl Into<String>) -> Self {
+        Self {
+            histogram_metric: histogram_metric.into(),
+            threshold: threshold.into(),
+            selector: None,
+        }
+    }
+}
+
 /// A plugin-provided SLI: a plugin registry `id` plus option values, expanded
 /// into one of the core SLI shapes during resolution (see
 /// [`SloSpec::to_sli_with`] and the [`plugin`] module).
@@ -145,7 +206,11 @@ pub struct LatencySli {
 /// compatible: slokit resolves ids against its own registry and never loads
 /// sloth's Go plugin files, so `sloth-common/...` ids fail with an
 /// unknown-plugin-id validation error.
+///
+/// `#[non_exhaustive]`: build one with [`PluginSli::new`] and fill `options`
+/// afterwards (see [`Spec`]).
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct PluginSli {
     /// The registry key, e.g. `slokit/availability/http-requests-total`.
     pub id: String,
@@ -158,6 +223,16 @@ pub struct PluginSli {
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub options: BTreeMap<String, String>,
+}
+
+impl PluginSli {
+    /// Build a plugin SLI reference from a registry id, with no options.
+    pub fn new(id: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            options: BTreeMap::new(),
+        }
+    }
 }
 
 /// Deserialize `sli.plugin.options` as a string map, coercing scalar YAML
@@ -230,7 +305,11 @@ where
 }
 
 /// Alerting metadata shared and per-severity.
+///
+/// `#[non_exhaustive]`: start from `Default` and set fields (this struct grew
+/// `windows` in 0.7; see [`Spec`]).
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct Alerting {
     /// Alert rule name. Defaults to the SLO name when empty.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -257,7 +336,11 @@ pub struct Alerting {
 /// One custom burn-rate condition (slokit extension): the alert for `severity`
 /// fires when the error ratio exceeds `factor` times the budget over both the
 /// `long` and `short` windows.
+///
+/// `#[non_exhaustive]`: build one with [`AlertWindowSpec::new`] (see
+/// [`Spec`]).
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct AlertWindowSpec {
     /// Which alert this condition belongs to: `page` or `ticket`.
     pub severity: String,
@@ -270,6 +353,22 @@ pub struct AlertWindowSpec {
 }
 
 impl AlertWindowSpec {
+    /// Build a custom burn-rate condition from its severity (`page` or
+    /// `ticket`), lookback window durations, and burn-rate factor.
+    pub fn new(
+        severity: impl Into<String>,
+        long: impl Into<String>,
+        short: impl Into<String>,
+        factor: f64,
+    ) -> Self {
+        Self {
+            severity: severity.into(),
+            long: long.into(),
+            short: short.into(),
+            factor,
+        }
+    }
+
     /// Convert to a core [`AlertWindow`](crate::burn_rate::AlertWindow),
     /// failing on an unknown severity or an unparseable duration.
     pub fn to_alert_window(&self) -> Result<crate::burn_rate::AlertWindow> {
@@ -292,7 +391,10 @@ impl AlertWindowSpec {
 }
 
 /// Per-severity alert overrides.
+///
+/// `#[non_exhaustive]`: start from `Default` and set fields (see [`Spec`]).
 #[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
+#[non_exhaustive]
 pub struct AlertMeta {
     /// Skip generating this severity's alert.
     #[serde(default)]
@@ -306,6 +408,18 @@ pub struct AlertMeta {
 }
 
 impl Spec {
+    /// Build a spec programmatically from a service name and its SLOs, with
+    /// the default `prometheus/v1` version and no service labels. Set the
+    /// public fields afterwards for the optional keys.
+    pub fn new(service: impl Into<String>, slos: Vec<SloSpec>) -> Self {
+        Self {
+            version: default_version(),
+            service: service.into(),
+            labels: BTreeMap::new(),
+            slos,
+        }
+    }
+
     /// Parse a spec from a YAML string. See also [`Spec::from_path`].
     pub fn from_yaml(yaml: &str) -> Result<Self> {
         parse::from_yaml(yaml)
@@ -361,7 +475,56 @@ impl Spec {
     }
 }
 
+impl SliSpec {
+    /// An SLI definition with the `events` shape set.
+    pub fn events(events: EventsSli) -> Self {
+        Self {
+            events: Some(events),
+            ..Self::default()
+        }
+    }
+
+    /// An SLI definition with the `raw` shape set.
+    pub fn raw(raw: RawSli) -> Self {
+        Self {
+            raw: Some(raw),
+            ..Self::default()
+        }
+    }
+
+    /// An SLI definition with the `latency` shape set.
+    pub fn latency(latency: LatencySli) -> Self {
+        Self {
+            latency: Some(latency),
+            ..Self::default()
+        }
+    }
+
+    /// An SLI definition with the `plugin` shape set.
+    pub fn plugin(plugin: PluginSli) -> Self {
+        Self {
+            plugin: Some(plugin),
+            ..Self::default()
+        }
+    }
+}
+
 impl SloSpec {
+    /// Build an SLO spec from its name, objective percentage, and SLI
+    /// definition, leaving every optional key at its default. Set the public
+    /// fields afterwards for description, labels, alerting, and period.
+    pub fn new(name: impl Into<String>, objective: f64, sli: SliSpec) -> Self {
+        Self {
+            name: name.into(),
+            objective,
+            description: String::new(),
+            labels: BTreeMap::new(),
+            sli,
+            alerting: Alerting::default(),
+            period: None,
+        }
+    }
+
     /// The `sloth_id` for this SLO: `"<service>-<name>"`.
     pub fn sloth_id(&self, service: &str) -> String {
         format!("{service}-{}", self.name)

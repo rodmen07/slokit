@@ -147,10 +147,8 @@ slos:
 "#,
     )
     .unwrap();
-    let opts = GenerateOptions {
-        period_aware: false,
-        ..GenerateOptions::default()
-    };
+    let mut opts = GenerateOptions::default();
+    opts.period_aware = false;
     let yaml = generate_rules_with(&spec, &opts)
         .unwrap()
         .to_prometheus_yaml()
@@ -170,10 +168,8 @@ fn default_period_output_is_unchanged_by_scaling() {
         .unwrap()
         .to_prometheus_yaml()
         .unwrap();
-    let opts = GenerateOptions {
-        period_aware: false,
-        ..GenerateOptions::default()
-    };
+    let mut opts = GenerateOptions::default();
+    opts.period_aware = false;
     let unaware = generate_rules_with(&sample_spec(), &opts)
         .unwrap()
         .to_prometheus_yaml()

@@ -298,7 +298,7 @@ println!("{}", ruleset.to_prometheus_yaml()?);
 | `check` | yes     | `reqwest`, `serde_json`  | live Prometheus querying (`PrometheusClient`, `check_spec`) |
 | `dashboard` | yes | `serde_json`             | Grafana dashboard generation (`dashboard_json`) |
 
-For the lean math-only core: `slokit = { version = "0.1", default-features = false }`.
+For the lean math-only core: `slokit = { version = "0.12", default-features = false }`.
 
 ## The MWMBR model
 
@@ -348,6 +348,22 @@ metadata rule all follow the effective windows, so the generated rule set stays
 self-consistent. `slokit lint` warns when custom windows leave an enabled
 severity with no conditions (`NO_SEVERITY_WINDOWS`) or outgrow the SLO period
 (`PERIOD_TOO_SHORT`).
+
+## Stability and MSRV
+
+The minimum supported Rust version is **1.82** (declared in Cargo.toml and
+enforced by a dedicated CI job). The semver contract for the 1.x line is
+written down in [docs/SEMVER.md](docs/SEMVER.md): what the public API covers,
+byte-stability of generated rules within a minor line, spec format and JSON
+Schema growth rules (tag-pinned schema URLs never change), the MSRV bump
+policy (minor version, announced in the CHANGELOG), and what is explicitly
+not covered (message wording, `Debug` output, human-readable CLI text).
+
+Most public enums and structs are `#[non_exhaustive]` so the API can grow
+without breaking changes: use a wildcard arm when matching, and build values
+with the provided constructors or `Default` instead of struct literals.
+0.12.0 was the deliberate final breaking-change window before the 1.0.0
+freeze.
 
 ## License
 

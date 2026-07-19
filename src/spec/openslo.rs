@@ -91,7 +91,11 @@ const API_VERSION: &str = "openslo/v1";
 
 /// The result of importing an OpenSLO YAML input: the converted specs plus
 /// lint-style notes about constructs that were dropped or transformed.
+///
+/// The struct is `#[non_exhaustive]`: it is an output type readers consume,
+/// and future report fields must not be breaking changes.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Import {
     /// The converted specs, one per distinct `spec.service`, in first-seen
     /// document order. Run [`validate_all`](super::validate_all) before
@@ -104,7 +108,12 @@ pub struct Import {
 
 /// One advisory note produced during import (not an error: the document was
 /// representable, but something was dropped or rewritten on the way in).
+///
+/// The struct is `#[non_exhaustive]`: it is an output type readers consume,
+/// and future fields (for example a machine-readable code) must not be
+/// breaking changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ImportNote {
     /// Where the note applies, e.g. `slo 'requests-availability'`.
     pub location: String,

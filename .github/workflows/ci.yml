@@ -38,6 +38,50 @@ jobs:
       - name: Test lean core
         run: cargo test --no-default-features --lib
 
+  msrv:
+    name: MSRV 1.82
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Stable cargo first: its rust-version-aware resolver (1.84+) picks
+      # dependency versions that honor rust-version = "1.82". Installing 1.82
+      # second makes it the default toolchain for the build steps.
+      - name: Install stable toolchain (MSRV-aware resolver)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@1.82
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@cargo-hack
+
+      # The committed Cargo.lock tracks current dependencies, some of which
+      # (clap 4.6+, the ICU4X tree) need newer rustc. Resolve an
+      # MSRV-compatible graph for this job only: the fallback resolver
+      # downgrades where a compatible release exists, and idna_adapter is
+      # pinned to 1.1.0, the upstream-supported escape hatch that swaps the
+      # ICU4X unicode backend (MSRV 1.83+) for unicode-rs.
+      - name: Resolve MSRV-compatible dependencies
+        run: |
+          cargo +stable update
+          cargo +stable update idna_adapter --precise 1.1.0
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+
+      # Build-only, without dev-dependencies: `cargo hack --no-dev-deps`
+      # proves the library and CLI compile on 1.82 while keeping test tooling
+      # (insta, jsonschema) out of the MSRV contract.
+      - name: Build (default features)
+        run: cargo hack build --no-dev-deps
+
+      - name: Build (all features)
+        run: cargo hack build --no-dev-deps --all-features
+
+      - name: Build lean core (no default features)
+        run: cargo hack build --no-dev-deps --no-default-features
+
   promtool:
     name: promtool check generated rules
     runs-on: ubuntu-latest

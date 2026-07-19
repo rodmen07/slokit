@@ -283,13 +283,12 @@ fn run_schema(args: SchemaArgs) -> Result<()> {
 
 fn run_generate(args: GenerateArgs) -> Result<()> {
     let specs = load_specs(&args.input)?;
-    let opts = GenerateOptions {
-        default_period: Window::parse(&args.period)?,
-        mwmbr: MwmbrConfig::sre_default(),
-        period_aware: !args.no_period_scaling,
-        // The CLI always resolves `sli.plugin` against the built-in registry.
-        ..GenerateOptions::default()
-    };
+    // The CLI always resolves `sli.plugin` against the default (built-in)
+    // registry.
+    let mut opts = GenerateOptions::default();
+    opts.default_period = Window::parse(&args.period)?;
+    opts.mwmbr = MwmbrConfig::sre_default();
+    opts.period_aware = !args.no_period_scaling;
 
     let rendered = match args.format {
         // All specs merge into one rules document.
