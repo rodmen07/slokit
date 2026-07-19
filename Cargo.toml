@@ -1,6 +1,6 @@
 [package]
 name = "slokit"
-version = "0.10.0"
+version = "0.11.0"
 edition = "2021"
 rust-version = "1.82"
 description = "SLO and error-budget engine for Rust: compute error budgets and burn rates, and generate multi-window multi-burn-rate Prometheus alert rules from sloth-compatible specs."
@@ -39,6 +39,14 @@ reqwest = { version = "0.12", default-features = false, features = [
 
 [dev-dependencies]
 insta = { version = "1", features = ["yaml"] }
+# Schema-validation tests only. The spec JSON Schema ships as a plain file
+# (embedded as a string), so these never become runtime dependencies and the
+# lean core is unchanged. Default features are off: the schema has no remote
+# `$ref`s to resolve, and the http resolver would drag reqwest/rustls/aws-lc
+# (a cmake-built C library) into every test build.
+jsonschema = { version = "0.48", default-features = false }
+serde_json = "1"
+serde_norway = "0.9"
 
 [lib]
 name = "slokit"

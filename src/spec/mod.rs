@@ -34,6 +34,18 @@ use crate::window::Window;
 /// The default SLO period when neither the spec nor the caller overrides it.
 pub const DEFAULT_PERIOD: Window = Window::days(30);
 
+/// The JSON Schema (draft 2020-12) for the spec format, embedded from
+/// `schema/slokit-spec.schema.json` in the repository.
+///
+/// The schema gives editors autocomplete and validation for the
+/// sloth-compatible spec shape plus every slokit extension (per-SLO
+/// [`SloSpec::period`], the [`LatencySli`] SLI, [`PluginSli`], and
+/// [`Alerting::windows`]). It encodes structural constraints only; cross-field
+/// semantics (duplicate SLO names, `short` shorter than `long`, plugin id
+/// resolution, and so on) remain owned by [`validate`]. The CLI prints this
+/// string via `slokit schema`.
+pub const SCHEMA_JSON: &str = include_str!("../../schema/slokit-spec.schema.json");
+
 fn default_version() -> String {
     "prometheus/v1".to_string()
 }
@@ -258,8 +270,8 @@ pub struct AlertWindowSpec {
 }
 
 impl AlertWindowSpec {
-    /// Convert to a core [`AlertWindow`], failing on an unknown severity or an
-    /// unparseable duration.
+    /// Convert to a core [`AlertWindow`](crate::burn_rate::AlertWindow),
+    /// failing on an unknown severity or an unparseable duration.
     pub fn to_alert_window(&self) -> Result<crate::burn_rate::AlertWindow> {
         let severity = match self.severity.as_str() {
             "page" => crate::burn_rate::Severity::Page,

@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rodmen07/slokit/main/schema/slokit-spec.schema.json",
+  "title": "slokit SLO spec (sloth prometheus/v1 compatible)",
+  "description": "A sloth (https://sloth.dev) prometheus/v1-compatible SLO spec with the slokit extensions: per-SLO `period`, the `latency` SLI, `sli.plugin`, and `alerting.windows`. This schema encodes structural constraints only: required fields, enum values, the exclusive SLI choice, duration and metric-name patterns, and objective bounds. Cross-field semantics stay in `slokit validate`, which remains authoritative: duplicate SLO names within and across specs, `short` shorter than `long` in alerting.windows, rejection of zero-total durations such as `0s`, comma and quote checks on latency selectors, plugin id resolution and option contracts, and the `{{.window}}` token check on plugin-expanded queries. Unknown properties are allowed everywhere, matching the parser: newer sloth keys do not break slokit.",
+  "type": "object",
+  "required": ["service", "slos"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "default": "prometheus/v1",
+      "description": "Spec version. slokit ignores this field and always generates prometheus/v1 rules; `slokit lint` warns (SPEC_VERSION) when it is not `prometheus/v1`."
+    },
+    "service": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "The service these SLOs describe. Must not be empty or whitespace-only."
+    },
+    "labels": {
+      "$ref": "#/$defs/labelMap",
+      "description": "Labels propagated onto every generated rule for this service."
+    },
+    "slos": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/slo" },
+      "description": "The SLOs for this service. SLO names must be unique within the service; `slokit validate` enforces uniqueness, including across the spec files of one run."
+    }
+  },
+  "$defs": {
+    "labelMap": {
+      "type": "object",
+      "description": "Names to string values (labels or annotations). Names must not be empty; `slokit lint` additionally warns on names outside the legacy Prometheus charset (LABEL_NAME_CHARS) and on user labels with the reserved `sloth_` prefix (RESERVED_LABEL).",
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "type": "string" }
+    },
+    "duration": {
+      "type": "string",
+      "pattern": "^([0-9]+[smhdw])+$",
+      "description": "A Prometheus-style duration: one or more number-unit terms, summed (`30m`, `1h30m`, `2w`). Units: s, m, h, d, w. `slokit validate` rejects zero-total durations such as `0s`."
+    },
+    "windowedQuery": {
+      "type": "string",
+      "pattern": "\\{\\{(\\.window| \\.window )\\}\\}",
+      "description": "A PromQL query template containing the window token, written `{{.window}}` or `{{ .window }}` (the two forms generation substitutes), which is replaced with each burn-rate window."
+    },
+    "slo": {
+      "type": "object",
+      "required": ["name", "objective", "sli"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "SLO name, unique within the service. Must not be empty or whitespace-only."
+        },
+        "objective": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 100,
+          "description": "Reliability target as a percentage in the open interval (0, 100), e.g. `99.9`."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the SLO (`slokit lint` reports NO_DESCRIPTION when absent)."
+        },
+        "labels": {
+          "$ref": "#/$defs/labelMap",
+          "description": "Labels added to this SLO's rules."
+        },
+        "sli": { "$ref": "#/$defs/sli" },
+        "alerting": { "$ref": "#/$defs/alerting" },
+        "period": {
+          "$ref": "#/$defs/duration",
+          "description": "slokit extension: per-SLO period override (e.g. `28d`). Defaults to 30d (or the CLI `--period`) when absent; the burn-rate windows scale to it unless `--no-period-scaling` is set."
+        }
+      }
+    },
+    "sli": {
+      "type": "object",
+      "description": "How the error ratio is measured: exactly one of `events`, `raw`, `latency`, or `plugin`.",
+      "properties": {
+        "events": { "$ref": "#/$defs/eventsSli" },
+        "raw": { "$ref": "#/$defs/rawSli" },
+        "latency": { "$ref": "#/$defs/latencySli" },
+        "plugin": { "$ref": "#/$defs/pluginSli" }
+      },
+      "oneOf": [
+        { "required": ["events"] },
+        { "required": ["raw"] },
+        { "required": ["latency"] },
+        { "required": ["plugin"] }
+      ]
+    },
+    "eventsSli": {
+      "type": "object",
+      "description": "Events-based SLI: bad events over total events.",
+      "required": ["error_query", "total_query"],
+      "properties": {
+        "error_query": {
+          "$ref": "#/$defs/windowedQuery",
+          "description": "Query counting failing events over `{{.window}}`."
+        },
+        "total_query": {
+          "$ref": "#/$defs/windowedQuery",
+          "description": "Query counting all events over `{{.window}}`."
+        }
+      }
+    },
+    "rawSli": {
+      "type": "object",
+      "description": "Raw SLI: a query that already yields an error ratio.",
+      "required": ["error_ratio_query"],
+      "properties": {
+        "error_ratio_query": {
+          "$ref": "#/$defs/windowedQuery",
+          "description": "Query yielding an error ratio over `{{.window}}`."
+        }
+      }
+    },
+    "latencySli": {
+      "type": "object",
+      "description": "slokit extension: the fraction of requests slower than a histogram bucket threshold. slokit generates the bucket math (`1 - bucket(le=threshold) / count`), so you do not hand-write it.",
+      "required": ["histogram_metric", "threshold"],
+      "properties": {
+        "histogram_metric": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_:][a-zA-Z0-9_:]*$",
+          "description": "Histogram base metric without the `_bucket`/`_count` suffix. Embedded unquoted in the generated PromQL, so it must match the classic Prometheus metric-name charset."
+        },
+        "threshold": {
+          "type": "string",
+          "pattern": "^\\+?([0-9]+\\.?[0-9]*|\\.[0-9]+)([eE][+-]?[0-9]+)?$",
+          "description": "The `le` bucket boundary as a string (e.g. \"0.3\"), embedded verbatim in the `le=\"...\"` matcher: a positive number with no surrounding whitespace. `slokit validate` also rejects zero."
+        },
+        "selector": {
+          "type": "string",
+          "pattern": "^[^{}]*$",
+          "description": "Optional label matchers written without braces, e.g. `job=\"api\"`. `slokit validate` also checks quote balance and leading/trailing commas."
+        }
+      }
+    },
+    "pluginSli": {
+      "type": "object",
+      "description": "sloth-compatible plugin SLI shape, resolved against slokit's own SLI plugin registry. slokit never loads sloth's Go plugin files, so `sloth-common/...` ids fail validation with an unknown-plugin-id error.",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Registry key, e.g. `slokit/availability/http-requests-total`. Whether the id exists (and its option contract) is checked by `slokit validate`."
+        },
+        "options": {
+          "type": "object",
+          "description": "Option values passed to the plugin. Scalars only: strings, numbers, and booleans are coerced to strings (`threshold: 0.5` equals `threshold: \"0.5\"`). Option names a plugin does not declare are an advisory lint (PLUGIN_UNKNOWN_OPTION).",
+          "additionalProperties": { "type": ["string", "number", "boolean"] }
+        }
+      }
+    },
+    "alerting": {
+      "type": "object",
+      "description": "Alerting metadata for the page and ticket burn-rate alerts.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^$|\\S",
+          "description": "Alert rule name; falls back to the SLO name when empty. Must not be whitespace-only."
+        },
+        "labels": {
+          "$ref": "#/$defs/labelMap",
+          "description": "Labels applied to both severities."
+        },
+        "annotations": {
+          "$ref": "#/$defs/labelMap",
+          "description": "Annotations applied to both severities."
+        },
+        "page_alert": {
+          "$ref": "#/$defs/alertMeta",
+          "description": "Page-alert overrides."
+        },
+        "ticket_alert": {
+          "$ref": "#/$defs/alertMeta",
+          "description": "Ticket-alert overrides."
+        },
+        "windows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/alertWindow" },
+          "description": "slokit extension: custom burn-rate conditions replacing the default MWMBR window table for this SLO. An empty or absent list keeps the (period-scaled) defaults. `slokit lint` warns when custom windows leave an enabled severity with no conditions (NO_SEVERITY_WINDOWS) or repeat a condition (DUPLICATE_ALERT_WINDOW)."
+        }
+      }
+    },
+    "alertMeta": {
+      "type": "object",
+      "description": "Per-severity alert overrides.",
+      "properties": {
+        "disable": {
+          "type": "boolean",
+          "default": false,
+          "description": "Skip generating this severity's alert."
+        },
+        "labels": {
+          "$ref": "#/$defs/labelMap",
+          "description": "Labels for this severity."
+        },
+        "annotations": {
+          "$ref": "#/$defs/labelMap",
+          "description": "Annotations for this severity."
+        }
+      }
+    },
+    "alertWindow": {
+      "type": "object",
+      "description": "One custom burn-rate condition: the alert for `severity` fires when the error ratio exceeds `factor` times the budget over both the `long` and `short` windows.",
+      "required": ["severity", "long", "short", "factor"],
+      "properties": {
+        "severity": {
+          "enum": ["page", "ticket"],
+          "description": "Which alert this condition belongs to."
+        },
+        "long": {
+          "$ref": "#/$defs/duration",
+          "description": "The long lookback window, e.g. `1h`. Must be longer than `short` (`slokit validate` checks the comparison)."
+        },
+        "short": {
+          "$ref": "#/$defs/duration",
+          "description": "The short confirmation window, e.g. `5m`."
+        },
+        "factor": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The burn-rate multiplier that triggers this condition."
+        }
+      }
+    }
+  }
+}
