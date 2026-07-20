@@ -46,7 +46,12 @@ jobs:
 
       - name: Publish to crates.io
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          # The env var name is fixed by cargo itself; the SECRET it reads from
+          # is CRATES_IO_TOKEN, which is the name used across all three crate
+          # repos. The old CARGO_REGISTRY_TOKEN secret predates that convention
+          # and went stale when the token was rotated on 2026-07-19, which
+          # silently failed the v1.0.0 publish.
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
           set +e
           output=$(cargo publish 2>&1)
