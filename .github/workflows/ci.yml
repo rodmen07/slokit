@@ -38,6 +38,30 @@ jobs:
       - name: Test lean core
         run: cargo test --no-default-features --lib
 
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
+      - name: Run security audit
+        # --deny warnings: without it, `cargo audit` exits 0 on `unsound` and
+        # `yanked` advisories, so they accumulate silently while CI stays green.
+        # This commit's Cargo.lock fixes RUSTSEC-2026-0185 (quinn-proto, HIGH,
+        # remote memory exhaustion, -> 0.11.16) and RUSTSEC-2026-0190 (anyhow,
+        # unsound Error::downcast_mut, -> 1.0.104), so the gate starts from a
+        # clean baseline; a new advisory now fails the build instead of
+        # scrolling past unseen.
+        run: cargo audit --deny warnings
+
   msrv:
     name: MSRV 1.82
     runs-on: ubuntu-latest
