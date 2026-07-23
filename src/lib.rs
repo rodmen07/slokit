@@ -55,6 +55,8 @@ mod sli;
 mod slo;
 mod window;
 
+pub mod simulate;
+
 pub use budget::ErrorBudget;
 pub use burn_rate::{AlertWindow, BurnRate, MwmbrConfig, Severity};
 pub use error::{Result, SlokitError};
