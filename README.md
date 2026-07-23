@@ -47,6 +47,10 @@ slokit lint -i slos.yaml --strict
 # Do the error-budget math from the terminal
 slokit calc --objective 99.9 --period 30d --total 1000000 --bad 250
 
+# "What if" planning: if the service sustains a 0.5% error rate, how fast does
+# the budget burn and which page/ticket alerts fire? (--traffic adds event counts)
+slokit simulate --objective 99.9 --error-rate 0.5 --traffic 100
+
 # Check a live Prometheus and report current budget/burn (exits 1 if any SLO breaches)
 slokit check -i slos.yaml --url http://localhost:9090 --window 1h
 

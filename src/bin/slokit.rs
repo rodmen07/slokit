@@ -10,6 +10,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
 use slokit::dashboard::dashboards_json;
 use slokit::generate::{generate_all, generate_rules_with, GenerateOptions};
+use slokit::simulate::simulate;
 use slokit::spec::{openslo, validate_all, Lint, LintLevel, Spec, SCHEMA_JSON};
 use slokit::{BurnRate, MwmbrConfig, Objective, Slo, Window};
 
@@ -90,6 +91,9 @@ enum Command {
     Lint(LintArgs),
     /// Compute error budget and burn-rate thresholds from the command line.
     Calc(CalcArgs),
+    /// Simulate a sustained error rate: burn rate, budget exhaustion, and which
+    /// alert windows would fire (forward-looking "what if" planning).
+    Simulate(SimulateArgs),
     /// Query a live Prometheus and report current budget and burn rate.
     Check(CheckArgs),
     /// Generate a Grafana dashboard (JSON) from a spec.
@@ -245,6 +249,31 @@ struct CalcArgs {
     bad: Option<f64>,
 }
 
+#[derive(Args)]
+struct SimulateArgs {
+    /// Objective as a percentage, e.g. 99.9.
+    #[arg(long)]
+    objective: f64,
+    /// The sustained error rate to simulate, as a percentage of requests, e.g.
+    /// 0.5 for 0.5% failing.
+    #[arg(long)]
+    error_rate: f64,
+    /// SLO period, e.g. 30d.
+    #[arg(long, default_value = "30d")]
+    period: String,
+    /// Budget remaining at the start of the simulation, as a percentage
+    /// (100 = a full, fresh period). Clamped to 0..=100.
+    #[arg(long, default_value_t = 100.0)]
+    remaining: f64,
+    /// Traffic in requests per second. When given, absolute allowed-bad and
+    /// projected bad-event counts are shown alongside the ratios.
+    #[arg(long)]
+    traffic: Option<f64>,
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = OutputFormat::Table)]
+    output: OutputFormat,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -252,6 +281,7 @@ fn main() -> Result<()> {
         Command::Validate(args) => run_validate(args),
         Command::Lint(args) => run_lint(args),
         Command::Calc(args) => run_calc(args),
+        Command::Simulate(args) => run_simulate(args),
         Command::Check(args) => run_check(args),
         Command::Dashboard(args) => run_dashboard(args),
         Command::Schema(args) => run_schema(args),
@@ -425,6 +455,125 @@ fn run_calc(args: CalcArgs) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn run_simulate(args: SimulateArgs) -> Result<()> {
+    let objective = Objective::percent(args.objective)?;
+    let period = Window::parse(&args.period)?;
+    let slo = Slo::new(objective, period);
+    let error_ratio = args.error_rate / 100.0;
+    let remaining_ratio = args.remaining / 100.0;
+    let config = MwmbrConfig::sre_default_for_period(period);
+
+    let sim = simulate(&slo, error_ratio, remaining_ratio, &config);
+
+    match args.output {
+        OutputFormat::Json => println!("{}", simulation_json(&args, &slo, &sim)?),
+        OutputFormat::Table => print_simulation_table(&args, &slo, &sim),
+    }
+    Ok(())
+}
+
+fn print_simulation_table(args: &SimulateArgs, slo: &Slo, sim: &slokit::simulate::Simulation) {
+    let period = slo.period;
+    println!(
+        "Objective:    {}% over {}",
+        slo.objective.as_percent(),
+        period
+    );
+    println!(
+        "Error budget: {} of events",
+        ratio_str(slo.error_budget_ratio())
+    );
+    println!(
+        "Simulated at: {} sustained error rate",
+        ratio_str(sim.error_ratio)
+    );
+    println!("Burn rate:    {:.2}x", sim.burn_rate.value());
+    println!(
+        "Budget start: {} remaining",
+        ratio_str(sim.remaining_budget_ratio)
+    );
+    match sim.time_to_exhaustion {
+        Some(d) => println!("Exhausted in: {}", humanize(d)),
+        None => println!("Exhausted in: never (no budget burn)"),
+    }
+
+    if let Some(rps) = args.traffic {
+        // Events over the whole period at this constant rate.
+        let total = rps * period.as_secs_f64();
+        let budget = slo.error_budget(total);
+        println!("Traffic:      {rps} req/s ({total:.0} events over {period})");
+        println!("Allowed bad:  {:.0} events", budget.allowed_bad_events());
+        println!("Projected bad: {:.0} events", total * sim.error_ratio);
+    }
+
+    println!("\nAlert conditions at this rate (page-first):");
+    for w in &sim.windows {
+        println!(
+            "  {} {:<6} long={:<4} short={:<4} factor={:<5} fires-at={:<9} {}",
+            if w.fires { "FIRE" } else { "  . " },
+            w.window.severity.label(),
+            w.window.long.to_string(),
+            w.window.short.to_string(),
+            w.window.factor,
+            ratio_str(w.threshold),
+            if w.fires { "<-- firing" } else { "" },
+        );
+    }
+    let pages = sim.pages();
+    let tickets = sim.tickets();
+    println!(
+        "\nVerdict: {}",
+        match (pages, tickets) {
+            (true, _) => "PAGE (wake someone up)",
+            (false, true) => "TICKET (file it, no page)",
+            (false, false) => "no alert fires at this rate",
+        }
+    );
+}
+
+fn simulation_json(
+    args: &SimulateArgs,
+    slo: &Slo,
+    sim: &slokit::simulate::Simulation,
+) -> Result<String> {
+    let windows: Vec<serde_json::Value> = sim
+        .windows
+        .iter()
+        .map(|w| {
+            serde_json::json!({
+                "severity": w.window.severity.label(),
+                "long": w.window.long.to_string(),
+                "short": w.window.short.to_string(),
+                "factor": w.window.factor,
+                "threshold_ratio": w.threshold,
+                "budget_consumed_over_long": w.budget_consumed_over_long,
+                "fires": w.fires,
+            })
+        })
+        .collect();
+    let mut root = serde_json::json!({
+        "objective_percent": slo.objective.as_percent(),
+        "period": slo.period.to_string(),
+        "error_budget_ratio": slo.error_budget_ratio(),
+        "simulated_error_ratio": sim.error_ratio,
+        "remaining_budget_ratio": sim.remaining_budget_ratio,
+        "burn_rate": sim.burn_rate.value(),
+        "time_to_exhaustion_secs": sim.time_to_exhaustion.map(|d| d.as_secs_f64()),
+        "pages": sim.pages(),
+        "tickets": sim.tickets(),
+        "windows": windows,
+    });
+    if let Some(rps) = args.traffic {
+        let total = rps * slo.period.as_secs_f64();
+        root["traffic_rps"] = serde_json::json!(rps);
+        root["total_events"] = serde_json::json!(total);
+        root["allowed_bad_events"] =
+            serde_json::json!(slo.error_budget(total).allowed_bad_events());
+        root["projected_bad_events"] = serde_json::json!(total * sim.error_ratio);
+    }
+    Ok(serde_json::to_string_pretty(&root)?)
 }
 
 fn run_check(args: CheckArgs) -> Result<()> {

@@ -8,6 +8,21 @@ From 1.0.0, slokit follows the semver guarantees documented in
 
 ## [Unreleased]
 
+### Added
+
+- `slokit simulate`: a forward-looking "what if" subcommand. Given an objective,
+  period, and a sustained error rate, it reports the resulting burn rate, the
+  projected time to budget exhaustion (from a full or partly-spent budget), and
+  which multi-window multi-burn-rate page/ticket conditions would fire at that
+  rate. `--traffic <rps>` adds absolute allowed-bad and projected-bad event
+  counts; `--output json` emits a machine-readable report. Where `calc` answers
+  "given the bad events already observed, how much budget is left", `simulate`
+  answers "if I sustain this rate from here, when do I run out and what pages".
+- New public `slokit::simulate` module (`simulate`, `Simulation`,
+  `WindowOutcome`) exposing the same steady-state math as a library API. Purely
+  additive and dependency-free, built on the existing core; part of the
+  always-available lean core (no feature flag).
+
 ## [1.0.0] - 2026-07-19
 
 The stable release. Identical in content to 0.12.0; this release turns the
