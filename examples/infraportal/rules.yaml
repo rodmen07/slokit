@@ -1,0 +1,3441 @@
+groups:
+- name: slokit-slo-sli-recordings-accounts-service-requests-availability
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service",code=~"5.."}[5m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service"}[5m])))
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      sloth_window: 5m
+      tier: crm
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service",code=~"5.."}[30m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service"}[30m])))
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      sloth_window: 30m
+      tier: crm
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service",code=~"5.."}[1h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service"}[1h])))
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      sloth_window: 1h
+      tier: crm
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service",code=~"5.."}[2h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service"}[2h])))
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      sloth_window: 2h
+      tier: crm
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service",code=~"5.."}[6h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service"}[6h])))
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      sloth_window: 6h
+      tier: crm
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service",code=~"5.."}[1d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service"}[1d])))
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      sloth_window: 1d
+      tier: crm
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service",code=~"5.."}[3d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="accounts-service"}[3d])))
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      sloth_window: 3d
+      tier: crm
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"}[30d])
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      sloth_window: 30d
+      tier: crm
+- name: slokit-slo-meta-recordings-accounts-service-requests-availability
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.999)
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:error_budget:ratio
+    expr: vector(0.001)
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-availability
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.9'
+      sloth_service: accounts-service
+      sloth_slo: requests-availability
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: crm
+- name: slokit-slo-alerts-accounts-service-requests-availability
+  rules:
+  - alert: accounts-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: accounts-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#accounts-service
+      summary: 'page burn-rate alert: SLO ''requests-availability'' on service ''accounts-service'' is consuming its error budget too fast'
+  - alert: accounts-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="accounts-service-requests-availability", sloth_service="accounts-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: accounts-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#accounts-service
+      summary: 'ticket burn-rate alert: SLO ''requests-availability'' on service ''accounts-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-accounts-service-requests-latency
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="accounts-service", le="0.3"}[5m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="accounts-service"}[5m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      sloth_window: 5m
+      tier: crm
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="accounts-service", le="0.3"}[30m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="accounts-service"}[30m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      sloth_window: 30m
+      tier: crm
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="accounts-service", le="0.3"}[1h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="accounts-service"}[1h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      sloth_window: 1h
+      tier: crm
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="accounts-service", le="0.3"}[2h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="accounts-service"}[2h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      sloth_window: 2h
+      tier: crm
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="accounts-service", le="0.3"}[6h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="accounts-service"}[6h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      sloth_window: 6h
+      tier: crm
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="accounts-service", le="0.3"}[1d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="accounts-service"}[1d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      sloth_window: 1d
+      tier: crm
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="accounts-service", le="0.3"}[3d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="accounts-service"}[3d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      sloth_window: 3d
+      tier: crm
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"}[30d])
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      sloth_window: 30d
+      tier: crm
+- name: slokit-slo-meta-recordings-accounts-service-requests-latency
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.995)
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:error_budget:ratio
+    expr: vector(0.005)
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: accounts-service-requests-latency
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.5'
+      sloth_service: accounts-service
+      sloth_slo: requests-latency
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: crm
+- name: slokit-slo-alerts-accounts-service-requests-latency
+  rules:
+  - alert: accounts-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"} > (14.4 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"} > (14.4 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"} > (6 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"} > (6 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: accounts-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#accounts-service
+      summary: 'page burn-rate alert: SLO ''requests-latency'' on service ''accounts-service'' is consuming its error budget too fast'
+  - alert: accounts-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"} > (3 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"} > (3 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"} > (1 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="accounts-service-requests-latency", sloth_service="accounts-service", sloth_slo="requests-latency"} > (1 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: accounts-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#accounts-service
+      summary: 'ticket burn-rate alert: SLO ''requests-latency'' on service ''accounts-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-activities-service-requests-availability
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="activities-service",code=~"5.."}[5m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="activities-service"}[5m])))
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      sloth_window: 5m
+      tier: crm
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="activities-service",code=~"5.."}[30m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="activities-service"}[30m])))
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      sloth_window: 30m
+      tier: crm
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="activities-service",code=~"5.."}[1h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="activities-service"}[1h])))
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      sloth_window: 1h
+      tier: crm
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="activities-service",code=~"5.."}[2h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="activities-service"}[2h])))
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      sloth_window: 2h
+      tier: crm
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="activities-service",code=~"5.."}[6h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="activities-service"}[6h])))
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      sloth_window: 6h
+      tier: crm
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="activities-service",code=~"5.."}[1d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="activities-service"}[1d])))
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      sloth_window: 1d
+      tier: crm
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="activities-service",code=~"5.."}[3d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="activities-service"}[3d])))
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      sloth_window: 3d
+      tier: crm
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"}[30d])
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      sloth_window: 30d
+      tier: crm
+- name: slokit-slo-meta-recordings-activities-service-requests-availability
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.999)
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:error_budget:ratio
+    expr: vector(0.001)
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-availability
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.9'
+      sloth_service: activities-service
+      sloth_slo: requests-availability
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: crm
+- name: slokit-slo-alerts-activities-service-requests-availability
+  rules:
+  - alert: activities-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: activities-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#activities-service
+      summary: 'page burn-rate alert: SLO ''requests-availability'' on service ''activities-service'' is consuming its error budget too fast'
+  - alert: activities-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="activities-service-requests-availability", sloth_service="activities-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: activities-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#activities-service
+      summary: 'ticket burn-rate alert: SLO ''requests-availability'' on service ''activities-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-activities-service-requests-latency
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="activities-service", le="0.3"}[5m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="activities-service"}[5m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      sloth_window: 5m
+      tier: crm
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="activities-service", le="0.3"}[30m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="activities-service"}[30m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      sloth_window: 30m
+      tier: crm
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="activities-service", le="0.3"}[1h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="activities-service"}[1h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      sloth_window: 1h
+      tier: crm
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="activities-service", le="0.3"}[2h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="activities-service"}[2h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      sloth_window: 2h
+      tier: crm
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="activities-service", le="0.3"}[6h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="activities-service"}[6h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      sloth_window: 6h
+      tier: crm
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="activities-service", le="0.3"}[1d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="activities-service"}[1d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      sloth_window: 1d
+      tier: crm
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="activities-service", le="0.3"}[3d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="activities-service"}[3d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      sloth_window: 3d
+      tier: crm
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"}[30d])
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      sloth_window: 30d
+      tier: crm
+- name: slokit-slo-meta-recordings-activities-service-requests-latency
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.995)
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:error_budget:ratio
+    expr: vector(0.005)
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: activities-service-requests-latency
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.5'
+      sloth_service: activities-service
+      sloth_slo: requests-latency
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: crm
+- name: slokit-slo-alerts-activities-service-requests-latency
+  rules:
+  - alert: activities-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"} > (14.4 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"} > (14.4 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"} > (6 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"} > (6 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: activities-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#activities-service
+      summary: 'page burn-rate alert: SLO ''requests-latency'' on service ''activities-service'' is consuming its error budget too fast'
+  - alert: activities-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"} > (3 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"} > (3 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"} > (1 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="activities-service-requests-latency", sloth_service="activities-service", sloth_slo="requests-latency"} > (1 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: activities-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#activities-service
+      summary: 'ticket burn-rate alert: SLO ''requests-latency'' on service ''activities-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-automation-service-requests-availability
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="automation-service",code=~"5.."}[5m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="automation-service"}[5m])))
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      sloth_window: 5m
+      tier: platform
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="automation-service",code=~"5.."}[30m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="automation-service"}[30m])))
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      sloth_window: 30m
+      tier: platform
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="automation-service",code=~"5.."}[1h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="automation-service"}[1h])))
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      sloth_window: 1h
+      tier: platform
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="automation-service",code=~"5.."}[2h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="automation-service"}[2h])))
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      sloth_window: 2h
+      tier: platform
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="automation-service",code=~"5.."}[6h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="automation-service"}[6h])))
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      sloth_window: 6h
+      tier: platform
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="automation-service",code=~"5.."}[1d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="automation-service"}[1d])))
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      sloth_window: 1d
+      tier: platform
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="automation-service",code=~"5.."}[3d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="automation-service"}[3d])))
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      sloth_window: 3d
+      tier: platform
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"}[30d])
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      sloth_window: 30d
+      tier: platform
+- name: slokit-slo-meta-recordings-automation-service-requests-availability
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.995)
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:error_budget:ratio
+    expr: vector(0.005)
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-availability
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.5'
+      sloth_service: automation-service
+      sloth_slo: requests-availability
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: platform
+- name: slokit-slo-alerts-automation-service-requests-availability
+  rules:
+  - alert: automation-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"} > (14.4 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"} > (14.4 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"} > (6 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"} > (6 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: automation-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#automation-service
+      summary: 'page burn-rate alert: SLO ''requests-availability'' on service ''automation-service'' is consuming its error budget too fast'
+  - alert: automation-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"} > (3 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"} > (3 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"} > (1 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="automation-service-requests-availability", sloth_service="automation-service", sloth_slo="requests-availability"} > (1 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: automation-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#automation-service
+      summary: 'ticket burn-rate alert: SLO ''requests-availability'' on service ''automation-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-automation-service-requests-latency
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="automation-service", le="0.5"}[5m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="automation-service"}[5m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      sloth_window: 5m
+      tier: platform
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="automation-service", le="0.5"}[30m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="automation-service"}[30m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      sloth_window: 30m
+      tier: platform
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="automation-service", le="0.5"}[1h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="automation-service"}[1h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      sloth_window: 1h
+      tier: platform
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="automation-service", le="0.5"}[2h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="automation-service"}[2h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      sloth_window: 2h
+      tier: platform
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="automation-service", le="0.5"}[6h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="automation-service"}[6h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      sloth_window: 6h
+      tier: platform
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="automation-service", le="0.5"}[1d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="automation-service"}[1d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      sloth_window: 1d
+      tier: platform
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="automation-service", le="0.5"}[3d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="automation-service"}[3d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      sloth_window: 3d
+      tier: platform
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"}[30d])
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      sloth_window: 30d
+      tier: platform
+- name: slokit-slo-meta-recordings-automation-service-requests-latency
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.99)
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:error_budget:ratio
+    expr: vector(0.01)
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: automation-service-requests-latency
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99'
+      sloth_service: automation-service
+      sloth_slo: requests-latency
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: platform
+- name: slokit-slo-alerts-automation-service-requests-latency
+  rules:
+  - alert: automation-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"} > (14.4 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"} > (14.4 * 0.01)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"} > (6 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"} > (6 * 0.01)) without (sloth_window)
+      )
+    labels:
+      service: automation-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#automation-service
+      summary: 'page burn-rate alert: SLO ''requests-latency'' on service ''automation-service'' is consuming its error budget too fast'
+  - alert: automation-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"} > (3 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"} > (3 * 0.01)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"} > (1 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="automation-service-requests-latency", sloth_service="automation-service", sloth_slo="requests-latency"} > (1 * 0.01)) without (sloth_window)
+      )
+    labels:
+      service: automation-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#automation-service
+      summary: 'ticket burn-rate alert: SLO ''requests-latency'' on service ''automation-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-contacts-service-requests-availability
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service",code=~"5.."}[5m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service"}[5m])))
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      sloth_window: 5m
+      tier: crm
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service",code=~"5.."}[30m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service"}[30m])))
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      sloth_window: 30m
+      tier: crm
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service",code=~"5.."}[1h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service"}[1h])))
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      sloth_window: 1h
+      tier: crm
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service",code=~"5.."}[2h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service"}[2h])))
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      sloth_window: 2h
+      tier: crm
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service",code=~"5.."}[6h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service"}[6h])))
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      sloth_window: 6h
+      tier: crm
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service",code=~"5.."}[1d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service"}[1d])))
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      sloth_window: 1d
+      tier: crm
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service",code=~"5.."}[3d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="contacts-service"}[3d])))
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      sloth_window: 3d
+      tier: crm
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"}[30d])
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      sloth_window: 30d
+      tier: crm
+- name: slokit-slo-meta-recordings-contacts-service-requests-availability
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.999)
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:error_budget:ratio
+    expr: vector(0.001)
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-availability
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.9'
+      sloth_service: contacts-service
+      sloth_slo: requests-availability
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: crm
+- name: slokit-slo-alerts-contacts-service-requests-availability
+  rules:
+  - alert: contacts-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: contacts-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#contacts-service
+      summary: 'page burn-rate alert: SLO ''requests-availability'' on service ''contacts-service'' is consuming its error budget too fast'
+  - alert: contacts-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="contacts-service-requests-availability", sloth_service="contacts-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: contacts-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#contacts-service
+      summary: 'ticket burn-rate alert: SLO ''requests-availability'' on service ''contacts-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-contacts-service-requests-latency
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="contacts-service", le="0.3"}[5m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="contacts-service"}[5m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      sloth_window: 5m
+      tier: crm
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="contacts-service", le="0.3"}[30m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="contacts-service"}[30m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      sloth_window: 30m
+      tier: crm
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="contacts-service", le="0.3"}[1h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="contacts-service"}[1h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      sloth_window: 1h
+      tier: crm
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="contacts-service", le="0.3"}[2h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="contacts-service"}[2h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      sloth_window: 2h
+      tier: crm
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="contacts-service", le="0.3"}[6h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="contacts-service"}[6h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      sloth_window: 6h
+      tier: crm
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="contacts-service", le="0.3"}[1d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="contacts-service"}[1d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      sloth_window: 1d
+      tier: crm
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="contacts-service", le="0.3"}[3d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="contacts-service"}[3d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      sloth_window: 3d
+      tier: crm
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"}[30d])
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      sloth_window: 30d
+      tier: crm
+- name: slokit-slo-meta-recordings-contacts-service-requests-latency
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.995)
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:error_budget:ratio
+    expr: vector(0.005)
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: contacts-service-requests-latency
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.5'
+      sloth_service: contacts-service
+      sloth_slo: requests-latency
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: crm
+- name: slokit-slo-alerts-contacts-service-requests-latency
+  rules:
+  - alert: contacts-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"} > (14.4 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"} > (14.4 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"} > (6 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"} > (6 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: contacts-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#contacts-service
+      summary: 'page burn-rate alert: SLO ''requests-latency'' on service ''contacts-service'' is consuming its error budget too fast'
+  - alert: contacts-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"} > (3 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"} > (3 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"} > (1 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="contacts-service-requests-latency", sloth_service="contacts-service", sloth_slo="requests-latency"} > (1 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: contacts-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#contacts-service
+      summary: 'ticket burn-rate alert: SLO ''requests-latency'' on service ''contacts-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-integrations-service-requests-availability
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service",code=~"5.."}[5m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service"}[5m])))
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      sloth_window: 5m
+      tier: platform
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service",code=~"5.."}[30m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service"}[30m])))
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      sloth_window: 30m
+      tier: platform
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service",code=~"5.."}[1h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service"}[1h])))
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      sloth_window: 1h
+      tier: platform
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service",code=~"5.."}[2h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service"}[2h])))
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      sloth_window: 2h
+      tier: platform
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service",code=~"5.."}[6h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service"}[6h])))
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      sloth_window: 6h
+      tier: platform
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service",code=~"5.."}[1d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service"}[1d])))
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      sloth_window: 1d
+      tier: platform
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service",code=~"5.."}[3d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="integrations-service"}[3d])))
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      sloth_window: 3d
+      tier: platform
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"}[30d])
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      sloth_window: 30d
+      tier: platform
+- name: slokit-slo-meta-recordings-integrations-service-requests-availability
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.995)
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:error_budget:ratio
+    expr: vector(0.005)
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-availability
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.5'
+      sloth_service: integrations-service
+      sloth_slo: requests-availability
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: platform
+- name: slokit-slo-alerts-integrations-service-requests-availability
+  rules:
+  - alert: integrations-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"} > (14.4 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"} > (14.4 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"} > (6 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"} > (6 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: integrations-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#integrations-service
+      summary: 'page burn-rate alert: SLO ''requests-availability'' on service ''integrations-service'' is consuming its error budget too fast'
+  - alert: integrations-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"} > (3 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"} > (3 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"} > (1 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="integrations-service-requests-availability", sloth_service="integrations-service", sloth_slo="requests-availability"} > (1 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: integrations-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#integrations-service
+      summary: 'ticket burn-rate alert: SLO ''requests-availability'' on service ''integrations-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-integrations-service-requests-latency
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="integrations-service", le="0.5"}[5m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="integrations-service"}[5m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      sloth_window: 5m
+      tier: platform
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="integrations-service", le="0.5"}[30m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="integrations-service"}[30m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      sloth_window: 30m
+      tier: platform
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="integrations-service", le="0.5"}[1h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="integrations-service"}[1h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      sloth_window: 1h
+      tier: platform
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="integrations-service", le="0.5"}[2h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="integrations-service"}[2h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      sloth_window: 2h
+      tier: platform
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="integrations-service", le="0.5"}[6h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="integrations-service"}[6h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      sloth_window: 6h
+      tier: platform
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="integrations-service", le="0.5"}[1d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="integrations-service"}[1d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      sloth_window: 1d
+      tier: platform
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="integrations-service", le="0.5"}[3d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="integrations-service"}[3d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      sloth_window: 3d
+      tier: platform
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"}[30d])
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      sloth_window: 30d
+      tier: platform
+- name: slokit-slo-meta-recordings-integrations-service-requests-latency
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.99)
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:error_budget:ratio
+    expr: vector(0.01)
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: integrations-service-requests-latency
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99'
+      sloth_service: integrations-service
+      sloth_slo: requests-latency
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: platform
+- name: slokit-slo-alerts-integrations-service-requests-latency
+  rules:
+  - alert: integrations-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"} > (14.4 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"} > (14.4 * 0.01)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"} > (6 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"} > (6 * 0.01)) without (sloth_window)
+      )
+    labels:
+      service: integrations-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#integrations-service
+      summary: 'page burn-rate alert: SLO ''requests-latency'' on service ''integrations-service'' is consuming its error budget too fast'
+  - alert: integrations-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"} > (3 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"} > (3 * 0.01)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"} > (1 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="integrations-service-requests-latency", sloth_service="integrations-service", sloth_slo="requests-latency"} > (1 * 0.01)) without (sloth_window)
+      )
+    labels:
+      service: integrations-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#integrations-service
+      summary: 'ticket burn-rate alert: SLO ''requests-latency'' on service ''integrations-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-opportunities-service-requests-availability
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service",code=~"5.."}[5m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[5m])))
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      sloth_window: 5m
+      tier: crm
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service",code=~"5.."}[30m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[30m])))
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      sloth_window: 30m
+      tier: crm
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service",code=~"5.."}[1h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[1h])))
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      sloth_window: 1h
+      tier: crm
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service",code=~"5.."}[2h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[2h])))
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      sloth_window: 2h
+      tier: crm
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service",code=~"5.."}[6h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[6h])))
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      sloth_window: 6h
+      tier: crm
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service",code=~"5.."}[1d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[1d])))
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      sloth_window: 1d
+      tier: crm
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service",code=~"5.."}[3d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[3d])))
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      sloth_window: 3d
+      tier: crm
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"}[30d])
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      sloth_window: 30d
+      tier: crm
+- name: slokit-slo-meta-recordings-opportunities-service-requests-availability
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.999)
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:error_budget:ratio
+    expr: vector(0.001)
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      tier: crm
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-availability
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.9'
+      sloth_service: opportunities-service
+      sloth_slo: requests-availability
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: crm
+- name: slokit-slo-alerts-opportunities-service-requests-availability
+  rules:
+  - alert: opportunities-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: opportunities-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#opportunities-service
+      summary: 'page burn-rate alert: SLO ''requests-availability'' on service ''opportunities-service'' is consuming its error budget too fast'
+  - alert: opportunities-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="opportunities-service-requests-availability", sloth_service="opportunities-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: opportunities-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#opportunities-service
+      summary: 'ticket burn-rate alert: SLO ''requests-availability'' on service ''opportunities-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-opportunities-service-requests-latency
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="opportunities-service", le="0.3"}[5m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[5m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      sloth_window: 5m
+      tier: crm
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="opportunities-service", le="0.3"}[30m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[30m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      sloth_window: 30m
+      tier: crm
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="opportunities-service", le="0.3"}[1h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[1h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      sloth_window: 1h
+      tier: crm
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="opportunities-service", le="0.3"}[2h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[2h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      sloth_window: 2h
+      tier: crm
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="opportunities-service", le="0.3"}[6h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[6h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      sloth_window: 6h
+      tier: crm
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="opportunities-service", le="0.3"}[1d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[1d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      sloth_window: 1d
+      tier: crm
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="opportunities-service", le="0.3"}[3d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="opportunities-service"}[3d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      sloth_window: 3d
+      tier: crm
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"}[30d])
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      sloth_window: 30d
+      tier: crm
+- name: slokit-slo-meta-recordings-opportunities-service-requests-latency
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.995)
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:error_budget:ratio
+    expr: vector(0.005)
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      tier: crm
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: opportunities-service-requests-latency
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.5'
+      sloth_service: opportunities-service
+      sloth_slo: requests-latency
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: crm
+- name: slokit-slo-alerts-opportunities-service-requests-latency
+  rules:
+  - alert: opportunities-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"} > (14.4 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"} > (14.4 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"} > (6 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"} > (6 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: opportunities-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#opportunities-service
+      summary: 'page burn-rate alert: SLO ''requests-latency'' on service ''opportunities-service'' is consuming its error budget too fast'
+  - alert: opportunities-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"} > (3 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"} > (3 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"} > (1 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="opportunities-service-requests-latency", sloth_service="opportunities-service", sloth_slo="requests-latency"} > (1 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: opportunities-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#opportunities-service
+      summary: 'ticket burn-rate alert: SLO ''requests-latency'' on service ''opportunities-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-reporting-service-requests-availability
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service",code=~"5.."}[5m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service"}[5m])))
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      sloth_window: 5m
+      tier: platform
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service",code=~"5.."}[30m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service"}[30m])))
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      sloth_window: 30m
+      tier: platform
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service",code=~"5.."}[1h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service"}[1h])))
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      sloth_window: 1h
+      tier: platform
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service",code=~"5.."}[2h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service"}[2h])))
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      sloth_window: 2h
+      tier: platform
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service",code=~"5.."}[6h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service"}[6h])))
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      sloth_window: 6h
+      tier: platform
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service",code=~"5.."}[1d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service"}[1d])))
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      sloth_window: 1d
+      tier: platform
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service",code=~"5.."}[3d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="reporting-service"}[3d])))
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      sloth_window: 3d
+      tier: platform
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"}[30d])
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      sloth_window: 30d
+      tier: platform
+- name: slokit-slo-meta-recordings-reporting-service-requests-availability
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.999)
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:error_budget:ratio
+    expr: vector(0.001)
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-availability
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.9'
+      sloth_service: reporting-service
+      sloth_slo: requests-availability
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: platform
+- name: slokit-slo-alerts-reporting-service-requests-availability
+  rules:
+  - alert: reporting-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: reporting-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#reporting-service
+      summary: 'page burn-rate alert: SLO ''requests-availability'' on service ''reporting-service'' is consuming its error budget too fast'
+  - alert: reporting-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="reporting-service-requests-availability", sloth_service="reporting-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: reporting-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#reporting-service
+      summary: 'ticket burn-rate alert: SLO ''requests-availability'' on service ''reporting-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-reporting-service-requests-latency
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="reporting-service", le="0.8"}[5m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="reporting-service"}[5m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      sloth_window: 5m
+      tier: platform
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="reporting-service", le="0.8"}[30m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="reporting-service"}[30m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      sloth_window: 30m
+      tier: platform
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="reporting-service", le="0.8"}[1h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="reporting-service"}[1h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      sloth_window: 1h
+      tier: platform
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="reporting-service", le="0.8"}[2h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="reporting-service"}[2h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      sloth_window: 2h
+      tier: platform
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="reporting-service", le="0.8"}[6h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="reporting-service"}[6h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      sloth_window: 6h
+      tier: platform
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="reporting-service", le="0.8"}[1d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="reporting-service"}[1d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      sloth_window: 1d
+      tier: platform
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="reporting-service", le="0.8"}[3d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="reporting-service"}[3d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      sloth_window: 3d
+      tier: platform
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"}[30d])
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      sloth_window: 30d
+      tier: platform
+- name: slokit-slo-meta-recordings-reporting-service-requests-latency
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.99)
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:error_budget:ratio
+    expr: vector(0.01)
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: reporting-service-requests-latency
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99'
+      sloth_service: reporting-service
+      sloth_slo: requests-latency
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: platform
+- name: slokit-slo-alerts-reporting-service-requests-latency
+  rules:
+  - alert: reporting-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"} > (14.4 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"} > (14.4 * 0.01)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"} > (6 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"} > (6 * 0.01)) without (sloth_window)
+      )
+    labels:
+      service: reporting-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#reporting-service
+      summary: 'page burn-rate alert: SLO ''requests-latency'' on service ''reporting-service'' is consuming its error budget too fast'
+  - alert: reporting-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"} > (3 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"} > (3 * 0.01)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"} > (1 * 0.01)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="reporting-service-requests-latency", sloth_service="reporting-service", sloth_slo="requests-latency"} > (1 * 0.01)) without (sloth_window)
+      )
+    labels:
+      service: reporting-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#reporting-service
+      summary: 'ticket burn-rate alert: SLO ''requests-latency'' on service ''reporting-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-search-service-requests-availability
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="search-service",code=~"5.."}[5m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="search-service"}[5m])))
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      sloth_window: 5m
+      tier: platform
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="search-service",code=~"5.."}[30m])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="search-service"}[30m])))
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      sloth_window: 30m
+      tier: platform
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="search-service",code=~"5.."}[1h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="search-service"}[1h])))
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      sloth_window: 1h
+      tier: platform
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="search-service",code=~"5.."}[2h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="search-service"}[2h])))
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      sloth_window: 2h
+      tier: platform
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="search-service",code=~"5.."}[6h])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="search-service"}[6h])))
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      sloth_window: 6h
+      tier: platform
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="search-service",code=~"5.."}[1d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="search-service"}[1d])))
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      sloth_window: 1d
+      tier: platform
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      (sum(rate(http_request_duration_seconds_count{job="search-service",code=~"5.."}[3d])))
+      /
+      (sum(rate(http_request_duration_seconds_count{job="search-service"}[3d])))
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      sloth_window: 3d
+      tier: platform
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"}[30d])
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      sloth_window: 30d
+      tier: platform
+- name: slokit-slo-meta-recordings-search-service-requests-availability
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.999)
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:error_budget:ratio
+    expr: vector(0.001)
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"}
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      tier: platform
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-availability
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.9'
+      sloth_service: search-service
+      sloth_slo: requests-availability
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: platform
+- name: slokit-slo-alerts-search-service-requests-availability
+  rules:
+  - alert: search-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"} > (14.4 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"} > (6 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: search-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#search-service
+      summary: 'page burn-rate alert: SLO ''requests-availability'' on service ''search-service'' is consuming its error budget too fast'
+  - alert: search-service-high-error-rate
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"} > (3 * 0.001)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="search-service-requests-availability", sloth_service="search-service", sloth_slo="requests-availability"} > (1 * 0.001)) without (sloth_window)
+      )
+    labels:
+      service: search-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#search-service
+      summary: 'ticket burn-rate alert: SLO ''requests-availability'' on service ''search-service'' is consuming its error budget too fast'
+- name: slokit-slo-sli-recordings-search-service-requests-latency
+  rules:
+  - record: slo:sli_error:ratio_rate5m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="search-service", le="0.4"}[5m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="search-service"}[5m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      sloth_window: 5m
+      tier: platform
+  - record: slo:sli_error:ratio_rate30m
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="search-service", le="0.4"}[30m]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="search-service"}[30m]))
+      )
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      sloth_window: 30m
+      tier: platform
+  - record: slo:sli_error:ratio_rate1h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="search-service", le="0.4"}[1h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="search-service"}[1h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      sloth_window: 1h
+      tier: platform
+  - record: slo:sli_error:ratio_rate2h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="search-service", le="0.4"}[2h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="search-service"}[2h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      sloth_window: 2h
+      tier: platform
+  - record: slo:sli_error:ratio_rate6h
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="search-service", le="0.4"}[6h]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="search-service"}[6h]))
+      )
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      sloth_window: 6h
+      tier: platform
+  - record: slo:sli_error:ratio_rate1d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="search-service", le="0.4"}[1d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="search-service"}[1d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      sloth_window: 1d
+      tier: platform
+  - record: slo:sli_error:ratio_rate3d
+    expr: |-
+      1 - (
+        sum(rate(http_request_duration_seconds_bucket{job="search-service", le="0.4"}[3d]))
+        /
+        sum(rate(http_request_duration_seconds_count{job="search-service"}[3d]))
+      )
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      sloth_window: 3d
+      tier: platform
+  - record: slo:sli_error:ratio_rate30d
+    expr: |-
+      sum_over_time(slo:sli_error:ratio_rate5m{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"}[30d])
+      /
+      count_over_time(slo:sli_error:ratio_rate5m{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"}[30d])
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      sloth_window: 30d
+      tier: platform
+- name: slokit-slo-meta-recordings-search-service-requests-latency
+  rules:
+  - record: slo:objective:ratio
+    expr: vector(0.995)
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:error_budget:ratio
+    expr: vector(0.005)
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:time_period:days
+    expr: vector(30)
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:current_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate5m{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:period_burn_rate:ratio
+    expr: |-
+      slo:sli_error:ratio_rate30d{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"}
+      / on(sloth_id, sloth_slo, sloth_service) group_left
+      slo:error_budget:ratio{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:period_error_budget_remaining:ratio
+    expr: 1 - slo:period_burn_rate:ratio{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"}
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      tier: platform
+  - record: slo:info
+    expr: vector(1)
+    labels:
+      owner: platform
+      sloth_id: search-service-requests-latency
+      sloth_mode: cli-gen-prometheus
+      sloth_objective: '99.5'
+      sloth_service: search-service
+      sloth_slo: requests-latency
+      sloth_spec: prometheus/v1
+      sloth_version: 1.0.0
+      tier: platform
+- name: slokit-slo-alerts-search-service-requests-latency
+  rules:
+  - alert: search-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1h{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"} > (14.4 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate5m{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"} > (14.4 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate6h{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"} > (6 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate30m{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"} > (6 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: search-service
+      severity: page
+      sloth_severity: page
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#search-service
+      summary: 'page burn-rate alert: SLO ''requests-latency'' on service ''search-service'' is consuming its error budget too fast'
+  - alert: search-service-high-latency
+    expr: |-
+      (
+        max(slo:sli_error:ratio_rate1d{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"} > (3 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate2h{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"} > (3 * 0.005)) without (sloth_window)
+      )
+      or
+      (
+        max(slo:sli_error:ratio_rate3d{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"} > (1 * 0.005)) without (sloth_window)
+        and
+        max(slo:sli_error:ratio_rate6h{sloth_id="search-service-requests-latency", sloth_service="search-service", sloth_slo="requests-latency"} > (1 * 0.005)) without (sloth_window)
+      )
+    labels:
+      service: search-service
+      severity: ticket
+      sloth_severity: ticket
+    annotations:
+      runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#search-service
+      summary: 'ticket burn-rate alert: SLO ''requests-latency'' on service ''search-service'' is consuming its error budget too fast'

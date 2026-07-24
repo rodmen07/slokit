@@ -1,0 +1,47 @@
+version: "prometheus/v1"
+service: integrations-service
+labels:
+  owner: platform
+  tier: platform
+slos:
+  - name: requests-availability
+    objective: 99.5
+    period: 30d
+    description: "99.5% of HTTP requests to integrations-service succeed (non-5xx)"
+    sli:
+      events:
+        error_query: sum(rate(http_request_duration_seconds_count{job="integrations-service",code=~"5.."}[{{.window}}]))
+        total_query: sum(rate(http_request_duration_seconds_count{job="integrations-service"}[{{.window}}]))
+    alerting:
+      name: integrations-service-high-error-rate
+      annotations:
+        runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#integrations-service
+      page_alert:
+        labels:
+          severity: page
+          service: integrations-service
+      ticket_alert:
+        labels:
+          severity: ticket
+          service: integrations-service
+  - name: requests-latency
+    objective: 99.0
+    period: 30d
+    description: "99.0% of integrations-service requests are served under 500ms"
+    sli:
+      latency:
+        histogram_metric: http_request_duration_seconds
+        threshold: "0.5"
+        selector: job="integrations-service"
+    alerting:
+      name: integrations-service-high-latency
+      annotations:
+        runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#integrations-service
+      page_alert:
+        labels:
+          severity: page
+          service: integrations-service
+      ticket_alert:
+        labels:
+          severity: ticket
+          service: integrations-service

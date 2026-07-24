@@ -69,6 +69,9 @@ Every command's `-i` accepts a **single spec file or a directory** of
 document, `check` reports across every service, and `dashboard` emits a JSON
 array of dashboards.
 
+A full worked example (SLO specs for an 8-service platform plus the rules slokit
+generates from them) lives in [`examples/infraportal/`](examples/infraportal/).
+
 `check` exit codes: `0` healthy, `1` the `--fail-on` level was reached
 (`breach` by default, or `warning`/`never`), `2` a runtime error. `--output
 json` prints the statuses as a JSON array for piping into other tools.

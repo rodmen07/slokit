@@ -1,0 +1,47 @@
+version: "prometheus/v1"
+service: reporting-service
+labels:
+  owner: platform
+  tier: platform
+slos:
+  - name: requests-availability
+    objective: 99.9
+    period: 30d
+    description: "99.9% of HTTP requests to reporting-service succeed (non-5xx)"
+    sli:
+      events:
+        error_query: sum(rate(http_request_duration_seconds_count{job="reporting-service",code=~"5.."}[{{.window}}]))
+        total_query: sum(rate(http_request_duration_seconds_count{job="reporting-service"}[{{.window}}]))
+    alerting:
+      name: reporting-service-high-error-rate
+      annotations:
+        runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#reporting-service
+      page_alert:
+        labels:
+          severity: page
+          service: reporting-service
+      ticket_alert:
+        labels:
+          severity: ticket
+          service: reporting-service
+  - name: requests-latency
+    objective: 99.0
+    period: 30d
+    description: "99.0% of reporting-service requests are served under 800ms"
+    sli:
+      latency:
+        histogram_metric: http_request_duration_seconds
+        threshold: "0.8"
+        selector: job="reporting-service"
+    alerting:
+      name: reporting-service-high-latency
+      annotations:
+        runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#reporting-service
+      page_alert:
+        labels:
+          severity: page
+          service: reporting-service
+      ticket_alert:
+        labels:
+          severity: ticket
+          service: reporting-service
