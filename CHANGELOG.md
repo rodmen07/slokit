@@ -22,6 +22,13 @@ From 1.0.0, slokit follows the semver guarantees documented in
   `WindowOutcome`) exposing the same steady-state math as a library API. Purely
   additive and dependency-free, built on the existing core; part of the
   always-available lean core (no feature flag).
+- **`examples/infraportal/`**: a real dogfooding example set. SLO specs for the
+  8-service InfraPortal platform (availability + latency per service, 16 SLOs)
+  plus the Prometheus rules slokit generates from them, kept honest by
+  `tests/examples_infraportal.rs` (every spec validates; the committed
+  `rules.yaml` must match regeneration byte-for-byte, so the public example can
+  never drift from the generator). Documented as SLO-definitions-as-code that
+  activate once the services expose `/metrics`.
 
 ## [1.0.0] - 2026-07-19
 

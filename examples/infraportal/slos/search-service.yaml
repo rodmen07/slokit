@@ -1,0 +1,47 @@
+version: "prometheus/v1"
+service: search-service
+labels:
+  owner: platform
+  tier: platform
+slos:
+  - name: requests-availability
+    objective: 99.9
+    period: 30d
+    description: "99.9% of HTTP requests to search-service succeed (non-5xx)"
+    sli:
+      events:
+        error_query: sum(rate(http_request_duration_seconds_count{job="search-service",code=~"5.."}[{{.window}}]))
+        total_query: sum(rate(http_request_duration_seconds_count{job="search-service"}[{{.window}}]))
+    alerting:
+      name: search-service-high-error-rate
+      annotations:
+        runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#search-service
+      page_alert:
+        labels:
+          severity: page
+          service: search-service
+      ticket_alert:
+        labels:
+          severity: ticket
+          service: search-service
+  - name: requests-latency
+    objective: 99.5
+    period: 30d
+    description: "99.5% of search-service requests are served under 400ms"
+    sli:
+      latency:
+        histogram_metric: http_request_duration_seconds
+        threshold: "0.4"
+        selector: job="search-service"
+    alerting:
+      name: search-service-high-latency
+      annotations:
+        runbook: https://github.com/rodmen07/microservices/blob/main/monitoring/RUNBOOK.md#search-service
+      page_alert:
+        labels:
+          severity: page
+          service: search-service
+      ticket_alert:
+        labels:
+          severity: ticket
+          service: search-service
