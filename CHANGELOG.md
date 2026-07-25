@@ -30,6 +30,19 @@ From 1.0.0, slokit follows the semver guarantees documented in
   never drift from the generator). Documented as SLO-definitions-as-code that
   activate once the services expose `/metrics`.
 
+### Fixed
+
+- `slokit simulate` now validates its numeric inputs at the CLI boundary the
+  way `--objective` already did. Previously `--error-rate 150` (an impossible
+  above-100% rate), `--error-rate=-5`, `--error-rate nan`, a negative or `NaN`
+  `--traffic`, and a `NaN` `--remaining` were all accepted and produced
+  nonsensical output at exit 0 ("Burn rate: NaNx", negative event counts, and a
+  `null` burn rate in `--output json`). Each is now rejected with a clear error
+  naming the flag and a non-zero exit. A finite out-of-range `--remaining` is
+  still clamped to `0..=100`, as its help documents. Library behavior is
+  unchanged: `slokit::simulate::simulate` keeps its frozen 1.x signature and its
+  documented `[0, 1]` `error_ratio` precondition; this only tightens the CLI.
+
 ## [1.0.0] - 2026-07-19
 
 The stable release. Identical in content to 0.12.0; this release turns the
