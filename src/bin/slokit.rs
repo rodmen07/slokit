@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
@@ -457,7 +457,38 @@ fn run_calc(args: CalcArgs) -> Result<()> {
     Ok(())
 }
 
+/// Reject out-of-domain simulation inputs at the CLI boundary.
+///
+/// [`simulate`](slokit::simulate::simulate) documents `error_ratio` as a ratio
+/// in `[0, 1]` and treats anything else as garbage-in (a negative or above-100%
+/// error rate yields a negative or absurd burn rate, a `NaN` propagates a `NaN`
+/// burn rate and a `null` in the JSON output), so the boundary must enforce the
+/// precondition the way [`Objective::percent`] already does for `--objective`.
+/// The library API is frozen at 1.x (`docs/SEMVER.md`), so validation lives here
+/// rather than changing `simulate`'s signature or silently clamping its output.
+fn validate_simulate_ranges(args: &SimulateArgs) -> Result<()> {
+    if !args.error_rate.is_finite() || args.error_rate < 0.0 || args.error_rate > 100.0 {
+        bail!(
+            "--error-rate {} is not a percentage in the range [0, 100]",
+            args.error_rate
+        );
+    }
+    // `--remaining` is documented as clamped to 0..=100, so a finite out-of-range
+    // value is intentional; only a non-finite one (NaN/inf) escapes the clamp and
+    // prints "NaN% remaining".
+    if !args.remaining.is_finite() {
+        bail!("--remaining {} is not a finite percentage", args.remaining);
+    }
+    if let Some(traffic) = args.traffic {
+        if !traffic.is_finite() || traffic < 0.0 {
+            bail!("--traffic {traffic} is not a finite, non-negative rate");
+        }
+    }
+    Ok(())
+}
+
 fn run_simulate(args: SimulateArgs) -> Result<()> {
+    validate_simulate_ranges(&args)?;
     let objective = Objective::percent(args.objective)?;
     let period = Window::parse(&args.period)?;
     let slo = Slo::new(objective, period);
