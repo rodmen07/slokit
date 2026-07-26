@@ -1,4 +1,4 @@
-//! Drift guard: `ROADMAP.md` against `Cargo.toml` and `CHANGELOG.md`.
+//! Drift guard: the release documents against `Cargo.toml` and `Cargo.lock`.
 //!
 //! The roadmap is the one document in this repo that nothing else checks, and
 //! it rotted within a single day of being written: the revision dated
@@ -14,9 +14,26 @@
 //! 1. the `## Current state: vX.Y.Z` heading equals `Cargo.toml`'s version,
 //! 2. every released `CHANGELOG` version appears in the history table,
 //! 3. no released version is listed as an upcoming `### vX.Y.Z` milestone,
-//! 4. no released version sits in a `BLOCKED` row, and
+//! 4. no released version sits in a `BLOCKED` row,
 //! 5. the "Unreleased on main" section exists exactly when the CHANGELOG has
-//!    unreleased entries.
+//!    unreleased entries, and
+//! 6. `Cargo.toml`'s version has a `## [x.y.z]` CHANGELOG entry of its own.
+//!
+//! Check 6 was added with the v1.1.0 prep. It closes the way a release-prep PR
+//! can be half-finished while checks 1 through 5 all stay green: bumping
+//! `Cargo.toml` and forgetting the changelog passes every one of them, because
+//! check 1 simply follows `Cargo.toml` wherever it goes and check 2 only
+//! constrains versions the changelog already names.
+//!
+//! The sibling half-finish, a `Cargo.lock` left behind at the old version, is
+//! deliberately NOT guarded here, and the reason is worth keeping. A test that
+//! `include_str!`s `Cargo.lock` cannot fail: cargo rewrites a stale lockfile
+//! during the build that produces the test binary, so by the time any
+//! assertion runs the file on disk has already been repaired. Measured, not
+//! assumed — reverting the lock to 1.0.0 against a 1.1.0 `Cargo.toml` and
+//! running `cargo test` left the lock reading 1.1.0 again and the assertion
+//! passing. That check lives in `.github/workflows/ci.yml` as
+//! `cargo metadata --locked`, the one invocation that refuses to repair.
 //!
 //! The extractors are themselves exercised on synthetic input at the bottom of
 //! the file, so a parser that silently stops matching cannot turn these into
@@ -256,6 +273,23 @@ fn roadmap_declares_unreleased_work_exactly_when_the_changelog_has_some() {
          disappear from it when the release is cut.",
         if has_entries { "has" } else { "has no" },
         if has_section { "has" } else { "lacks" },
+    );
+}
+
+#[test]
+fn the_crate_version_has_its_own_changelog_entry() {
+    let declared = crate_version(CARGO_TOML).expect("Cargo.toml [package] version parses");
+    let released = released_versions(CHANGELOG);
+    assert!(
+        released.contains(&declared),
+        "Cargo.toml declares {} but CHANGELOG.md has no `## [{}]` heading. A release-prep \
+         PR that bumps the version and forgets the changelog passes every other guard in \
+         this file: the current-state check follows Cargo.toml wherever it goes, and the \
+         history check only constrains versions the changelog already names. Either write \
+         the `## [{}] - <date>` section or put the version back.",
+        show(declared),
+        show(declared),
+        show(declared)
     );
 }
 

@@ -23,6 +23,18 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # The committed Cargo.lock must already agree with Cargo.toml. Every
+      # other cargo invocation in this job would silently REPAIR a stale
+      # lockfile in the runner's working copy and carry on green, so a
+      # release-prep PR that bumps the version and forgets `cargo update`
+      # ships a committed lockfile that disagrees with the crate it locks and
+      # nothing reports it. `--locked` is the one mode that refuses to repair:
+      # it exits 101 with "cannot update the lock file ... because --locked was
+      # passed". `metadata` is used rather than a build so this fails in
+      # seconds, before the expensive steps.
+      - name: Verify Cargo.lock is up to date
+        run: cargo metadata --locked --format-version 1 > /dev/null
+
       - name: Format
         run: cargo fmt --all --check
 
