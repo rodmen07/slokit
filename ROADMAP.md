@@ -1,8 +1,17 @@
 # slokit Roadmap
 
-Canonical planning document for slokit. Last updated 2026-07-18, immediately
-after the v0.7.0 release. Backward-looking detail lives in
+Canonical planning document for slokit. Last updated 2026-07-25, after the
+v1.0.0 freeze release. Backward-looking detail lives in
 [CHANGELOG.md](CHANGELOG.md); this file covers where the crate is going.
+
+This file is machine-checked. `tests/roadmap_truth.rs` reads it against
+`Cargo.toml` and `CHANGELOG.md` on every `cargo test` run and fails when the
+two drift: a current-state version that does not match the crate version, a
+released version missing from the history table, a released version still
+listed as an upcoming milestone or as BLOCKED, or unreleased CHANGELOG entries
+with no "Unreleased on main" section here. The previous revision of this file
+had four of those defects at once (it described the pre-0.8 world while the
+crate was at 1.0.0), which is why the guard exists.
 
 Item labeling used throughout:
 
@@ -10,154 +19,104 @@ Item labeling used throughout:
 - **BLOCKED**: cannot start until the stated blocker clears.
 - **USER-ONLY**: requires the maintainer (releases, tags, publishes, reviews).
 
-All releases (git tags, GitHub releases, `cargo publish`) are USER-ONLY,
-including the eventual v1.0.0 freeze publish. Agents prepare release PRs; the
-user ships them.
+All releases (git tags, GitHub releases, `cargo publish`) are USER-ONLY.
+Agents prepare release PRs; the user ships them.
 
-## Current state: v0.7.0 (released 2026-07-18)
+## Current state: v1.0.0 (released 2026-07-19)
 
-slokit is an SLO and error-budget engine with two pillars:
+slokit is a stable, published SLO and error-budget engine with two pillars:
 
 1. A dependency-light core math library (thiserror only, builds with
-   `--no-default-features`) for embedding error-budget and burn-rate math in
-   services.
+   `--no-default-features`) for embedding error-budget, burn-rate, and
+   forward-looking simulation math in services.
 2. A sloth `prometheus/v1`-compatible Prometheus rule generator, plus a CLI
-   with `generate`, `validate`, `lint`, `calc`, `check`, and `dashboard`
-   commands behind feature flags (`cli`, `spec`, `check`, `dashboard`).
+   with `generate`, `validate`, `lint`, `calc`, `simulate`, `check`,
+   `dashboard`, and `schema` commands behind feature flags (`cli`, `spec`,
+   `check`, `dashboard`).
 
-MSRV 1.82 is declared in Cargo.toml (not yet CI-enforced). CI runs fmt, clippy
-with `-D warnings`, all-features tests, and a lean-core build/test.
+v1.0.0 is live on crates.io (`newest_version` 1.0.0, confirmed 2026-07-25) and
+the public API is frozen per [docs/SEMVER.md](docs/SEMVER.md): 1.x changes are
+additive only, generated rule output is byte-stable within a minor line, and
+the tag-pinned JSON Schema URLs are immutable.
 
-Recently shipped:
+MSRV is 1.82 and it **is** CI-enforced: the `MSRV 1.82` job in
+`.github/workflows/ci.yml` builds the default, all-features, and lean-core
+configurations on a pinned 1.82 toolchain against an MSRV-compatible
+resolution. CI additionally runs `fmt, clippy, test` (with `-D warnings` plus a
+lean-core build and test), `Security audit` (`cargo audit --deny warnings`),
+`promtool check generated rules` against a pinned Prometheus release, and
+`coverage`.
 
-- **v0.7.0 (2026-07-18)**: configurable alerting. Per-SLO `alerting.windows`
-  spec extension (severity/long/short/factor with validation), period-scaled
-  MWMBR defaults (`MwmbrConfig::scaled`, `sre_default_for_period`),
-  `generate --no-period-scaling` / `GenerateOptions::period_aware`, new
-  `NO_SEVERITY_WINDOWS` lint, and `PERIOD_TOO_SHORT` now evaluates effective
-  windows.
-- **v0.6.1 through v0.6.8 (2026-06-27)**: check-hardening patch series.
-  Non-finite Prometheus sample rejection (NaN/Inf), bearer-token auth
-  coverage, HTTP error diagnostics (status plus trimmed body snippet,
-  `errorType` propagation, missing/unsupported `resultType` diagnostics),
-  extensive regression tests.
-- **v0.6.0 (2026-06-07)**: `slokit lint` command (OBJECTIVE_100,
-  OBJECTIVE_LOW, PERIOD_TOO_SHORT, NO_ALERT_LABELS, ALL_ALERTS_DISABLED,
-  NO_DESCRIPTION; `--strict`, `--output json`) plus the crates.io publish
-  workflow.
+## Unreleased on main
+
+Four commits have merged since the v1.0.0 tag (`20f3125`) and are **not yet
+published**. Everything here is additive per docs/SEMVER.md, so it is a minor
+release, not a patch:
+
+| PR | Commit | Merged | What |
+|----|--------|--------|------|
+| #14 | `5d1086f` | 2026-07-22 | `cargo audit --deny warnings` CI gate; cleared the HIGH quinn-proto advisory |
+| #15 | `96946b8` | 2026-07-23 | `slokit simulate` plus the public `slokit::simulate` module (lean core, no feature flag) |
+| #16 | `dc0468a` | 2026-07-24 | `examples/infraportal/`: 16 dogfooded SLOs with byte-identity drift tests |
+| #17 | `70bb1dd` | 2026-07-25 | `simulate` numeric input validation at the CLI boundary |
+
+The user-facing consequence of leaving this unshipped: `slokit simulate` exists
+on `main` and in the docs but cannot be obtained from crates.io. That is the
+next milestone.
 
 ## Next milestones
 
-Ordered path to 1.0. Each milestone is sized for one or two small PRs and
-targets the cadence of roughly one minor version per week. Each release cut at
-the end of a milestone is USER-ONLY.
+### v1.1.0: publish the post-1.0 work
 
-### v0.8.0: Spec hardening + promtool integration
+The first minor of the 1.x line. No new development is required; the work is
+already on `main` and green.
 
-Makes generated output externally validated before the API surface grows
-further.
+- agent-doable: release-prep PR bumping `Cargo.toml` to 1.1.0, converting the
+  CHANGELOG `## [Unreleased]` section to `## [1.1.0] - <date>`, and updating
+  this file's current-state and history sections in the same commit (the drift
+  guard fails the build otherwise).
+- USER-ONLY: tag v1.1.0, create the GitHub release, and let the publish
+  workflow run.
 
-- agent-doable: audit `src/spec/validate.rs` for gaps and tighten with tests:
-  duplicate SLO names across multi-spec directories, empty or whitespace-only
-  `service`/`name`/query fields, conflicting extension combinations (one small
-  PR).
-- agent-doable: promtool integration: validate generated rule files with
-  `promtool check rules` in tests, skipping gracefully when promtool is absent
-  locally; add a CI job that installs promtool and runs it against generated
-  fixtures (one small PR, CI job can ride along).
+Done when: the crates.io API reports `newest_version` 1.1.0, and
+`cargo install slokit && slokit simulate --help` succeeds from the registry
+rather than from a git checkout.
 
-Done when: validation gaps above are rejected with tests, and CI runs promtool
-against generated rule fixtures on every push.
+### v1.2.0: post-1.0 expansion (proposal-gated)
 
-### v0.9.0: Plugin/extension system (SliPlugin)
+The agent-doable path to 1.0 is complete, so what comes next is a product
+decision rather than a queue. The candidates below are unranked and none is
+scheduled until a design doc picks one.
 
-Design-doc-first so the extension surface gets human review before it becomes
-API.
+- agent-doable: a post-1.0 expansion proposal design doc under `docs/design/`
+  covering the candidates in the section below, each written as an overridable
+  default so the whole set can be accepted in one word.
+- USER-ONLY: review and merge the proposal, which schedules v1.2.0.
 
-Design doc: [docs/design/SLI_PLUGINS.md](docs/design/SLI_PLUGINS.md).
-
-- agent-doable now (PR 1): short design doc covering the `SliPlugin` registry,
-  the `sli.plugin` spec key, and resolution order versus the built-in
-  `events`/`raw`/`latency` SLIs. Committed alone for user review.
-- USER-ONLY: review and merge the design-doc PR.
-- BLOCKED until the design-doc PR merges (PR 2): implement the `SliPlugin`
-  registry and `sli.plugin` spec key per the approved design, with
-  validate/lint awareness and README docs.
-
-Done when: a plugin-provided SLI can be registered and used from a spec, and
-validate/lint understand `sli.plugin`.
-
-### v0.10.0: OpenSLO import
-
-Widens the input funnel beyond sloth specs.
-
-- agent-doable: accept OpenSLO YAML and map it to the internal spec model (new
-  `spec::openslo` module behind the existing `spec` feature).
-- agent-doable: input detection or an explicit CLI flag (for example
-  `--input-format openslo`) wired through
-  `generate`/`validate`/`lint`/`check`/`dashboard`.
-- agent-doable: fixtures plus tests documenting which OpenSLO fields map,
-  which are ignored, and which error.
-
-Done when: an OpenSLO fixture generates the same rules as its equivalent sloth
-spec, and unsupported fields fail or warn with clear messages.
-
-### v0.11.0: Spec JSON Schema
-
-Completes the interop tranche: editor autocomplete and validation for the
-sloth-compatible spec including the slokit extensions (`period`, `latency`
-SLI, `alerting.windows`).
-
-- agent-doable: author the JSON Schema for the spec format, committed in the
-  repo, with a test asserting sample fixtures validate against it.
-- agent-doable: expose it via a `slokit schema` subcommand or a documented
-  raw-file URL, and add a README section on editor integration
-  (yaml-language-server).
-
-Done when: the schema is published in-repo, fixtures validate against it in
-tests, and the README documents how to wire it into an editor.
-
-### v0.12.0: 1.0 freeze prep
-
-Agent-doable groundwork so the USER-ONLY v1.0.0 release is a
-version-bump-and-publish, not a work item. Small breaking changes land here,
-before the freeze.
-
-- agent-doable: add `#[non_exhaustive]` to public enums and audit/finalize
-  builder APIs and the public surface.
-- agent-doable: docs pass: rustdoc coverage on all public items,
-  `deny(missing_docs)` or an equivalent lint, README/CHANGELOG polish.
-- agent-doable: CI-enforce the declared MSRV (a 1.82 job) and document the
-  MSRV and semver guarantees policy.
-
-Done when: the public API is final, fully documented, and MSRV-checked in CI,
-with the semver policy written down.
-
-### v1.0.0: API freeze and release
-
-The stated end state: stable API with semver guarantees.
-
-- agent-doable: prepare the 1.0.0 version-bump PR with the final CHANGELOG
-  entry and any last doc tweaks.
-- USER-ONLY: tag v1.0.0, create the GitHub release, and `cargo publish`.
-
-Done when: v1.0.0 is live on crates.io with the freeze documented.
+Done when: a design doc exists under `docs/design/`, is merged, and this file's
+v1.2.0 section names the chosen scope with a checkable done-when.
 
 ## Later / candidates (unscheduled)
 
-- OpenSLO export (the inverse of the v0.10.0 import).
+- OpenSLO **export** (the inverse of the v0.10.0 import, which shipped).
 - Additional lint rules surfaced by real-world specs.
 - Dashboard enhancements, for example per-severity burn panels.
+- Carrying `examples/infraportal/` from SLO-definitions-as-code to live status,
+  which is blocked on the InfraPortal services exposing `/metrics` at all (that
+  work lives in the microservices repo, not here).
 - USER-ONLY: backfill missing git tags v0.5.0 and v0.6.1 through v0.6.8
-  (published to crates.io without tags; opportunistic or post-1.0).
+  (published to crates.io without tags; opportunistic).
 
 ## Blocked and USER-ONLY summary
 
 | Item | Status | Reason |
 |------|--------|--------|
-| Every release cut (tags, GitHub releases, `cargo publish`) | USER-ONLY | releases are manual by policy, including v1.0.0 |
-| v0.9.0 SliPlugin implementation (PR 2) | BLOCKED | gated on user review and merge of the design-doc PR (PR 1, agent-doable now) |
+| Every release cut (tags, GitHub releases, `cargo publish`) | USER-ONLY | releases are manual by policy |
+| v1.1.0 tag, GitHub release, and publish | USER-ONLY | the release-prep PR is agent-doable; the cut is not |
+| Review and merge of the post-1.0 expansion proposal | USER-ONLY | it is a scope decision, not an implementation |
 | Tag backfill for v0.5.0 and v0.6.1 through v0.6.8 | USER-ONLY | tag creation and pushes are manual |
+
+Nothing is BLOCKED. Every remaining agent-doable item can start today.
 
 Not blocked by anything: the 2026-06-04 infrastructure decommission does not
 affect slokit. The crate has no cloud runtime; CI and publishing run on GitHub
@@ -179,6 +138,12 @@ happened:
 | 0.6.0 | 2026-06-07 | `lint` command, crates.io publish workflow |
 | 0.6.1-0.6.8 | 2026-06-27 | check-hardening patch series |
 | 0.7.0 | 2026-07-18 | configurable alerting (custom windows, period scaling) |
+| 0.8.0 | 2026-07-19 | spec-validation hardening plus promtool CI validation of generated rules |
+| 0.9.0 | 2026-07-19 | `SliPlugin` registry and the `sli.plugin` spec key, validate/lint aware |
+| 0.10.0 | 2026-07-19 | OpenSLO v1 import with `--input-format` and auto-detection |
+| 0.11.0 | 2026-07-19 | spec JSON Schema, the `schema` subcommand, byte-identical schema pins |
+| 0.12.0 | 2026-07-19 | 1.0 freeze prep: `#[non_exhaustive]` audit, constructors, `deny(missing_docs)`, docs/SEMVER.md, MSRV 1.82 CI job |
+| 1.0.0 | 2026-07-19 | API freeze; content identical to 0.12.0, guarantees documented |
 
 Drift worth recording:
 
@@ -188,6 +153,18 @@ Drift worth recording:
 - The 0.6.1 through 0.6.8 patch series (2026-06-27) was an unplanned
   check-hardening detour driven by autonomous dev runs, not by any roadmap.
 - Cadence: minors 0.1.0 through 0.6.0 shipped in one burst (2026-06-04 to
-  2026-06-07), then minor releases paused for six weeks (only the 0.6.x patch
-  series on 2026-06-27 and 0.7.0 on 2026-07-18). The milestones above are
-  sized to resume roughly one minor per week.
+  2026-06-07), then minors paused for six weeks, then **0.8.0 through 1.0.0
+  all shipped on a single day, 2026-07-19**. The "roughly one minor per week"
+  sizing in the pre-1.0 revision of this file was wrong by more than an order
+  of magnitude in the other direction; agent throughput, not calendar time, is
+  what sizes these milestones.
+- This file went stale within one day of being written. The revision dated
+  2026-07-18 declared "Current state: v0.7.0", listed v0.8.0 through v1.0.0 as
+  upcoming milestones, said MSRV was "not yet CI-enforced", and carried a
+  BLOCKED row for v0.9.0 PR 2 gated on a design-doc review that had already
+  happened. All of those were false by 2026-07-19; preflight caught only one of
+  them (the BLOCKED row) seven days later. The verbatim row it caught was
+  `| v0.9.0 SliPlugin implementation (PR 2) | BLOCKED | gated on user review
+  and merge of the design-doc PR (PR 1, agent-doable now) |`; PR 2 shipped as
+  slokit PR #6 and v0.9.0 was tagged the next day. That failure is what
+  `tests/roadmap_truth.rs` now guards against.
