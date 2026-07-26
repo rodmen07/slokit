@@ -1,17 +1,25 @@
 # slokit Roadmap
 
-Canonical planning document for slokit. Last updated 2026-07-25, after the
-v1.0.0 freeze release. Backward-looking detail lives in
+Canonical planning document for slokit. Last updated 2026-07-26, when the
+v1.1.0 release prep landed. Backward-looking detail lives in
 [CHANGELOG.md](CHANGELOG.md); this file covers where the crate is going.
 
 This file is machine-checked. `tests/roadmap_truth.rs` reads it against
-`Cargo.toml` and `CHANGELOG.md` on every `cargo test` run and fails when the
-two drift: a current-state version that does not match the crate version, a
+`Cargo.toml` and `CHANGELOG.md` on every `cargo test` run and fails when they
+drift: a current-state version that does not match the crate version, a
 released version missing from the history table, a released version still
-listed as an upcoming milestone or as BLOCKED, or unreleased CHANGELOG entries
-with no "Unreleased on main" section here. The previous revision of this file
-had four of those defects at once (it described the pre-0.8 world while the
-crate was at 1.0.0), which is why the guard exists.
+listed as an upcoming milestone or as BLOCKED, unreleased CHANGELOG entries
+with no "Unreleased on main" section here, or a crate version with no CHANGELOG
+entry of its own. The previous revision of this file had four of those defects
+at once (it described the pre-0.8 world while the crate was at 1.0.0), which is
+why the guard exists; the last check was added with the v1.1.0 prep, because a
+version bump with no changelog entry passes all of the others.
+
+The remaining release-prep half-finish, a `Cargo.lock` left at the old version,
+is checked in CI instead of here, and the reason is recorded in that test file:
+an assertion that reads `Cargo.lock` cannot fail, because cargo repairs a stale
+lockfile while building the very test binary that would report it. The step
+that does fail is `cargo metadata --locked` in `.github/workflows/ci.yml`.
 
 Item labeling used throughout:
 
@@ -22,7 +30,7 @@ Item labeling used throughout:
 All releases (git tags, GitHub releases, `cargo publish`) are USER-ONLY.
 Agents prepare release PRs; the user ships them.
 
-## Current state: v1.0.0 (released 2026-07-19)
+## Current state: v1.1.0 (prepared 2026-07-26, tag not yet cut)
 
 slokit is a stable, published SLO and error-budget engine with two pillars:
 
@@ -34,53 +42,27 @@ slokit is a stable, published SLO and error-budget engine with two pillars:
    `dashboard`, and `schema` commands behind feature flags (`cli`, `spec`,
    `check`, `dashboard`).
 
-v1.0.0 is live on crates.io (`newest_version` 1.0.0, confirmed 2026-07-25) and
-the public API is frozen per [docs/SEMVER.md](docs/SEMVER.md): 1.x changes are
+`main` carries the finished 1.1.0 release: `Cargo.toml`, `Cargo.lock` and
+`CHANGELOG.md` all say 1.1.0. The registry does not yet: the crates.io API
+reported `newest_version` 1.0.0 when this line was written (2026-07-26), and it
+will keep reporting 1.0.0 until the USER-ONLY cut below runs. Treat "the crate
+version" and "the published version" as two separate facts until then.
+
+The public API is frozen per [docs/SEMVER.md](docs/SEMVER.md): 1.x changes are
 additive only, generated rule output is byte-stable within a minor line, and
-the tag-pinned JSON Schema URLs are immutable.
+the tag-pinned JSON Schema URLs are immutable. 1.1.0 keeps all three: it adds
+`slokit simulate` and the public `slokit::simulate` module without touching any
+1.0.0 signature.
 
 MSRV is 1.82 and it **is** CI-enforced: the `MSRV 1.82` job in
 `.github/workflows/ci.yml` builds the default, all-features, and lean-core
 configurations on a pinned 1.82 toolchain against an MSRV-compatible
-resolution. CI additionally runs `fmt, clippy, test` (with `-D warnings` plus a
-lean-core build and test), `Security audit` (`cargo audit --deny warnings`),
-`promtool check generated rules` against a pinned Prometheus release, and
-`coverage`.
-
-## Unreleased on main
-
-Four commits have merged since the v1.0.0 tag (`20f3125`) and are **not yet
-published**. Everything here is additive per docs/SEMVER.md, so it is a minor
-release, not a patch:
-
-| PR | Commit | Merged | What |
-|----|--------|--------|------|
-| #14 | `5d1086f` | 2026-07-22 | `cargo audit --deny warnings` CI gate; cleared the HIGH quinn-proto advisory |
-| #15 | `96946b8` | 2026-07-23 | `slokit simulate` plus the public `slokit::simulate` module (lean core, no feature flag) |
-| #16 | `dc0468a` | 2026-07-24 | `examples/infraportal/`: 16 dogfooded SLOs with byte-identity drift tests |
-| #17 | `70bb1dd` | 2026-07-25 | `simulate` numeric input validation at the CLI boundary |
-
-The user-facing consequence of leaving this unshipped: `slokit simulate` exists
-on `main` and in the docs but cannot be obtained from crates.io. That is the
-next milestone.
+resolution. CI additionally runs `fmt, clippy, test` (with `-D warnings`, a
+committed-lockfile check via `cargo metadata --locked`, and a lean-core build
+and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
+generated rules` against a pinned Prometheus release, and `coverage`.
 
 ## Next milestones
-
-### v1.1.0: publish the post-1.0 work
-
-The first minor of the 1.x line. No new development is required; the work is
-already on `main` and green.
-
-- agent-doable: release-prep PR bumping `Cargo.toml` to 1.1.0, converting the
-  CHANGELOG `## [Unreleased]` section to `## [1.1.0] - <date>`, and updating
-  this file's current-state and history sections in the same commit (the drift
-  guard fails the build otherwise).
-- USER-ONLY: tag v1.1.0, create the GitHub release, and let the publish
-  workflow run.
-
-Done when: the crates.io API reports `newest_version` 1.1.0, and
-`cargo install slokit && slokit simulate --help` succeeds from the registry
-rather than from a git checkout.
 
 ### v1.2.0: post-1.0 expansion (proposal-gated)
 
@@ -112,11 +94,24 @@ v1.2.0 section names the chosen scope with a checkable done-when.
 | Item | Status | Reason |
 |------|--------|--------|
 | Every release cut (tags, GitHub releases, `cargo publish`) | USER-ONLY | releases are manual by policy |
-| v1.1.0 tag, GitHub release, and publish | USER-ONLY | the release-prep PR is agent-doable; the cut is not |
+| v1.1.0 tag, GitHub release, and publish (dated 2026-07-26) | USER-ONLY | prep is merged; clears when the crates.io API reports `newest_version` 1.1.0 |
 | Review and merge of the post-1.0 expansion proposal | USER-ONLY | it is a scope decision, not an implementation |
 | Tag backfill for v0.5.0 and v0.6.1 through v0.6.8 | USER-ONLY | tag creation and pushes are manual |
 
 Nothing is BLOCKED. Every remaining agent-doable item can start today.
+
+The v1.1.0 cut is one command against a green `main`:
+
+```
+git tag v1.1.0 && git push origin v1.1.0
+gh release create v1.1.0 --verify-tag --generate-notes
+```
+
+Creating the **release** (not the tag) fires `.github/workflows/publish.yml`,
+which re-runs fmt, clippy and both test configurations, asserts `Cargo.toml`'s
+version equals the tag, and then publishes with `secrets.CRATES_IO_TOKEN`
+(present since 2026-07-19). Publishing is irreversible, which is why the
+command stays with the maintainer.
 
 Not blocked by anything: the 2026-06-04 infrastructure decommission does not
 affect slokit. The crate has no cloud runtime; CI and publishing run on GitHub
@@ -144,6 +139,7 @@ happened:
 | 0.11.0 | 2026-07-19 | spec JSON Schema, the `schema` subcommand, byte-identical schema pins |
 | 0.12.0 | 2026-07-19 | 1.0 freeze prep: `#[non_exhaustive]` audit, constructors, `deny(missing_docs)`, docs/SEMVER.md, MSRV 1.82 CI job |
 | 1.0.0 | 2026-07-19 | API freeze; content identical to 0.12.0, guarantees documented |
+| 1.1.0 | 2026-07-26 | `slokit simulate` + the public `slokit::simulate` module, `examples/infraportal/`, `cargo audit` CI gate; prepared 2026-07-26, publishes when the tag is cut |
 
 Drift worth recording:
 
@@ -168,3 +164,10 @@ Drift worth recording:
   and merge of the design-doc PR (PR 1, agent-doable now) |`; PR 2 shipped as
   slokit PR #6 and v0.9.0 was tagged the next day. That failure is what
   `tests/roadmap_truth.rs` now guards against.
+- 1.0.0 through 1.1.0 is the first time this repo let user-facing work sit
+  unpublished: `slokit simulate` merged 2026-07-23 (PR #15) and was documented
+  in the README and the roadmap while `cargo install slokit` still delivered a
+  binary without it. Four merged PRs accumulated behind the missing cut. The
+  "Unreleased on main" section and its guard exist so that gap is at least
+  visible in the roadmap; making it visible is not the same as closing it, and
+  only the tag closes it.

@@ -6,7 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
-## [Unreleased]
+## [1.1.0] - 2026-07-26
+
+The first minor of the 1.x line: it publishes the work that accumulated on
+`main` after the 1.0.0 freeze. Every change is additive per
+[docs/SEMVER.md](docs/SEMVER.md), so no 1.0.0 code needs editing to upgrade.
 
 ### Added
 
