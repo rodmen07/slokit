@@ -1,8 +1,9 @@
 # slokit Roadmap
 
-Canonical planning document for slokit. Last updated 2026-07-26, when the
-v1.1.0 release prep landed. Backward-looking detail lives in
-[CHANGELOG.md](CHANGELOG.md); this file covers where the crate is going.
+Canonical planning document for slokit. Last updated 2026-07-26, after the
+v1.1.0 cut published and the post-1.0 expansion proposal was drafted.
+Backward-looking detail lives in [CHANGELOG.md](CHANGELOG.md); this file
+covers where the crate is going.
 
 This file is machine-checked. `tests/roadmap_truth.rs` reads it against
 `Cargo.toml` and `CHANGELOG.md` on every `cargo test` run and fails when they
@@ -25,12 +26,19 @@ Item labeling used throughout:
 
 - **agent-doable**: can be implemented autonomously as a normal PR.
 - **BLOCKED**: cannot start until the stated blocker clears.
-- **USER-ONLY**: requires the maintainer (releases, tags, publishes, reviews).
+- **USER-ONLY**: requires the maintainer (reviews, scope decisions, secret
+  writes).
 
-All releases (git tags, GitHub releases, `cargo publish`) are USER-ONLY.
-Agents prepare release PRs; the user ships them.
+Releases (git tags, GitHub releases, the publishes they fire) are DELEGATED
+per the 2026-07-26 user decision recorded in the autodev skill's Merges and
+releases policy, which supersedes the "all releases are USER-ONLY" line that
+previously stood here. What gates a cut is the checklist, not a marker:
+release prep on `main`, CI green on that commit, this file or the backlog
+naming the release, and the registry confirmed afterwards. The v1.1.0 cut on
+2026-07-26 ran under exactly that delegation. Secret writes (`gh secret set`)
+remain USER-ONLY.
 
-## Current state: v1.1.0 (prepared 2026-07-26, tag not yet cut)
+## Current state: v1.1.0 (released and published 2026-07-26)
 
 slokit is a stable, published SLO and error-budget engine with two pillars:
 
@@ -42,11 +50,12 @@ slokit is a stable, published SLO and error-budget engine with two pillars:
    `dashboard`, and `schema` commands behind feature flags (`cli`, `spec`,
    `check`, `dashboard`).
 
-`main` carries the finished 1.1.0 release: `Cargo.toml`, `Cargo.lock` and
-`CHANGELOG.md` all say 1.1.0. The registry does not yet: the crates.io API
-reported `newest_version` 1.0.0 when this line was written (2026-07-26), and it
-will keep reporting 1.0.0 until the USER-ONLY cut below runs. Treat "the crate
-version" and "the published version" as two separate facts until then.
+1.1.0 is fully shipped: `Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say
+1.1.0, tag `v1.1.0` points at the prep commit `8733a07`, the GitHub release
+exists, and the crates.io API reports `newest_version` and
+`max_stable_version` both `1.1.0` (re-read 2026-07-26, after the publish
+workflow run `30202759087` succeeded). The crate version and the published
+version agree again.
 
 The public API is frozen per [docs/SEMVER.md](docs/SEMVER.md): 1.x changes are
 additive only, generated rule output is byte-stable within a minor line, and
@@ -67,22 +76,31 @@ generated rules` against a pinned Prometheus release, and `coverage`.
 ### v1.2.0: post-1.0 expansion (proposal-gated)
 
 The agent-doable path to 1.0 is complete, so what comes next is a product
-decision rather than a queue. The candidates below are unranked and none is
-scheduled until a design doc picks one.
+decision rather than a queue. The proposal now exists:
+[docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md)
+(2026-07-26) ranks the candidates and proposes **OpenSLO v1 export** as the
+single v1.2.0 theme, every decision (D1 through D6) an overridable default so
+the whole set can be accepted in one word.
 
-- agent-doable: a post-1.0 expansion proposal design doc under `docs/design/`
-  covering the candidates in the section below, each written as an overridable
-  default so the whole set can be accepted in one word.
-- USER-ONLY: review and merge the proposal, which schedules v1.2.0.
+- USER-ONLY (dated 2026-07-26): review the proposal's D1 through D6; clears
+  when the maintainer approves or overrides them, which schedules v1.2.0.
 
-Done when: a design doc exists under `docs/design/`, is merged, and this file's
-v1.2.0 section names the chosen scope with a checkable done-when.
+Done when: the proposal is reviewed and this file's v1.2.0 section names the
+chosen scope with a checkable done-when (the proposal's D6 has the default
+one).
 
 ## Later / candidates (unscheduled)
 
-- OpenSLO **export** (the inverse of the v0.10.0 import, which shipped).
-- Additional lint rules surfaced by real-world specs.
-- Dashboard enhancements, for example per-severity burn panels.
+Ranked with defaults in
+[docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md)
+(pending review); listed here until a review schedules them:
+
+- OpenSLO **export** (the inverse of the v0.10.0 import, which shipped) —
+  the proposal's default pick for v1.2.0.
+- Additional lint rules surfaced by real-world specs — proposed next after
+  v1.2.0, each rule gated on citing a real spec where it would have fired.
+- Dashboard enhancements, for example per-severity burn panels — deferred
+  until any generated dashboard has live data to render.
 - Carrying `examples/infraportal/` from SLO-definitions-as-code to live status,
   which is blocked on the InfraPortal services exposing `/metrics` at all (that
   work lives in the microservices repo, not here).
@@ -93,25 +111,25 @@ v1.2.0 section names the chosen scope with a checkable done-when.
 
 | Item | Status | Reason |
 |------|--------|--------|
-| Every release cut (tags, GitHub releases, `cargo publish`) | USER-ONLY | releases are manual by policy |
-| v1.1.0 tag, GitHub release, and publish (dated 2026-07-26) | USER-ONLY | prep is merged; clears when the crates.io API reports `newest_version` 1.1.0 |
-| Review and merge of the post-1.0 expansion proposal | USER-ONLY | it is a scope decision, not an implementation |
-| Tag backfill for v0.5.0 and v0.6.1 through v0.6.8 | USER-ONLY | tag creation and pushes are manual |
+| Review of the post-1.0 expansion proposal (dated 2026-07-26) | USER-ONLY | it is a scope decision, not an implementation; clears when the maintainer approves or overrides D1-D6 in docs/design/POST_1_0_EXPANSION.md |
+| Tag backfill for v0.5.0 and v0.6.1 through v0.6.8 (dated 2026-07-26) | USER-ONLY | predates the release delegation and stays outside it: nine historical versions with no release prep on `main` to verify a cut against (backfill publishes nothing — publish.yml fires on release publication, and those versions are already on crates.io); clears when the nine tags exist on origin or the user directs it |
 
-Nothing is BLOCKED. Every remaining agent-doable item can start today.
+Nothing is BLOCKED. Every remaining agent-doable item can start today. The
+two rows above that previously gated releases as USER-ONLY ("Every release
+cut" and the v1.1.0 cut row) are gone: the first was superseded by the
+2026-07-26 delegation (see the labeling section above), and the second's
+clearing condition — the crates.io API reporting `newest_version` 1.1.0 — was
+met the same day.
 
-The v1.1.0 cut is one command against a green `main`:
-
-```
-git tag v1.1.0 && git push origin v1.1.0
-gh release create v1.1.0 --verify-tag --generate-notes
-```
-
-Creating the **release** (not the tag) fires `.github/workflows/publish.yml`,
-which re-runs fmt, clippy and both test configurations, asserts `Cargo.toml`'s
-version equals the tag, and then publishes with `secrets.CRATES_IO_TOKEN`
-(present since 2026-07-19). Publishing is irreversible, which is why the
-command stays with the maintainer.
+For the record, the v1.1.0 cut ran 2026-07-26 as: tag `v1.1.0` at `8733a07`,
+`gh release create v1.1.0 --verify-tag --generate-notes`, which fired
+`.github/workflows/publish.yml` (run `30202759087`, success). Creating the
+**release** (not the tag) is what fires publish.yml, which re-runs fmt,
+clippy and both test configurations, asserts `Cargo.toml`'s version equals
+the tag, then publishes with `secrets.CRATES_IO_TOKEN`. Publishing is
+irreversible, which is why the delegation's checklist — prep on `main`, CI
+green on that commit, version and changelog re-read before tagging, registry
+confirmed after — gates every cut.
 
 Not blocked by anything: the 2026-06-04 infrastructure decommission does not
 affect slokit. The crate has no cloud runtime; CI and publishing run on GitHub
@@ -139,7 +157,7 @@ happened:
 | 0.11.0 | 2026-07-19 | spec JSON Schema, the `schema` subcommand, byte-identical schema pins |
 | 0.12.0 | 2026-07-19 | 1.0 freeze prep: `#[non_exhaustive]` audit, constructors, `deny(missing_docs)`, docs/SEMVER.md, MSRV 1.82 CI job |
 | 1.0.0 | 2026-07-19 | API freeze; content identical to 0.12.0, guarantees documented |
-| 1.1.0 | 2026-07-26 | `slokit simulate` + the public `slokit::simulate` module, `examples/infraportal/`, `cargo audit` CI gate; prepared 2026-07-26, publishes when the tag is cut |
+| 1.1.0 | 2026-07-26 | `slokit simulate` + the public `slokit::simulate` module, `examples/infraportal/`, `cargo audit` CI gate; released and published the same day under the release delegation |
 
 Drift worth recording:
 
@@ -170,4 +188,6 @@ Drift worth recording:
   binary without it. Four merged PRs accumulated behind the missing cut. The
   "Unreleased on main" section and its guard exist so that gap is at least
   visible in the roadmap; making it visible is not the same as closing it, and
-  only the tag closes it.
+  only the tag closes it. The tag closed it on 2026-07-26, the same day the
+  release delegation landed — the gap existed exactly as long as releases
+  were held on a USER-ONLY marker.
