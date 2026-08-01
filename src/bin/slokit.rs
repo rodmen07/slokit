@@ -1,5 +1,6 @@
 //! `slokit` command-line interface.
 
+use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -98,6 +99,8 @@ enum Command {
     Check(CheckArgs),
     /// Generate a Grafana dashboard (JSON) from a spec.
     Dashboard(DashboardArgs),
+    /// Export a spec to another SLO format (the inverse of `--input-format`).
+    Export(ExportArgs),
     /// Print the JSON Schema for the spec format (editor/tooling integration).
     Schema(SchemaArgs),
 }
@@ -116,6 +119,13 @@ enum OutputFormat {
     Table,
     /// Machine-readable JSON array of statuses.
     Json,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum ExportFormat {
+    /// OpenSLO v1 `kind: SLO` documents, one per SLO, as a multi-document
+    /// YAML stream.
+    Openslo,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -195,6 +205,21 @@ struct DashboardArgs {
     #[command(flatten)]
     input: InputArgs,
     /// Output file. Defaults to stdout.
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct ExportArgs {
+    #[command(flatten)]
+    input: InputArgs,
+    /// Output format. `openslo` is the only value today; the flag exists so
+    /// adding a second format later is not a breaking change.
+    #[arg(long, value_enum, default_value_t = ExportFormat::Openslo)]
+    format: ExportFormat,
+    /// Output DIRECTORY, receiving one `<service>.yaml` per spec (created if
+    /// absent). Defaults to stdout, where every spec is written as one
+    /// multi-document YAML stream.
     #[arg(short, long)]
     output: Option<PathBuf>,
 }
@@ -284,6 +309,7 @@ fn main() -> Result<()> {
         Command::Simulate(args) => run_simulate(args),
         Command::Check(args) => run_check(args),
         Command::Dashboard(args) => run_dashboard(args),
+        Command::Export(args) => run_export(args),
         Command::Schema(args) => run_schema(args),
     }
 }
@@ -309,6 +335,95 @@ fn run_dashboard(args: DashboardArgs) -> Result<()> {
 fn run_schema(args: SchemaArgs) -> Result<()> {
     // Verbatim, so the output is byte-identical to the in-repo schema file.
     write_output(SCHEMA_JSON.to_string(), args.output, "schema")
+}
+
+fn run_export(args: ExportArgs) -> Result<()> {
+    let specs = load_specs(&args.input)?;
+    // Only export what slokit itself accepts: an invalid spec would otherwise
+    // become OpenSLO that some downstream importer has to reject instead.
+    validate_all(&specs)?;
+
+    let mut documents = Vec::with_capacity(specs.len());
+    for spec in &specs {
+        let export = match args.format {
+            ExportFormat::Openslo => openslo::to_yaml_reported(spec)
+                .with_context(|| format!("exporting service '{}' as OpenSLO", spec.service))?,
+        };
+        // Notes go to stderr so stdout stays a pipeable YAML stream, the same
+        // split the import path already uses for its notes.
+        for note in &export.notes {
+            eprintln!("note: {note}");
+        }
+        documents.push(export.yaml);
+    }
+
+    match args.output {
+        Some(dir) => write_export_dir(&dir, &specs, &documents),
+        // Each spec's export is already a multi-document stream ending in a
+        // newline, so `---` between them yields one valid stream.
+        None => Ok(std::io::stdout().write_all(documents.join("---\n").as_bytes())?),
+    }
+}
+
+/// The file name a spec is exported to under `--output`, or an error saying why
+/// the service name has none.
+///
+/// Fails closed rather than guessing, matching the export's posture for
+/// constructs it cannot represent: `service` is only checked non-empty by
+/// validation, so it can hold a path separator, `..`, or a drive letter, none
+/// of which may be pasted into a path this command then writes to.
+fn export_file_name(service: &str) -> Result<String> {
+    let name = service.trim();
+    let unusable = name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains(|c: char| c == '/' || c == '\\' || c == ':' || c.is_control());
+    if unusable {
+        bail!(
+            "--output writes one <service>.yaml per spec, and service '{service}' has no usable \
+             file name (it must not be '.' or '..', or contain a path separator, ':' or a control \
+             character); export this spec to stdout instead"
+        );
+    }
+    Ok(format!("{name}.yaml"))
+}
+
+/// Write one `<service>.yaml` per spec into `dir`.
+///
+/// Every name is resolved and checked for collisions BEFORE the first write, so
+/// a rejected batch leaves no half-written directory behind.
+fn write_export_dir(dir: &Path, specs: &[Spec], documents: &[String]) -> Result<()> {
+    if dir.exists() && !dir.is_dir() {
+        bail!(
+            "--output {} exists and is not a directory; `export` writes one <service>.yaml per \
+             spec, so this flag takes a directory (omit it to write to stdout)",
+            dir.display()
+        );
+    }
+
+    let mut seen = BTreeSet::new();
+    let mut names = Vec::with_capacity(specs.len());
+    for spec in specs {
+        let name = export_file_name(&spec.service)?;
+        if !seen.insert(name.clone()) {
+            bail!(
+                "two specs declare service '{}', so --output would write both to {name} and one \
+                 would be lost; export them separately or rename one",
+                spec.service.trim()
+            );
+        }
+        names.push(name);
+    }
+
+    std::fs::create_dir_all(dir)
+        .with_context(|| format!("creating output directory {}", dir.display()))?;
+    for (name, doc) in names.iter().zip(documents) {
+        let path = dir.join(name);
+        std::fs::write(&path, doc)
+            .with_context(|| format!("writing OpenSLO to {}", path.display()))?;
+        eprintln!("wrote {}", path.display());
+    }
+    Ok(())
 }
 
 fn run_generate(args: GenerateArgs) -> Result<()> {

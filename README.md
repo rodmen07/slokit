@@ -60,6 +60,9 @@ slokit check -i slos/ --url http://localhost:9090 --output json --fail-on warnin
 # Generate a Grafana dashboard (JSON) from a spec
 slokit dashboard -i slos.yaml -o dashboard.json
 
+# Export a spec as OpenSLO v1 (see "OpenSLO interop" below)
+slokit export -i slos.yaml --format openslo > slos.openslo.yaml
+
 # Print the spec JSON Schema (see "Editor integration" below)
 slokit schema
 ```
@@ -214,6 +217,56 @@ the registry through the `_with` entry points (`Spec::validate_with`,
 `SloSpec::to_sli_with`, `Spec::lint_with`) and `GenerateOptions::plugins`; see
 the `slokit::spec::plugin` module docs for a worked example. External plugin
 definition files (YAML/WASM) are deliberately out of scope for 0.9.
+
+## OpenSLO interop
+
+slokit reads and writes [OpenSLO](https://openslo.com) v1 `kind: SLO`
+documents, so a spec can move in either direction rather than only into slokit.
+
+**Importing.** Every `-i` accepts OpenSLO. A file whose first YAML document
+sets a top-level `apiVersion: openslo/...` is detected automatically;
+`--input-format openslo|slokit` overrides the detection either way.
+
+```sh
+slokit generate -i openslo-slos.yaml            # auto-detected
+slokit generate -i slos.yaml --input-format openslo
+```
+
+**Exporting.** `slokit export` is the inverse: one `kind: SLO` document per
+slokit SLO, written to stdout as a multi-document stream, or to a directory as
+one `<service>.yaml` per spec.
+
+```sh
+slokit export -i slos.yaml --format openslo > slos.openslo.yaml
+slokit export -i slos/ -o openslo/            # one file per service
+```
+
+`--format` takes only `openslo` today; the flag exists so a second format is
+not a breaking change later.
+
+The conversion is a **semantic** round trip, not a byte-for-byte one: the two
+models are not isomorphic, so `slokit export | slokit validate` gives back an
+equivalent spec with exactly three documented differences, each reported as a
+`note:` on stderr (stdout stays a clean YAML stream you can pipe or redirect):
+
+| slokit construct | on export |
+|---|---|
+| service-level `labels` | merged into every SLO's `metadata.labels`; re-importing leaves them on the SLOs |
+| per-SLO `alerting` | dropped: slokit derives MWMBR alerts from the objective, while OpenSLO models alerting as separate `kind: AlertPolicy` documents |
+| `version` (the slokit dialect tag) | replaced by `apiVersion: openslo/v1`; re-importing restores the default |
+
+Anything OpenSLO cannot represent is a **hard error naming the field**, never a
+silent drop or best-effort YAML a downstream consumer would reject: an
+`sli.plugin` (which has no query until the plugin expands it at generation
+time), an SLI setting no variant or several, an empty service or SLO name, an
+objective outside `(0, 100]`, and a latency SLI whose `threshold` or
+`histogram_metric` cannot become an OpenSLO `thresholdMetric`.
+
+Exported queries keep slokit's `{{.window}}` token verbatim. slokit re-imports
+it unchanged; any other OpenSLO consumer has to substitute its own lookback.
+
+The library half is `slokit::spec::openslo::to_yaml` (and `to_yaml_reported`,
+which keeps the notes), the sibling of `from_yaml`.
 
 ## Editor integration (JSON Schema)
 
