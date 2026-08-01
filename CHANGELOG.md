@@ -6,7 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
-## [Unreleased]
+## [1.2.0] - 2026-08-01
+
+OpenSLO v1 **export**: the inverse of the v0.10.0 import, so a spec can leave
+slokit as easily as it enters. Everything here is additive per
+[docs/SEMVER.md](docs/SEMVER.md); no 1.0.0 or 1.1.0 signature changed, and the
+lean core (`--no-default-features`) is untouched.
 
 ### Added
 
@@ -49,8 +54,8 @@ From 1.0.0, slokit follows the semver guarantees documented in
   round-trip transformations, and the fail-closed error set. The import had
   shipped in v0.10.0 with no README coverage at all.
 
-This is v1.2.0 PR 1 (the library half) and PR 2 (the `slokit export`
-subcommand). PR 3 is the release prep and the cut.
+Shipped as three slices: PR 1 (the library half), PR 2 (the `slokit export`
+subcommand), and this release prep with the cut that follows it.
 
 ## [1.1.0] - 2026-07-26
 
