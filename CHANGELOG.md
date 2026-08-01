@@ -32,7 +32,25 @@ From 1.0.0, slokit follows the semver guarantees documented in
   objective, and a latency threshold or histogram metric that cannot be written
   as an OpenSLO `thresholdMetric`.
 
-This is v1.2.0 PR 1 (the library half). The `slokit export` subcommand is PR 2.
+- `slokit export`, the CLI half: `slokit export -i <file|dir> [--format openslo]
+  [-o <dir>]` writes the OpenSLO documents to stdout as one multi-document
+  stream, or to a directory as one `<service>.yaml` per spec (created if
+  absent). `--format` accepts only `openslo` today; the flag exists so a second
+  format is not a breaking change. Export notes go to **stderr**, so stdout
+  stays a stream that pipes and redirects cleanly, the same split the import
+  path already uses.
+- Two `--output` guards, both rejecting the whole batch before anything is
+  written: a `service` that is not a usable file name (it is only checked
+  non-empty by validation, so it can hold a path separator, `..`, or a drive
+  letter) and two specs sharing a service, which would otherwise write to the
+  same file and silently lose one.
+- README: an **OpenSLO interop** section documenting both directions (the
+  import's auto-detection and `--input-format`, and the new export), the three
+  round-trip transformations, and the fail-closed error set. The import had
+  shipped in v0.10.0 with no README coverage at all.
+
+This is v1.2.0 PR 1 (the library half) and PR 2 (the `slokit export`
+subcommand). PR 3 is the release prep and the cut.
 
 ## [1.1.0] - 2026-07-26
 

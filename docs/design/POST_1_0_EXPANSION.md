@@ -150,6 +150,6 @@ overridden.
 That schedules v1.2.0 at exactly the scope above, and the
 [ROADMAP](../../ROADMAP.md) v1.2.0 section now carries the chosen scope and
 the checkable done-when (D6's default), written in PR 1 as this section
-required. PR 1 (the library export) shipped with that edit; PR 2 (the
-`export` subcommand) and PR 3 (release prep and the cut) follow in D6's
-order.
+required. PR 1 (the library export) shipped with that edit and PR 2 (the
+`export` subcommand) followed; PR 3 (release prep and the cut) is next. The
+[ROADMAP](../../ROADMAP.md) tracks slice status, not this document.

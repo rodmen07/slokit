@@ -78,6 +78,13 @@ generated rules` against a pinned Prometheus release, and `coverage`.
   `apiVersion: openslo/v1`, `kind: SLO` documents, with `Export`/`ExportNote`
   mirroring the import's `Import`/`ImportNote`. Additive per
   [docs/SEMVER.md](docs/SEMVER.md). See [CHANGELOG.md](CHANGELOG.md).
+- **`slokit export` subcommand (v1.2.0 PR 2).** `slokit export -i <file|dir>
+  [--format openslo] [-o <dir>]`, writing a multi-document stream to stdout or
+  one `<service>.yaml` per spec to a directory, with notes on stderr and two
+  fail-closed `--output` guards (an unusable service name, a service
+  collision). Binary-level tests in `tests/export_cli.rs` plus a README
+  **OpenSLO interop** section covering both directions. See
+  [CHANGELOG.md](CHANGELOG.md).
 
 ## Next milestones
 
@@ -101,9 +108,13 @@ Slices, dependency-ordered (D6):
    `ExportNote`, and `tests/openslo_export.rs` proving the round-trip property
    over every committed spec in the repo (the sample fixture plus all eight
    `examples/infraportal/slos/` specs).
-2. **PR 2 — `slokit export --format openslo` subcommand** plus binary-level
-   tests (the `tests/simulate_cli.rs` pattern) and a README section
-   (agent-doable, next).
+2. **PR 2 — `slokit export --format openslo` subcommand: SHIPPED on `main`**
+   (agent-doable). The subcommand, `tests/export_cli.rs` (binary-level, the
+   `tests/simulate_cli.rs` pattern), and the README **OpenSLO interop**
+   section. D2's `<SPEC>...` positional was read as its own following clause
+   ("following the flag conventions the other subcommands already use"): the
+   input is `-i`, the shared `InputArgs` every other subcommand takes, which
+   already accepts a file or a directory of specs.
 3. **PR 3 — release prep and the cut**: CHANGELOG `[1.2.0]`, version bumps, and
    the `## Unreleased on main` move above in the SAME commit (which
    `tests/roadmap_truth.rs` enforces), then the cut under the standing
