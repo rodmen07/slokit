@@ -1,7 +1,11 @@
 # slokit post-1.0 expansion: scoping v1.2.0
 
-- Status: draft, awaiting maintainer review (product increment, docs only)
-- Date: 2026-07-26 (written against v1.1.0, the version live on crates.io)
+- Status: **APPROVED 2026-08-01** — the maintainer approved D1 through D6 as
+  written, accepting the whole default set with no override. v1.2.0 is
+  scheduled at the scope below and the [ROADMAP](../../ROADMAP.md) v1.2.0
+  section carries it. This document is now the decision record, not a proposal.
+- Date: 2026-07-26 (written against v1.1.0, the version live on crates.io);
+  approved 2026-08-01
 - Scope: decides the theme of the v1.2.0 milestone and orders the remaining
   expansion candidates, per the [ROADMAP](../../ROADMAP.md) v1.2.0 section
 - Decides: D1 through D6 below. Every decision is an overridable default:
@@ -137,9 +141,15 @@ round-trip suite is green in CI; crates.io reports `newest_version` 1.2.0.
 - The `examples/infraportal/` live-status work (blocked on `/metrics` in the
   microservices repo; tracked there, not here).
 
-## 5. Review
+## 5. Review — CLOSED
 
-Maintainer review of D1 through D6 is the only gate. "Approved" schedules
-v1.2.0 as scoped above and the ROADMAP's v1.2.0 section gets the chosen
-scope and done-when in the first implementation PR. Any single decision can
-be overridden without re-opening the rest.
+Maintainer review of D1 through D6 was the only gate. It **closed on
+2026-08-01: approved as written**, the whole set, with no decision
+overridden.
+
+That schedules v1.2.0 at exactly the scope above, and the
+[ROADMAP](../../ROADMAP.md) v1.2.0 section now carries the chosen scope and
+the checkable done-when (D6's default), written in PR 1 as this section
+required. PR 1 (the library export) shipped with that edit; PR 2 (the
+`export` subcommand) and PR 3 (release prep and the cut) follow in D6's
+order.

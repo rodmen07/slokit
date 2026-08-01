@@ -1,0 +1,55 @@
+---
+source: tests/openslo_export.rs
+expression: yaml
+---
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: requests-availability
+  labels:
+    owner: team-platform
+spec:
+  description: 99.9% of HTTP requests succeed
+  service: myservice
+  indicator:
+    metadata:
+      name: requests-availability
+    spec:
+      ratioMetric:
+        bad:
+          metricSource:
+            type: Prometheus
+            spec:
+              query: sum(rate(http_request_duration_seconds_count{job="myservice",code=~"5.."}[{{.window}}]))
+        total:
+          metricSource:
+            type: Prometheus
+            spec:
+              query: sum(rate(http_request_duration_seconds_count{job="myservice"}[{{.window}}]))
+  budgetingMethod: Occurrences
+  objectives:
+  - target: 0.999
+---
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: requests-latency
+  labels:
+    owner: team-platform
+spec:
+  description: 99.5% of requests are served under 300ms
+  service: myservice
+  indicator:
+    metadata:
+      name: requests-latency
+    spec:
+      thresholdMetric:
+        metricSource:
+          type: Prometheus
+          spec:
+            query: http_request_duration_seconds{job="myservice"}
+  budgetingMethod: Occurrences
+  objectives:
+  - op: lte
+    value: 0.3
+    target: 0.995

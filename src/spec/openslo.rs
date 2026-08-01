@@ -72,6 +72,17 @@
 //!   `op: gt`/`gte`: slokit's latency SLI models "good means at or below the
 //!   threshold" over a Prometheus histogram.
 //! - An `indicatorRef` with no matching `kind: SLI` document in the input.
+//!
+//! # Export (the other direction)
+//!
+//! [`to_yaml`] and [`to_yaml_reported`] serialize a slokit [`Spec`] back out as
+//! OpenSLO v1 documents, so conversion is not a one-way door. The inverse
+//! mapping table, the constructs reported as [`ExportNote`]s, and the
+//! fail-closed error set are documented in the [`export`] submodule.
+
+pub mod export;
+
+pub use export::{to_yaml, to_yaml_reported, Export, ExportNote};
 
 use std::collections::BTreeMap;
 use std::path::Path;
