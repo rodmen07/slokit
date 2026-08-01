@@ -71,34 +71,58 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
+## Unreleased on main
+
+- **OpenSLO v1 export, library half (v1.2.0 PR 1).** `spec::openslo::to_yaml`
+  and `spec::openslo::to_yaml_reported` serialize a slokit `Spec` as
+  `apiVersion: openslo/v1`, `kind: SLO` documents, with `Export`/`ExportNote`
+  mirroring the import's `Import`/`ImportNote`. Additive per
+  [docs/SEMVER.md](docs/SEMVER.md). See [CHANGELOG.md](CHANGELOG.md).
+
 ## Next milestones
 
-### v1.2.0: post-1.0 expansion (proposal-gated)
+### v1.2.0: OpenSLO v1 export (scheduled)
 
-The agent-doable path to 1.0 is complete, so what comes next is a product
-decision rather than a queue. The proposal now exists:
-[docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md)
-(2026-07-26) ranks the candidates and proposes **OpenSLO v1 export** as the
-single v1.2.0 theme, every decision (D1 through D6) an overridable default so
-the whole set can be accepted in one word.
+The proposal's D1 through D6 were **APPROVED as written on 2026-08-01**, which
+scheduled this milestone. The scope below is the approved default set; the
+reasoning is in
+[docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md).
 
-- USER-ONLY (dated 2026-07-26): review the proposal's D1 through D6; clears
-  when the maintainer approves or overrides them, which schedules v1.2.0.
+Theme (D1, D4): OpenSLO v1 export and nothing else, the inverse of the v0.10.0
+import. Surface (D2): the library functions plus a `slokit export --format
+openslo` subcommand. Fidelity (D3): a semantic round trip, failing closed with
+an error naming the field on any construct OpenSLO cannot represent.
 
-Done when: the proposal is reviewed and this file's v1.2.0 section names the
-chosen scope with a checkable done-when (the proposal's D6 has the default
-one).
+Slices, dependency-ordered (D6):
+
+1. **PR 1 — library export: SHIPPED on `main`** (agent-doable). New
+   `spec::openslo::export` module carrying the inverse mapping table, the
+   fail-closed error set, `to_yaml` / `to_yaml_reported` / `Export` /
+   `ExportNote`, and `tests/openslo_export.rs` proving the round-trip property
+   over every committed spec in the repo (the sample fixture plus all eight
+   `examples/infraportal/slos/` specs).
+2. **PR 2 — `slokit export --format openslo` subcommand** plus binary-level
+   tests (the `tests/simulate_cli.rs` pattern) and a README section
+   (agent-doable, next).
+3. **PR 3 — release prep and the cut**: CHANGELOG `[1.2.0]`, version bumps, and
+   the `## Unreleased on main` move above in the SAME commit (which
+   `tests/roadmap_truth.rs` enforces), then the cut under the standing
+   2026-07-26 release delegation.
+
+Done when (checkable, from D6): `slokit export --format openslo` on a repo
+example produces YAML that `slokit validate` re-imports cleanly, the round-trip
+suite is green in CI, and crates.io reports `newest_version` 1.2.0.
 
 ## Later / candidates (unscheduled)
 
 Ranked with defaults in
 [docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md)
-(pending review); listed here until a review schedules them:
+(D1-D6 approved 2026-08-01; OpenSLO export left this list and became the
+v1.2.0 milestone above). Listed here until a decision schedules them:
 
-- OpenSLO **export** (the inverse of the v0.10.0 import, which shipped) —
-  the proposal's default pick for v1.2.0.
-- Additional lint rules surfaced by real-world specs — proposed next after
-  v1.2.0, each rule gated on citing a real spec where it would have fired.
+- Additional lint rules surfaced by real-world specs — approved as the next
+  theme after v1.2.0 (D5), each rule still gated on citing a real spec where it
+  would have fired.
 - Dashboard enhancements, for example per-severity burn panels — deferred
   until any generated dashboard has live data to render.
 - Carrying `examples/infraportal/` from SLO-definitions-as-code to live status,
@@ -111,15 +135,17 @@ Ranked with defaults in
 
 | Item | Status | Reason |
 |------|--------|--------|
-| Review of the post-1.0 expansion proposal (dated 2026-07-26) | USER-ONLY | it is a scope decision, not an implementation; clears when the maintainer approves or overrides D1-D6 in docs/design/POST_1_0_EXPANSION.md |
 | Tag backfill for v0.5.0 and v0.6.1 through v0.6.8 (dated 2026-07-26) | USER-ONLY | predates the release delegation and stays outside it: nine historical versions with no release prep on `main` to verify a cut against (backfill publishes nothing — publish.yml fires on release publication, and those versions are already on crates.io); clears when the nine tags exist on origin or the user directs it |
 
 Nothing is BLOCKED. Every remaining agent-doable item can start today. The
-two rows above that previously gated releases as USER-ONLY ("Every release
-cut" and the v1.1.0 cut row) are gone: the first was superseded by the
-2026-07-26 delegation (see the labeling section above), and the second's
-clearing condition — the crates.io API reporting `newest_version` 1.1.0 — was
-met the same day.
+two rows that previously gated releases as USER-ONLY ("Every release cut" and
+the v1.1.0 cut row) are gone: the first was superseded by the 2026-07-26
+delegation (see the labeling section above), and the second's clearing
+condition — the crates.io API reporting `newest_version` 1.1.0 — was met the
+same day. The proposal-review row is gone for the same reason: its clearing
+condition was met on 2026-08-01 when the maintainer approved D1-D6 as written,
+which scheduled the v1.2.0 milestone above. Its text is preserved in the
+History section below.
 
 For the record, the v1.1.0 cut ran 2026-07-26 as: tag `v1.1.0` at `8733a07`,
 `gh release create v1.1.0 --verify-tag --generate-notes`, which fired
@@ -161,6 +187,17 @@ happened:
 
 Drift worth recording:
 
+- **2026-08-01: the post-1.0 proposal was approved and v1.2.0 was scheduled.**
+  The maintainer approved D1 through D6 of
+  [docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md) as
+  written, so the v1.2.0 section above changed from "proposal-gated" to the
+  scoped OpenSLO-export milestone, OpenSLO export left the unscheduled
+  candidate list, and the USER-ONLY review row was deleted from the summary
+  table. That row read verbatim: `| Review of the post-1.0 expansion proposal
+  (dated 2026-07-26) | USER-ONLY | it is a scope decision, not an
+  implementation; clears when the maintainer approves or overrides D1-D6 in
+  docs/design/POST_1_0_EXPANSION.md |`. Its clearing condition was met, which
+  is the only reason it is gone.
 - Configurable alerting was originally planned for 0.6 but slipped; 0.6.0
   shipped the `lint` command instead, and configurable alerting landed as
   0.7.0 on 2026-07-18.

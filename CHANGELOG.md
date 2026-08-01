@@ -6,6 +6,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
+## [Unreleased]
+
+### Added
+
+- OpenSLO v1 **export**, the inverse of the v0.10.0 import, so conversion is no
+  longer a one-way door: `slokit::spec::openslo::to_yaml(&Spec) -> Result<String>`
+  serializes a spec as `apiVersion: openslo/v1`, `kind: SLO` documents (one per
+  slokit SLO, joined as a multi-document stream), and
+  `openslo::to_yaml_reported` returns the same YAML plus `ExportNote`s, the
+  export-side twin of `ImportNote`. Additive per
+  [docs/SEMVER.md](docs/SEMVER.md); the lean core is untouched.
+- The full inverse mapping table, the fail-closed error set, and the fidelity
+  contract are documented in the new `spec::openslo::export` module. The
+  contract is a semantic round trip, not byte identity: exporting and
+  re-importing yields the source spec with exactly three documented
+  transformations applied (service-level labels move onto each SLO, alerting
+  metadata is dropped because OpenSLO models alerting as separate
+  `kind: AlertPolicy` documents, and the slokit dialect tag returns to its
+  default), each reported as a note rather than dropped silently.
+- Constructs OpenSLO cannot represent fail closed with an error naming the
+  field rather than emitting best-effort YAML: plugin SLIs (which have no query
+  until the registered plugin expands them), an SLI with none or more than one
+  variant set, an empty service or SLO name, a spec with no SLOs, an out-of-range
+  objective, and a latency threshold or histogram metric that cannot be written
+  as an OpenSLO `thresholdMetric`.
+
+This is v1.2.0 PR 1 (the library half). The `slokit export` subcommand is PR 2.
+
 ## [1.1.0] - 2026-07-26
 
 The first minor of the 1.x line: it publishes the work that accumulated on
