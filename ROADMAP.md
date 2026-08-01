@@ -1,7 +1,7 @@
 # slokit Roadmap
 
-Canonical planning document for slokit. Last updated 2026-07-26, after the
-v1.1.0 cut published and the post-1.0 expansion proposal was drafted.
+Canonical planning document for slokit. Last updated 2026-08-01, when the
+v1.2.0 release prep landed and the OpenSLO export milestone closed.
 Backward-looking detail lives in [CHANGELOG.md](CHANGELOG.md); this file
 covers where the crate is going.
 
@@ -38,7 +38,7 @@ naming the release, and the registry confirmed afterwards. The v1.1.0 cut on
 2026-07-26 ran under exactly that delegation. Secret writes (`gh secret set`)
 remain USER-ONLY.
 
-## Current state: v1.1.0 (released and published 2026-07-26)
+## Current state: v1.2.0
 
 slokit is a stable, published SLO and error-budget engine with two pillars:
 
@@ -50,18 +50,27 @@ slokit is a stable, published SLO and error-budget engine with two pillars:
    `dashboard`, and `schema` commands behind feature flags (`cli`, `spec`,
    `check`, `dashboard`).
 
-1.1.0 is fully shipped: `Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say
-1.1.0, tag `v1.1.0` points at the prep commit `8733a07`, the GitHub release
-exists, and the crates.io API reports `newest_version` and
-`max_stable_version` both `1.1.0` (re-read 2026-07-26, after the publish
-workflow run `30202759087` succeeded). The crate version and the published
-version agree again.
+`Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say 1.2.0. Under the standing
+release delegation the cut (tag `v1.2.0`, GitHub release, the publish it fires)
+follows the prep commit directly, and the history row below records the date it
+ran.
+
+**This section deliberately does not claim a registry state.** The 1.1.0 prep
+wrote "prepared 2026-07-26, tag not yet cut" here and that sentence was false a
+few hours later, which cost a separate PR to correct. Whether crates.io has
+caught up is a live fact with a one-line check, not a claim a file can keep
+true:
+
+```
+curl -s -A "your-name (you@example.com)" https://crates.io/api/v1/crates/slokit \
+  | tr ',' '\n' | grep newest_version
+```
 
 The public API is frozen per [docs/SEMVER.md](docs/SEMVER.md): 1.x changes are
 additive only, generated rule output is byte-stable within a minor line, and
-the tag-pinned JSON Schema URLs are immutable. 1.1.0 keeps all three: it adds
-`slokit simulate` and the public `slokit::simulate` module without touching any
-1.0.0 signature.
+the tag-pinned JSON Schema URLs are immutable. 1.2.0 keeps all three: it adds
+the `spec::openslo::export` module and the `slokit export` subcommand without
+touching any 1.0.0 or 1.1.0 signature.
 
 MSRV is 1.82 and it **is** CI-enforced: the `MSRV 1.82` job in
 `.github/workflows/ci.yml` builds the default, all-features, and lean-core
@@ -71,69 +80,31 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
-## Unreleased on main
-
-- **OpenSLO v1 export, library half (v1.2.0 PR 1).** `spec::openslo::to_yaml`
-  and `spec::openslo::to_yaml_reported` serialize a slokit `Spec` as
-  `apiVersion: openslo/v1`, `kind: SLO` documents, with `Export`/`ExportNote`
-  mirroring the import's `Import`/`ImportNote`. Additive per
-  [docs/SEMVER.md](docs/SEMVER.md). See [CHANGELOG.md](CHANGELOG.md).
-- **`slokit export` subcommand (v1.2.0 PR 2).** `slokit export -i <file|dir>
-  [--format openslo] [-o <dir>]`, writing a multi-document stream to stdout or
-  one `<service>.yaml` per spec to a directory, with notes on stderr and two
-  fail-closed `--output` guards (an unusable service name, a service
-  collision). Binary-level tests in `tests/export_cli.rs` plus a README
-  **OpenSLO interop** section covering both directions. See
-  [CHANGELOG.md](CHANGELOG.md).
-
 ## Next milestones
 
-### v1.2.0: OpenSLO v1 export (scheduled)
+Nothing is scheduled. The v1.2.0 OpenSLO-export milestone closed with this
+release prep (all three D6 slices shipped; see the history table below), and
+the theme after it is named but not scoped.
 
-The proposal's D1 through D6 were **APPROVED as written on 2026-08-01**, which
-scheduled this milestone. The scope below is the approved default set; the
-reasoning is in
-[docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md).
-
-Theme (D1, D4): OpenSLO v1 export and nothing else, the inverse of the v0.10.0
-import. Surface (D2): the library functions plus a `slokit export --format
-openslo` subcommand. Fidelity (D3): a semantic round trip, failing closed with
-an error naming the field on any construct OpenSLO cannot represent.
-
-Slices, dependency-ordered (D6):
-
-1. **PR 1 — library export: SHIPPED on `main`** (agent-doable). New
-   `spec::openslo::export` module carrying the inverse mapping table, the
-   fail-closed error set, `to_yaml` / `to_yaml_reported` / `Export` /
-   `ExportNote`, and `tests/openslo_export.rs` proving the round-trip property
-   over every committed spec in the repo (the sample fixture plus all eight
-   `examples/infraportal/slos/` specs).
-2. **PR 2 — `slokit export --format openslo` subcommand: SHIPPED on `main`**
-   (agent-doable). The subcommand, `tests/export_cli.rs` (binary-level, the
-   `tests/simulate_cli.rs` pattern), and the README **OpenSLO interop**
-   section. D2's `<SPEC>...` positional was read as its own following clause
-   ("following the flag conventions the other subcommands already use"): the
-   input is `-i`, the shared `InputArgs` every other subcommand takes, which
-   already accepts a file or a directory of specs.
-3. **PR 3 — release prep and the cut**: CHANGELOG `[1.2.0]`, version bumps, and
-   the `## Unreleased on main` move above in the SAME commit (which
-   `tests/roadmap_truth.rs` enforces), then the cut under the standing
-   2026-07-26 release delegation.
-
-Done when (checkable, from D6): `slokit export --format openslo` on a repo
-example produces YAML that `slokit validate` re-imports cleanly, the round-trip
-suite is green in CI, and crates.io reports `newest_version` 1.2.0.
+D5 of [docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md),
+approved 2026-08-01, puts **additional lint rules** next, with each individual
+rule gated on citing a real-world spec where it would have fired. Turning that
+theme into a milestone is a product increment: it needs the candidate rules
+enumerated, each one grounded in a real spec, and a checkable done-when. Until
+that lands, the candidates below stay unscheduled and no version number is
+promised to any of them.
 
 ## Later / candidates (unscheduled)
 
 Ranked with defaults in
 [docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md)
-(D1-D6 approved 2026-08-01; OpenSLO export left this list and became the
-v1.2.0 milestone above). Listed here until a decision schedules them:
+(D1-D6 approved 2026-08-01; OpenSLO export left this list, became the v1.2.0
+milestone, and shipped — see the history table). Listed here until a decision
+schedules them:
 
-- Additional lint rules surfaced by real-world specs — approved as the next
-  theme after v1.2.0 (D5), each rule still gated on citing a real spec where it
-  would have fired.
+- Additional lint rules surfaced by real-world specs — the approved next theme
+  (D5), still unscoped, and each rule still gated on citing a real spec where
+  it would have fired.
 - Dashboard enhancements, for example per-severity burn panels — deferred
   until any generated dashboard has live data to render.
 - Carrying `examples/infraportal/` from SLO-definitions-as-code to live status,
@@ -155,18 +126,19 @@ delegation (see the labeling section above), and the second's clearing
 condition — the crates.io API reporting `newest_version` 1.1.0 — was met the
 same day. The proposal-review row is gone for the same reason: its clearing
 condition was met on 2026-08-01 when the maintainer approved D1-D6 as written,
-which scheduled the v1.2.0 milestone above. Its text is preserved in the
-History section below.
+which scheduled the v1.2.0 milestone that has since shipped. Its text is
+preserved in the History section below.
 
-For the record, the v1.1.0 cut ran 2026-07-26 as: tag `v1.1.0` at `8733a07`,
-`gh release create v1.1.0 --verify-tag --generate-notes`, which fired
-`.github/workflows/publish.yml` (run `30202759087`, success). Creating the
-**release** (not the tag) is what fires publish.yml, which re-runs fmt,
-clippy and both test configurations, asserts `Cargo.toml`'s version equals
-the tag, then publishes with `secrets.CRATES_IO_TOKEN`. Publishing is
-irreversible, which is why the delegation's checklist — prep on `main`, CI
-green on that commit, version and changelog re-read before tagging, registry
-confirmed after — gates every cut.
+For the record, every 1.x cut runs the same three commands against the prep
+commit on `main`: `git tag vX.Y.Z && git push origin vX.Y.Z`, then
+`gh release create vX.Y.Z --verify-tag --generate-notes`. The v1.1.0 cut ran
+it on 2026-07-26 (tag at `8733a07`, release fired
+`.github/workflows/publish.yml` run `30202759087`, success). Creating the **release** (not the tag) is what fires publish.yml,
+which re-runs fmt, clippy and both test configurations, asserts `Cargo.toml`'s
+version equals the tag, then publishes with `secrets.CRATES_IO_TOKEN`.
+Publishing is irreversible, which is why the delegation's checklist — prep on
+`main`, CI green on that commit, version and changelog re-read before tagging,
+registry confirmed after — gates every cut.
 
 Not blocked by anything: the 2026-06-04 infrastructure decommission does not
 affect slokit. The crate has no cloud runtime; CI and publishing run on GitHub
@@ -195,9 +167,33 @@ happened:
 | 0.12.0 | 2026-07-19 | 1.0 freeze prep: `#[non_exhaustive]` audit, constructors, `deny(missing_docs)`, docs/SEMVER.md, MSRV 1.82 CI job |
 | 1.0.0 | 2026-07-19 | API freeze; content identical to 0.12.0, guarantees documented |
 | 1.1.0 | 2026-07-26 | `slokit simulate` + the public `slokit::simulate` module, `examples/infraportal/`, `cargo audit` CI gate; released and published the same day under the release delegation |
+| 1.2.0 | 2026-08-01 | OpenSLO v1 export: the `spec::openslo::export` module (`to_yaml` / `to_yaml_reported`, `Export` / `ExportNote`) and the `slokit export --format openslo` subcommand, with a semantic round-trip property proven over every committed spec; proposed, approved and built the same day |
+
+The v1.2.0 milestone as it was scoped, for the record, since the section itself
+is gone from `## Next milestones` now that it shipped. Theme (D1, D4): OpenSLO
+v1 export and nothing else, the inverse of the v0.10.0 import. Surface (D2):
+the library functions plus a `slokit export --format openslo` subcommand.
+Fidelity (D3): a semantic round trip, failing closed with an error naming the
+field on any construct OpenSLO cannot represent. Slices (D6): PR 1 the library
+export (`#21`), PR 2 the subcommand (`#22`), PR 3 this release prep and the
+cut. Its done-when was checkable, and two of its three clauses are already
+mechanical: `slokit export --format openslo` on a repo example produces YAML
+that `slokit validate` re-imports cleanly (asserted at the binary level by
+`tests/export_cli.rs::an_exported_example_reimports_cleanly_through_validate`)
+and the round-trip suite is green in CI. The third — crates.io reporting
+`newest_version` 1.2.0 — is the registry check above, which nothing in this
+repo can assert on its own.
 
 Drift worth recording:
 
+- **2026-08-01: the current-state section stopped asserting a registry state.**
+  The 1.1.0 prep had written "prepared 2026-07-26, tag not yet cut" into
+  `## Current state`, which the cut falsified hours later and a separate PR had
+  to correct. Prep and cut now run in one increment, which makes any "not yet
+  cut" wording stale before the day is out, so that section states only what
+  the repo itself can prove — the three files agreeing on the version — and
+  delegates the registry claim to a one-line `curl`. The whole v1.2.0
+  milestone, proposal to build, ran on this one day.
 - **2026-08-01: the post-1.0 proposal was approved and v1.2.0 was scheduled.**
   The maintainer approved D1 through D6 of
   [docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md) as
