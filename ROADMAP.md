@@ -82,17 +82,93 @@ generated rules` against a pinned Prometheus release, and `coverage`.
 
 ## Next milestones
 
-Nothing is scheduled. The v1.2.0 OpenSLO-export milestone closed with this
-release prep (all three D6 slices shipped; see the history table below), and
-the theme after it is named but not scoped.
+### v1.3.0: lint rules grounded in real-world specs
 
-D5 of [docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md),
-approved 2026-08-01, puts **additional lint rules** next, with each individual
-rule gated on citing a real-world spec where it would have fired. Turning that
-theme into a milestone is a product increment: it needs the candidate rules
-enumerated, each one grounded in a real spec, and a checkable done-when. Until
-that lands, the candidates below stay unscheduled and no version number is
-promised to any of them.
+Scheduled 2026-08-01, the scoping D5 of
+[docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md)
+(approved 2026-08-01) required: every rule below cites a real spec where it
+fires. The grounding pass ran the released v1.2.0 linter over 19 real specs
+on 2026-08-01: the 8 committed `examples/infraportal/slos/` specs,
+`tests/fixtures/sample.yaml`, and 10 upstream sloth examples fetched from
+`slok/sloth@main` `examples/` (getting-started, home-wifi,
+kubernetes-apiserver, victoria-metrics, no-alerts, raw-home-wifi, multifile,
+openslo-getting-started, openslo-kubernetes-apiserver,
+contrib-denominator-corrected). That pass also validated the shipped rule set
+against the wild for the first time: `THRESHOLD_UNREACHABLE` fires on sloth's
+own `victoria-metrics.yml` (its `grpc-latency-percentile-90` SLO generates a
+page condition at factor 14.4 asking for an error ratio of ~1.44, so that
+alert can never fire), and `ALL_ALERTS_DISABLED` fires on `no-alerts.yml`
+(deliberate in that example, and the right advisory).
+
+Slices, dependency-ordered, all agent-doable; the two flagged decisions are
+overridable defaults:
+
+1. **PR 1, multi-document spec input (the enabler).** sloth's own
+   `examples/multifile.yml` fails to load at all today ("deserializing from
+   YAML containing more than one document is not supported"), and slokit's
+   own `export` writes exactly that stream shape to stdout, so slokit emits
+   a format it cannot re-read. A linter scoped to real-world specs has to be
+   able to read them, which is why this slice is in-theme (flagged default:
+   input capability inside a lint-themed minor bends D4's one-theme rule
+   without breaking it). Additive only: a stream-aware load path beside
+   `Spec::from_yaml`, wired through the CLI input layer that already accepts
+   files and directories. Done-when: a committed multi-document fixture
+   derived from sloth's `multifile.yml` loads through `slokit lint` and
+   `slokit validate` with per-document locations, and a multi-spec
+   `slokit export` stream pipes back through `slokit validate` cleanly at
+   the binary level.
+2. **PR 2, `SLI_FALLBACK_ASYMMETRY` (the new rule).** Grounding: BOTH SLOs
+   of sloth's `home-wifi.yml` (a real installation's spec) guard
+   `events.error_query` with `OR on() vector(0)` while `total_query` has no
+   fallback, so the moment `unifipoller_client_satisfaction_ratio` stops
+   being scraped the ratio evaluates to empty and every burn-rate alert
+   silently stops evaluating, which is exactly the no-data failure the
+   author's one-sided guard shows they meant to handle. Rule: warn when
+   exactly one of `error_query`/`total_query` contains a `vector(` no-data
+   fallback (flagged default: a textual, case-insensitive check, consistent
+   with lint already treating queries as text; anything smarter needs a
+   PromQL parser this crate deliberately does not carry). Done-when: the
+   rule fires on a committed fixture carrying the home-wifi pattern, stays
+   silent on symmetric-fallback and no-fallback specs, and the whole
+   committed example set stays lint-clean.
+3. **PR 3, release prep and the cut**, the standing shape `roadmap_truth`
+   enforces (CHANGELOG section, version bumps, this milestone section
+   retired into History in the same commit), cut under the release
+   delegation, registry confirmed after.
+
+**v1.3.0 done-when (checkable):** both new capabilities asserted by
+`cargo test` against committed fixtures derived from the cited real specs;
+the 8 `examples/infraportal/slos/` specs and `tests/fixtures/sample.yaml`
+still lint clean (the regression half); crates.io reports `newest_version`
+1.3.0.
+
+**Evaluated for v1.3.0 and not scheduled, grounding outcome recorded so it
+is not re-litigated:**
+
+- **Window-coverage check** (D5 candidate): formalized as "the minimum
+  factor across enabled alert conditions is above 1, so a sustained burn
+  rate between 1 and that minimum exhausts the whole budget without any
+  alert firing". Fires on zero of the 19 real specs: every loadable one
+  uses the default window table, whose ticket condition has factor 1, and
+  the two real coverage defects the pass found are already reported by
+  shipped rules. Stays a candidate; schedule it when a real spec with
+  custom windows or a disabled ticket alert exhibits the gap.
+- **Objective-precision check** (D5 candidate): not groundable from a spec
+  alone, because judging whether an objective's digits exceed what the
+  period can measure needs event volume, which no spec carries. Needs a
+  user report or traffic-annotated grounding first.
+- **Plugin-option-unused check** (D5 candidate): already shipped, before
+  the proposal named it, as `PLUGIN_UNKNOWN_OPTION` (v0.9.0,
+  `src/spec/lint.rs`). The proposal listed it without re-checking the
+  shipped set; corrected here rather than repeated.
+- **Missing `alerting.name`** (surfaced by this pass: `sample.yaml`'s
+  second SLO has none): rejected, because generation falls back to the SLO
+  name (verified in the generated rules: `alert: requests-latency`), which
+  is sound behavior a rule would only add noise about.
+- **openslo/v1alpha import** (sloth's two openslo examples): the importer
+  rejects the legacy flavor cleanly and by name ("unsupported apiVersion
+  'openslo/v1alpha' (expected openslo/v1)"). Noted as a possible future
+  import widening; not a lint rule, not scheduled.
 
 ## Later / candidates (unscheduled)
 
@@ -102,9 +178,9 @@ Ranked with defaults in
 milestone, and shipped — see the history table). Listed here until a decision
 schedules them:
 
-- Additional lint rules surfaced by real-world specs — the approved next theme
-  (D5), still unscoped, and each rule still gated on citing a real spec where
-  it would have fired.
+- Additional lint rules beyond v1.3.0: the window-coverage and
+  objective-precision candidates above stay here until a real spec grounds
+  them (the v1.3.0 section records exactly what each one is waiting for).
 - Dashboard enhancements, for example per-severity burn panels — deferred
   until any generated dashboard has live data to render.
 - Carrying `examples/infraportal/` from SLO-definitions-as-code to live status,
