@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
+## [Unreleased]
+
+### Added
+
+- **Multi-document spec input** (v1.3.0 slice 1): `Spec::from_yaml_stream`
+  parses a `---`-separated YAML stream into one spec per document (empty
+  documents skipped, errors naming the failing document by 1-based position),
+  and every CLI command's `-i` now accepts such a file — sloth's own
+  `examples/multifile.yml` layout, which previously failed to load at all
+  ("deserializing from YAML containing more than one document is not
+  supported"), and the very stream shape `slokit export` writes, which the
+  tool could emit but not re-read as native specs. `Spec::from_yaml` keeps
+  its exactly-one-document contract unchanged.
+
 ## [1.2.0] - 2026-08-01
 
 OpenSLO v1 **export**: the inverse of the v0.10.0 import, so a spec can leave

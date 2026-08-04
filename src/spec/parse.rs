@@ -2,6 +2,9 @@
 
 use std::path::Path;
 
+use serde::Deserialize;
+use serde_norway::{Deserializer as YamlDeserializer, Value};
+
 use crate::error::{Result, SlokitError};
 
 use super::Spec;
@@ -9,6 +12,37 @@ use super::Spec;
 /// Parse a [`Spec`] from a YAML string.
 pub fn from_yaml(yaml: &str) -> Result<Spec> {
     serde_norway::from_str(yaml).map_err(|e| SlokitError::Spec(e.to_string()))
+}
+
+/// Parse every document of a YAML stream as a [`Spec`], in stream order.
+///
+/// A plain single-document file yields one spec, so this is a superset of
+/// [`from_yaml`]; the reason both exist is that a stream is the natural shape
+/// for "many specs in one file" (sloth's `examples/multifile.yml`, or the
+/// stream `slokit export` writes to stdout), while [`from_yaml`] keeps the
+/// exactly-one contract embedders may rely on. Empty documents (stray `---`
+/// separators, comment-only documents) are skipped, matching the OpenSLO
+/// importer. Errors name the failing document by its 1-based position in the
+/// stream; a stream with no non-empty documents is an error.
+pub fn from_yaml_stream(yaml: &str) -> Result<Vec<Spec>> {
+    let mut specs = Vec::new();
+    for (idx, de) in YamlDeserializer::from_str(yaml).enumerate() {
+        let n = idx + 1;
+        let value =
+            Value::deserialize(de).map_err(|e| SlokitError::Spec(format!("document {n}: {e}")))?;
+        if value.is_null() {
+            continue;
+        }
+        let spec: Spec = serde_norway::from_value(value)
+            .map_err(|e| SlokitError::Spec(format!("document {n}: {e}")))?;
+        specs.push(spec);
+    }
+    if specs.is_empty() {
+        return Err(SlokitError::Spec(
+            "input contains no YAML documents".to_string(),
+        ));
+    }
+    Ok(specs)
 }
 
 /// Read and parse a [`Spec`] from a YAML file on disk.

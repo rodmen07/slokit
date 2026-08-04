@@ -425,6 +425,18 @@ impl Spec {
         parse::from_yaml(yaml)
     }
 
+    /// Parse one or many specs from a YAML string that may be a
+    /// multi-document stream (`---`-separated), the shape of sloth's
+    /// `examples/multifile.yml` and of the stream `slokit export` writes.
+    ///
+    /// A single document yields one spec; empty documents are skipped; a
+    /// stream with no non-empty documents is an error. Errors name the
+    /// failing document by its 1-based position. [`Spec::from_yaml`] keeps
+    /// the exactly-one-document contract and is unchanged.
+    pub fn from_yaml_stream(yaml: &str) -> Result<Vec<Self>> {
+        parse::from_yaml_stream(yaml)
+    }
+
     /// Read and parse a spec from a YAML file.
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self> {
         parse::from_path(path.as_ref())
