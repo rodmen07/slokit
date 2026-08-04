@@ -505,6 +505,18 @@ fn yaml_to_json(yaml: &str) -> Value {
     serde_norway::from_str(yaml).expect("spec parses as YAML")
 }
 
+/// Every non-empty document of a YAML stream, as JSON values. The schema is a
+/// per-document contract, so a multi-document fixture (`multifile.yaml`) is
+/// checked one document at a time; a single-document fixture is a 1-element
+/// stream, keeping every pre-stream case exactly as it was.
+fn yaml_documents_to_json(yaml: &str) -> Vec<Value> {
+    use serde::Deserialize;
+    serde_norway::Deserializer::from_str(yaml)
+        .map(|de| Value::deserialize(de).expect("spec parses as YAML"))
+        .filter(|v| !v.is_null())
+        .collect()
+}
+
 fn schema_errors(validator: &jsonschema::Validator, instance: &Value) -> Vec<String> {
     validator
         .iter_errors(instance)
@@ -596,11 +608,14 @@ fn embedded_schema_matches_the_repo_file() {
 fn every_native_spec_validates_against_the_schema() {
     let validator = compiled_schema();
     for (name, yaml) in positive_specs() {
-        let errors = schema_errors(&validator, &yaml_to_json(&yaml));
-        assert!(
-            errors.is_empty(),
-            "{name} should validate against the schema, got: {errors:#?}"
-        );
+        for (i, doc) in yaml_documents_to_json(&yaml).iter().enumerate() {
+            let errors = schema_errors(&validator, doc);
+            assert!(
+                errors.is_empty(),
+                "{name} document {} should validate against the schema, got: {errors:#?}",
+                i + 1
+            );
+        }
     }
 }
 
@@ -610,9 +625,12 @@ fn schema_positives_also_pass_the_rust_validator() {
     // accepts also parses and passes `slokit validate`, so the two layers
     // agree on what a sound spec looks like.
     for (name, yaml) in positive_specs() {
-        let spec = Spec::from_yaml(&yaml).unwrap_or_else(|e| panic!("{name} should parse: {e}"));
-        spec.validate()
-            .unwrap_or_else(|e| panic!("{name} should pass validate: {e}"));
+        let specs =
+            Spec::from_yaml_stream(&yaml).unwrap_or_else(|e| panic!("{name} should parse: {e}"));
+        for spec in specs {
+            spec.validate()
+                .unwrap_or_else(|e| panic!("{name} should pass validate: {e}"));
+        }
     }
 }
 

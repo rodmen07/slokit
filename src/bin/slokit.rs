@@ -42,8 +42,10 @@ fn spec_files(input: &Path) -> Result<Vec<PathBuf>> {
 /// Load one spec (file) or many (directory of `*.yaml`/`*.yml`), honoring the
 /// input format flag. Without an explicit format, each file is auto-detected:
 /// a first document with a top-level `apiVersion: openslo/...` is imported as
-/// OpenSLO, anything else parses as a native slokit spec. OpenSLO import
-/// notes are printed to stderr.
+/// OpenSLO, anything else parses as native slokit specs. Either way a file may
+/// be a multi-document YAML stream (sloth's `multifile.yml` layout, or the
+/// stream `slokit export` writes), and every document is loaded. OpenSLO
+/// import notes are printed to stderr.
 fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
     let mut specs = Vec::new();
     for file in spec_files(&input.input)? {
@@ -62,9 +64,9 @@ fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
             }
             specs.extend(import.specs);
         } else {
-            specs.push(
-                Spec::from_yaml(&contents)
-                    .with_context(|| format!("loading spec from {}", file.display()))?,
+            specs.extend(
+                Spec::from_yaml_stream(&contents)
+                    .with_context(|| format!("loading specs from {}", file.display()))?,
             );
         }
     }

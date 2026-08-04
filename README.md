@@ -70,7 +70,10 @@ slokit schema
 Every command's `-i` accepts a **single spec file or a directory** of
 `*.yaml`/`*.yml` specs. With a directory, `generate` merges all rules into one
 document, `check` reports across every service, and `dashboard` emits a JSON
-array of dashboards.
+array of dashboards. A file may also be a **multi-document YAML stream**
+(`---`-separated, sloth's `multifile.yml` layout or the stream `slokit export`
+writes): every document is loaded, and documents behave exactly like separate
+files in a directory. Embedders get the same via `Spec::from_yaml_stream`.
 
 A full worked example (SLO specs for an 8-service platform plus the rules slokit
 generates from them) lives in [`examples/infraportal/`](examples/infraportal/).

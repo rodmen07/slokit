@@ -80,6 +80,18 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
+## Unreleased on main
+
+Shipped on `main` since the v1.2.0 tag, releasing with v1.3.0 (this section
+exists exactly while `CHANGELOG.md` has `[Unreleased]` entries; the
+`roadmap_truth` guard enforces the pairing):
+
+- **v1.3.0 slice 1, multi-document spec input:** `Spec::from_yaml_stream` plus
+  CLI wiring, so every command's `-i` reads `---`-separated spec streams
+  (sloth's `multifile.yml` layout, and the stream `slokit export` writes).
+  Grounding fixture `tests/fixtures/multifile.yaml` derived from sloth's
+  `examples/multifile.yml`; pinned by `tests/multidoc_input.rs`.
+
 ## Next milestones
 
 ### v1.3.0: lint rules grounded in real-world specs
