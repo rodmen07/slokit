@@ -91,6 +91,13 @@ exists exactly while `CHANGELOG.md` has `[Unreleased]` entries; the
   (sloth's `multifile.yml` layout, and the stream `slokit export` writes).
   Grounding fixture `tests/fixtures/multifile.yaml` derived from sloth's
   `examples/multifile.yml`; pinned by `tests/multidoc_input.rs`.
+- **v1.3.0 slice 2, the `SLI_FALLBACK_ASYMMETRY` lint rule:** warns when
+  exactly one of an events SLI's `error_query`/`total_query` contains a
+  `vector(` no-data fallback (textual and case-insensitive, the flagged
+  default recorded below). Grounding fixture
+  `tests/fixtures/fallback_asymmetry.yaml` carries the home-wifi pattern;
+  pinned by `tests/lint_fallback_asymmetry.rs`, which also guards the
+  committed example set staying lint-clean.
 
 ## Next milestones
 

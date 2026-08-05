@@ -41,7 +41,8 @@ slokit generate -i slos.yaml --format operator
 slokit validate -i slos.yaml
 
 # Lint a spec for advisory issues (100% objective, period shorter than the
-# burn-rate windows, alerts missing routing labels, ...). --strict fails CI.
+# burn-rate windows, alerts missing routing labels, a `vector(` no-data
+# fallback on only one of the two event queries, ...). --strict fails CI.
 slokit lint -i slos.yaml --strict
 
 # Do the error-budget math from the terminal
