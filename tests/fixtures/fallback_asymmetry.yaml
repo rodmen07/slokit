@@ -1,0 +1,42 @@
+# Derived from sloth's examples/home-wifi.yml (slok/sloth@main), the real
+# installation spec that grounds SLI_FALLBACK_ASYMMETRY: both of its SLOs
+# guard `events.error_query` with an `OR on() vector(0)` no-data fallback
+# while leaving `total_query` bare, so a scrape gap in
+# unifipoller_client_satisfaction_ratio empties the ratio and every
+# burn-rate alert silently stops evaluating. This fixture carries that
+# exact one-sided pattern in slokit's native format.
+version: "prometheus/v1"
+service: home-wifi
+labels:
+  owner: home
+slos:
+  - name: client-satisfaction
+    objective: 99.0
+    description: "Wifi clients are satisfied with the connection"
+    sli:
+      events:
+        error_query: (1 - avg(avg_over_time(unifipoller_client_satisfaction_ratio[{{.window}}]))) OR on() vector(0)
+        total_query: avg(avg_over_time(unifipoller_client_satisfaction_ratio[{{.window}}]))
+    alerting:
+      name: HomeWifiClientSatisfaction
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket
+  - name: client-satisfaction-strict
+    objective: 95.0
+    description: "Wifi clients are strictly satisfied with the connection"
+    sli:
+      events:
+        error_query: (1 - avg(avg_over_time(unifipoller_client_satisfaction_ratio[{{.window}}]))) OR on() vector(0)
+        total_query: avg(avg_over_time(unifipoller_client_satisfaction_ratio[{{.window}}]))
+    alerting:
+      name: HomeWifiClientSatisfactionStrict
+      page_alert:
+        labels:
+          severity: page
+      ticket_alert:
+        labels:
+          severity: ticket

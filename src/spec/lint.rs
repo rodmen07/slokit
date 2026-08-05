@@ -105,6 +105,16 @@ fn label_name_lints(
     }
 }
 
+/// Whether a query's text contains a `vector(` no-data fallback.
+///
+/// Textual and case-insensitive by design (the flagged default recorded in
+/// `ROADMAP.md`'s v1.3.0 section): lint already treats queries as text, and
+/// anything smarter needs a PromQL parser this crate deliberately does not
+/// carry.
+fn has_vector_fallback(query: &str) -> bool {
+    query.to_ascii_lowercase().contains("vector(")
+}
+
 /// Run every advisory check against `spec` and return all findings, ordered by
 /// SLO and then by check. An empty vec means the spec is clean. Plugin option
 /// names are checked against slokit's built-in plugin registry.
@@ -349,6 +359,34 @@ pub fn lint_with(spec: &Spec, plugins: &SliPluginRegistry) -> Vec<Lint> {
                         });
                     }
                 }
+            }
+        }
+
+        // An events SLI guarding exactly one of its two queries with a
+        // `vector(` no-data fallback. The moment the underlying metric stops
+        // being scraped, the unguarded query evaluates to empty, the whole
+        // ratio evaluates to empty, and every burn-rate alert silently stops
+        // evaluating -- which is exactly the no-data failure the one-sided
+        // guard shows the author meant to handle. Grounded on sloth's own
+        // `examples/home-wifi.yml`, where both SLOs guard `error_query` with
+        // `OR on() vector(0)` and leave `total_query` bare.
+        if let Some(events) = &slo.sli.events {
+            let error_guarded = has_vector_fallback(&events.error_query);
+            let total_guarded = has_vector_fallback(&events.total_query);
+            if error_guarded != total_guarded {
+                let (guarded, bare) = if error_guarded {
+                    ("error_query", "total_query")
+                } else {
+                    ("total_query", "error_query")
+                };
+                out.push(Lint {
+                    level: LintLevel::Warning,
+                    code: "SLI_FALLBACK_ASYMMETRY",
+                    location: loc.clone(),
+                    message: format!(
+                        "`sli.events.{guarded}` has a `vector(` no-data fallback but `sli.events.{bare}` does not; if the metric stops being scraped, the ratio evaluates to empty and burn-rate alerts silently stop evaluating -- guard both queries or neither"
+                    ),
+                });
             }
         }
 
@@ -963,5 +1001,122 @@ slos:
             .find(|l| l.code == "PLUGIN_UNKNOWN_OPTION")
             .expect("expected PLUGIN_UNKNOWN_OPTION");
         assert!(found.message.contains("'extra'"), "{}", found.message);
+    }
+
+    // ---- SLI_FALLBACK_ASYMMETRY ----
+    //
+    // The clean no-fallback case is `clean_spec_has_no_findings` above: CLEAN
+    // is an events SLI with no `vector(` in either query.
+
+    fn events_spec(error_query: &str, total_query: &str) -> Spec {
+        let yaml = format!(
+            r#"
+service: home-wifi
+slos:
+  - name: client-satisfaction
+    objective: 99.0
+    description: d
+    sli:
+      events:
+        error_query: '{error_query}'
+        total_query: '{total_query}'
+    alerting:
+      labels: {{ severity: page }}
+"#
+        );
+        Spec::from_yaml(&yaml).unwrap()
+    }
+
+    #[test]
+    fn one_sided_error_query_fallback_warns() {
+        // The home-wifi.yml pattern: error guarded, total bare.
+        let spec = events_spec(
+            "(1 - avg(sat[{{.window}}])) OR on() vector(0)",
+            "avg(sat[{{.window}}])",
+        );
+        let findings = lint(&spec);
+        let found = findings
+            .iter()
+            .find(|l| l.code == "SLI_FALLBACK_ASYMMETRY")
+            .expect("expected SLI_FALLBACK_ASYMMETRY");
+        assert_eq!(found.level, LintLevel::Warning);
+        assert!(
+            found
+                .message
+                .contains("`sli.events.error_query` has a `vector(` no-data fallback"),
+            "{}",
+            found.message
+        );
+        assert!(
+            found.message.contains("`sli.events.total_query` does not"),
+            "{}",
+            found.message
+        );
+    }
+
+    #[test]
+    fn one_sided_total_query_fallback_also_warns() {
+        // The mirror asymmetry names the queries the other way round.
+        let spec = events_spec(
+            "sum(rate(err[{{.window}}]))",
+            "sum(rate(tot[{{.window}}])) OR on() vector(1)",
+        );
+        let findings = lint(&spec);
+        let found = findings
+            .iter()
+            .find(|l| l.code == "SLI_FALLBACK_ASYMMETRY")
+            .expect("expected SLI_FALLBACK_ASYMMETRY");
+        assert!(
+            found
+                .message
+                .contains("`sli.events.total_query` has a `vector(` no-data fallback"),
+            "{}",
+            found.message
+        );
+        assert!(
+            found.message.contains("`sli.events.error_query` does not"),
+            "{}",
+            found.message
+        );
+    }
+
+    #[test]
+    fn symmetric_vector_fallback_is_clean() {
+        let spec = events_spec(
+            "(1 - avg(sat[{{.window}}])) OR on() vector(0)",
+            "avg(sat[{{.window}}]) OR on() vector(1)",
+        );
+        assert!(
+            !codes(&spec).contains(&"SLI_FALLBACK_ASYMMETRY"),
+            "{:?}",
+            codes(&spec)
+        );
+    }
+
+    #[test]
+    fn fallback_detection_is_case_insensitive() {
+        // The flagged default in ROADMAP.md: textual, case-insensitive.
+        let spec = events_spec(
+            "(1 - avg(sat[{{.window}}])) OR on() VECTOR(0)",
+            "avg(sat[{{.window}}])",
+        );
+        assert!(codes(&spec).contains(&"SLI_FALLBACK_ASYMMETRY"));
+    }
+
+    #[test]
+    fn raw_sli_with_a_fallback_is_not_flagged() {
+        // A raw SLI has one query, so no asymmetry is possible; the rule is
+        // scoped to events SLIs and must ignore `vector(` elsewhere.
+        let yaml = r#"
+service: api
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}] OR on() vector(0)" } }
+    alerting: { labels: { severity: page } }
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        assert!(!codes(&spec).contains(&"SLI_FALLBACK_ASYMMETRY"));
     }
 }

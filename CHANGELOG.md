@@ -19,6 +19,13 @@ From 1.0.0, slokit follows the semver guarantees documented in
   supported"), and the very stream shape `slokit export` writes, which the
   tool could emit but not re-read as native specs. `Spec::from_yaml` keeps
   its exactly-one-document contract unchanged.
+- **`SLI_FALLBACK_ASYMMETRY` lint rule** (v1.3.0 slice 2): warns when exactly
+  one of an events SLI's `error_query`/`total_query` contains a `vector(`
+  no-data fallback (textual, case-insensitive). Grounded on sloth's own
+  `examples/home-wifi.yml`, where both SLOs guard `error_query` with
+  `OR on() vector(0)` and leave `total_query` bare, so a scrape gap empties
+  the ratio and every burn-rate alert silently stops evaluating — exactly
+  the no-data failure the one-sided guard shows the author meant to handle.
 
 ## [1.2.0] - 2026-08-01
 
