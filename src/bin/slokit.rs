@@ -175,7 +175,9 @@ struct GenerateArgs {
     /// Default SLO period for SLOs that do not set their own.
     #[arg(long, default_value = "30d")]
     period: String,
-    /// metadata.name for the operator format. Defaults to the spec's service.
+    /// metadata.name for the operator format's PrometheusRule resource.
+    /// Defaults to each spec's service; only valid when exactly one spec is
+    /// loaded, because every resource in the emitted stream needs its own name.
     #[arg(long)]
     name: Option<String>,
     /// Use the 30d-calibrated burn-rate windows verbatim instead of scaling
@@ -429,6 +431,16 @@ fn write_export_dir(dir: &Path, specs: &[Spec], documents: &[String]) -> Result<
 }
 
 fn run_generate(args: GenerateArgs) -> Result<()> {
+    if args.name.is_some() && !matches!(args.format, Format::Operator) {
+        // The flag was silently discarded here before; reject it instead of
+        // letting a user believe it named something (the svccat `--filter`
+        // lesson: a parsed-and-ignored flag is a shipped no-op).
+        bail!(
+            "--name sets metadata.name on the operator format's PrometheusRule resource and has \
+             no effect on --format prometheus; pass --format operator or drop the flag"
+        );
+    }
+
     let specs = load_specs(&args.input)?;
     // The CLI always resolves `sli.plugin` against the default (built-in)
     // registry.
@@ -442,16 +454,56 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
         Format::Prometheus => generate_all(&specs, &opts)?.to_prometheus_yaml()?,
         // One PrometheusRule resource per spec, joined as a multi-document YAML.
         Format::Operator => {
+            let names = operator_resource_names(&specs, args.name.as_deref())?;
             let mut docs = Vec::with_capacity(specs.len());
-            for spec in &specs {
-                let name = args.name.clone().unwrap_or_else(|| spec.service.clone());
-                docs.push(generate_rules_with(spec, &opts)?.to_operator_yaml(&name, &spec.labels)?);
+            for (spec, name) in specs.iter().zip(&names) {
+                docs.push(generate_rules_with(spec, &opts)?.to_operator_yaml(name, &spec.labels)?);
             }
             docs.join("---\n")
         }
     };
 
     write_output(rendered, args.output, "rules")
+}
+
+/// The `metadata.name` each spec's `PrometheusRule` resource gets under
+/// `--format operator`, or an error naming the collision.
+///
+/// Fails closed BEFORE anything is rendered, matching `write_export_dir`'s
+/// posture for files: two resources of the same kind and `metadata.name` are
+/// ONE resource to a cluster, so `kubectl apply` of a stream carrying a
+/// duplicate would keep only the last document and silently drop every other
+/// spec's rules. Both routes to that state are rejected: `--name` fanned out
+/// over several specs (it used to stamp the same name on all of them), and two
+/// specs legally sharing a service (validation only rejects duplicate
+/// service/SLO PAIRS, so same-service specs with different SLO names load
+/// fine).
+fn operator_resource_names(specs: &[Spec], flag_name: Option<&str>) -> Result<Vec<String>> {
+    if let Some(name) = flag_name {
+        if specs.len() > 1 {
+            bail!(
+                "--name {name} would give all {} PrometheusRule resources the same metadata.name, \
+                 and `kubectl apply` of that stream keeps only the last; --name takes effect only \
+                 when exactly one spec is loaded (omit it to name each resource after its spec's \
+                 service)",
+                specs.len()
+            );
+        }
+        return Ok(vec![name.to_string()]);
+    }
+
+    let mut seen = BTreeSet::new();
+    let names: Vec<String> = specs.iter().map(|spec| spec.service.clone()).collect();
+    for name in &names {
+        if !seen.insert(name.clone()) {
+            bail!(
+                "two specs declare service '{name}', so --format operator would emit two \
+                 PrometheusRule resources with the same metadata.name and `kubectl apply` would \
+                 keep only the last; rename one service or generate them separately"
+            );
+        }
+    }
+    Ok(names)
 }
 
 fn run_validate(args: ValidateArgs) -> Result<()> {

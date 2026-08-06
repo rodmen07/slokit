@@ -1,0 +1,30 @@
+# Two specs in one stream declaring the SAME service with DIFFERENT SLO names.
+# This is legal input everywhere else: per-spec validation sees nothing wrong,
+# and the cross-spec check in `validate_all` rejects duplicate service/SLO
+# PAIRS, not duplicate services. `--format operator` is the one surface where
+# the pair collides (both resources default to `metadata.name: payments`), so
+# this fixture pins the fail-closed guard on that path.
+---
+version: "prometheus/v1"
+service: "payments"
+slos:
+  - name: "availability"
+    objective: 99.9
+    sli:
+      events:
+        error_query: sum(rate(http_requests_total{job="payments",code=~"5.."}[{{.window}}]))
+        total_query: sum(rate(http_requests_total{job="payments"}[{{.window}}]))
+    alerting:
+      name: PaymentsAvailability
+---
+version: "prometheus/v1"
+service: "payments"
+slos:
+  - name: "latency"
+    objective: 99.0
+    sli:
+      events:
+        error_query: sum(rate(http_request_duration_seconds_bucket{job="payments",le="0.5"}[{{.window}}]))
+        total_query: sum(rate(http_request_duration_seconds_count{job="payments"}[{{.window}}]))
+    alerting:
+      name: PaymentsLatency
