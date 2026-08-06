@@ -5,6 +5,14 @@ on:
     branches: [main]
   pull_request:
 
+# Least-privilege token for every job. The repository default is a settings
+# toggle, not a reviewed commit: without this block a change to that toggle
+# silently widens every job's GITHUB_TOKEN. Nothing here needs more than
+# checkout (Contents: read); the default also handed out Packages: read.
+# tests/workflow_permissions.rs pins this block and its scope.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"

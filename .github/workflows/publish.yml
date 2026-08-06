@@ -4,6 +4,12 @@ on:
   release:
     types: [published]
 
+# Least-privilege token: publishing needs only checkout (Contents: read);
+# the crates.io push authenticates with CRATES_IO_TOKEN, never GITHUB_TOKEN.
+# tests/workflow_permissions.rs pins this block and its scope.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
