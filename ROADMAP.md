@@ -81,6 +81,14 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
+## Unreleased on main
+
+- `generate --format operator` fails closed on colliding `metadata.name`
+  resources (`--name` fanned out over several specs, or two specs sharing a
+  service), and `--name` with `--format prometheus` is rejected instead of
+  silently discarded. Found by the 2026-08-06 QA adversarial review of the
+  v1.3.0 multi-document input; pinned by `tests/generate_operator_cli.rs`.
+
 ## Next milestones
 
 Nothing is scheduled. The v1.3.0 lint-rules-grounded-in-real-specs milestone

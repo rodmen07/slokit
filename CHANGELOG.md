@@ -6,6 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
+## [Unreleased]
+
+### Fixed
+
+- **`generate --format operator` no longer emits colliding `metadata.name`
+  resources.** Every emitted `PrometheusRule` was named
+  `--name`-or-the-spec's-service per spec, so with several specs loaded (one
+  `-i` directory, or since 1.3.0 one multi-document file) `--name X` stamped X
+  onto every resource, and two specs legally sharing a service (validation
+  rejects duplicate service/SLO pairs, not duplicate services) collided on the
+  default too. `kubectl apply` of such a stream keeps only the last document,
+  silently dropping every other spec's rules. Both routes now fail closed
+  before anything is rendered, the same posture `export --output` already has
+  for file names. `--name` remains valid with exactly one spec.
+- **`--name` with `--format prometheus` is rejected instead of silently
+  ignored.** Only the operator arm ever read the flag; the merged Prometheus
+  rules document has no `metadata.name` to set, so the flag was a shipped
+  no-op on the default format.
+
 ## [1.3.0] - 2026-08-05
 
 ### Added
