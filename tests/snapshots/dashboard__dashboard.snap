@@ -143,14 +143,250 @@ expression: json
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 14.4
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 6,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate1h{sloth_id=\"myservice-requests-availability\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-availability\"}",
+          "legendFormat": "long (1h)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate5m{sloth_id=\"myservice-requests-availability\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-availability\"}",
+          "legendFormat": "short (5m)",
+          "refId": "B"
+        }
+      ],
+      "title": "page burn rate (1h/5m, threshold 14.4x)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 6.0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 7,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate6h{sloth_id=\"myservice-requests-availability\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-availability\"}",
+          "legendFormat": "long (6h)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate30m{sloth_id=\"myservice-requests-availability\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-availability\"}",
+          "legendFormat": "short (30m)",
+          "refId": "B"
+        }
+      ],
+      "title": "page burn rate (6h/30m, threshold 6x)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 3.0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "id": 8,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate1d{sloth_id=\"myservice-requests-availability\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-availability\"}",
+          "legendFormat": "long (1d)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate2h{sloth_id=\"myservice-requests-availability\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-availability\"}",
+          "legendFormat": "short (2h)",
+          "refId": "B"
+        }
+      ],
+      "title": "ticket burn rate (1d/2h, threshold 3x)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1.0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "id": 9,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate3d{sloth_id=\"myservice-requests-availability\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-availability\"}",
+          "legendFormat": "long (3d)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate6h{sloth_id=\"myservice-requests-availability\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-availability\"}",
+          "legendFormat": "short (6h)",
+          "refId": "B"
+        }
+      ],
+      "title": "ticket burn rate (3d/6h, threshold 1x)",
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 15
+        "y": 31
       },
-      "id": 6,
+      "id": 10,
       "panels": [],
       "title": "requests-latency",
       "type": "row"
@@ -170,9 +406,9 @@ expression: json
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 16
+        "y": 32
       },
-      "id": 7,
+      "id": 11,
       "targets": [
         {
           "datasource": {
@@ -201,9 +437,9 @@ expression: json
         "h": 6,
         "w": 8,
         "x": 8,
-        "y": 16
+        "y": 32
       },
-      "id": 8,
+      "id": 12,
       "targets": [
         {
           "datasource": {
@@ -232,9 +468,9 @@ expression: json
         "h": 6,
         "w": 8,
         "x": 16,
-        "y": 16
+        "y": 32
       },
-      "id": 9,
+      "id": 13,
       "targets": [
         {
           "datasource": {
@@ -263,9 +499,9 @@ expression: json
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 22
+        "y": 38
       },
-      "id": 10,
+      "id": 14,
       "targets": [
         {
           "datasource": {
@@ -277,6 +513,242 @@ expression: json
         }
       ],
       "title": "SLI error ratio (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 14.4
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 46
+      },
+      "id": 15,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate1h{sloth_id=\"myservice-requests-latency\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-latency\"}",
+          "legendFormat": "long (1h)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate5m{sloth_id=\"myservice-requests-latency\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-latency\"}",
+          "legendFormat": "short (5m)",
+          "refId": "B"
+        }
+      ],
+      "title": "page burn rate (1h/5m, threshold 14.4x)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 6.0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 46
+      },
+      "id": 16,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate6h{sloth_id=\"myservice-requests-latency\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-latency\"}",
+          "legendFormat": "long (6h)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate30m{sloth_id=\"myservice-requests-latency\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-latency\"}",
+          "legendFormat": "short (30m)",
+          "refId": "B"
+        }
+      ],
+      "title": "page burn rate (6h/30m, threshold 6x)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 3.0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 54
+      },
+      "id": 17,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate1d{sloth_id=\"myservice-requests-latency\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-latency\"}",
+          "legendFormat": "long (1d)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate2h{sloth_id=\"myservice-requests-latency\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-latency\"}",
+          "legendFormat": "short (2h)",
+          "refId": "B"
+        }
+      ],
+      "title": "ticket burn rate (1d/2h, threshold 3x)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1.0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 54
+      },
+      "id": 18,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate3d{sloth_id=\"myservice-requests-latency\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-latency\"}",
+          "legendFormat": "long (3d)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "expr": "slo:sli_error:ratio_rate6h{sloth_id=\"myservice-requests-latency\"}\n/ on(sloth_id, sloth_slo, sloth_service) group_left\nslo:error_budget:ratio{sloth_id=\"myservice-requests-latency\"}",
+          "legendFormat": "short (6h)",
+          "refId": "B"
+        }
+      ],
+      "title": "ticket burn rate (3d/6h, threshold 1x)",
       "type": "timeseries"
     }
   ],

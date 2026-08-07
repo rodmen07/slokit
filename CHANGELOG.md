@@ -8,6 +8,22 @@ From 1.0.0, slokit follows the semver guarantees documented in
 
 ## [Unreleased]
 
+### Added
+
+- **Per-severity dashboard burn panels** (v1.4.0 slice 1): `slokit dashboard`
+  now emits one burn-rate timeseries panel per enabled alert condition of each
+  SLO, plotting the long- and short-window burn rates that condition compares
+  (the recorded `slo:sli_error:ratio_rate<window>` series divided by
+  `slo:error_budget:ratio`, the generator's own grouping idiom) with a
+  threshold line at the condition's burn-rate factor, titled by severity. A
+  severity whose alert is disabled gets no panel, mirroring alert generation.
+  Values are burn-rate multiples, so the threshold lines are the plain
+  SRE-table factors. A new drift-guard suite (`tests/dashboard_drift.rs`)
+  reads both the emitted dashboard and the generator's rendered recording
+  rules and fails if any dashboard expression references a `slo:` series the
+  generator does not record for that spec. Generated Prometheus rule output is
+  unchanged.
+
 ### Fixed
 
 - **`generate --format operator` no longer emits colliding `metadata.name`

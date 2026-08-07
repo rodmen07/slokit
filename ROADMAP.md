@@ -88,6 +88,11 @@ generated rules` against a pinned Prometheus release, and `coverage`.
   service), and `--name` with `--format prometheus` is rejected instead of
   silently discarded. Found by the 2026-08-06 QA adversarial review of the
   v1.3.0 multi-document input; pinned by `tests/generate_operator_cli.rs`.
+- v1.4.0 slice 1 (per-severity dashboard burn panels): one burn-rate
+  timeseries panel per enabled alert condition, threshold line at the
+  condition's factor, disabled severities skipped; expression drift against
+  the generator's recordings guarded by `tests/dashboard_drift.rs`. Generated
+  rule output untouched.
 
 ## Next milestones
 
