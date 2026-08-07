@@ -1,8 +1,8 @@
 # slokit Roadmap
 
-Canonical planning document for slokit. Last updated 2026-08-05, when the
-v1.3.0 release prep landed and the lint-rules-grounded-in-real-specs milestone
-closed.
+Canonical planning document for slokit. Last updated 2026-08-07, when the
+product scoping pass after the v1.3.0 cut scheduled v1.4.0 (per-severity
+dashboard burn panels).
 Backward-looking detail lives in [CHANGELOG.md](CHANGELOG.md); this file
 covers where the crate is going.
 
@@ -91,10 +91,82 @@ generated rules` against a pinned Prometheus release, and `coverage`.
 
 ## Next milestones
 
-Nothing is scheduled. The v1.3.0 lint-rules-grounded-in-real-specs milestone
-closed with this release prep (both dependency-ordered slices shipped; see
-the history table below), and the theme after it is not yet scoped — that is
-a product increment, not an implementation task.
+### v1.4.0: per-severity dashboard burn panels
+
+Scheduled 2026-08-07 by the product scoping pass that followed the v1.3.0
+cut, executing the approved D5 candidate order (lint rules, then dashboard
+panels) from
+[docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md).
+
+**The D5 deferral premise, re-tested rather than inherited (flagged
+override, 2026-08-07).** D5 deferred this candidate because "the generated
+dashboards have no live consumer today". That premise is unchanged inside
+this repo (`examples/infraportal/` is still SLO-definitions-as-code), but it
+argued the wrong consequence: the dashboards' consumers are the crates.io
+users who run `slokit dashboard` against their own Prometheus, not the
+committed example set, and the feature is checkable without live data by
+exactly the criterion D1 used to rank OpenSLO export first. Every panel
+expression is derivable from series the generator already records, so "the
+dashboard shows what the alerts gate" is a property a test can pin, not an
+opinion about polish. The maintainer can override this scheduling by naming
+a different theme; nothing below is built until a dev increment picks up
+slice 1.
+
+**Grounding (read from source 2026-08-07, not inherited):**
+
+- `src/dashboard.rs` (275 lines, read in full) emits five panels per SLO: a
+  row, three stats (budget remaining, current burn rate, objective), and one
+  SLI timeseries. The only burn-rate surface is the single all-window
+  `slo:current_burn_rate:ratio` stat; no panel names a severity.
+- The generator records `slo:sli_error:ratio_rate<window>` at every MWMBR
+  lookback window (`src/generate/recording.rs`), and the alert conditions
+  gate exactly those series with `threshold = factor * error budget`
+  (`src/generate/alert.rs`, `src/burn_rate.rs`). So a per-severity panel can
+  plot the very quantity each alert condition compares, from
+  already-recorded series only, with the window's `factor` as its threshold
+  line. No new rule bytes are needed and none are permitted: rule output is
+  byte-stable within a minor line per [docs/SEMVER.md](docs/SEMVER.md).
+- Alert windows carry `severity` and `disable`
+  (`src/spec/mod.rs`, `AlertWindowSpec`), so the panel set must mirror alert
+  generation: a disabled severity gets no panel.
+
+**Scope (one theme, the D4 discipline):** for each enabled alert window of
+each SLO, a burn-rate timeseries panel plotting the long and short lookback
+burn rates (`slo:sli_error:ratio_rate<w>` divided by
+`slo:error_budget:ratio`, the `GROUPING` idiom `src/generate/metadata.rs`
+already uses) with a threshold line at the window's factor, titled by
+severity. Default unit is burn-rate multiples, so the threshold lines are
+the plain SRE-table factors; rendering raw error ratios with scaled
+thresholds is the recorded alternative (flagged default, 2026-08-07).
+
+**Slices (dependency-ordered; nothing calendar-sized):**
+
+1. PR 1 (dev): the panels plus the expression drift guard, in
+   `src/dashboard.rs` or a sibling submodule if the file would pass the
+   ~400-line comprehension ceiling (the `src/spec/openslo/export.rs`
+   precedent). Public API additive only.
+2. PR 2 (dev): release prep and the cut. Folds the two entries already
+   staged under CHANGELOG `[Unreleased]` (CI workflow permissions, operator
+   naming fail-closed) into 1.4.0; a separate 1.3.1 patch is deliberately
+   not cut first (flagged default, 2026-08-07). The cut also closes the
+   pending "observe publish.yml's least-privilege block on a real run"
+   follow-up, since any tag at or after `a674339` runs the
+   permissions-bearing workflow.
+
+**Done-when (checkable; no clause satisfiable by prose alone):**
+
+1. For a spec with page and ticket windows, `slokit dashboard` emits one
+   burn panel per severity per SLO whose threshold equals that window's
+   factor, and a spec with a disabled ticket alert emits no ticket panel,
+   both directions asserted by unit tests over the emitted JSON.
+2. A drift guard reads BOTH the emitted dashboard and the generator's
+   recording rules for the same spec and fails if any dashboard PromQL
+   expression references a `slo:` series the generator does not record for
+   that spec. This is the property that makes the feature checkable without
+   live data.
+3. Generated Prometheus rule output is byte-identical before and after: the
+   existing snapshot suite passes unchanged.
+4. crates.io reports `newest_version` 1.4.0 (the registry check above).
 
 ## Later / candidates (unscheduled)
 
@@ -113,8 +185,6 @@ schedules them:
   the gap; **objective-precision** (whether an objective's digits exceed what
   the period can measure) is not groundable from a spec alone and needs event
   volume, which needs a user report or traffic-annotated grounding first.
-- Dashboard enhancements, for example per-severity burn panels — deferred
-  until any generated dashboard has live data to render.
 - Carrying `examples/infraportal/` from SLO-definitions-as-code to live status,
   which is blocked on the InfraPortal services exposing `/metrics` at all (that
   work lives in the microservices repo, not here).
@@ -220,6 +290,14 @@ repo can assert on its own.
 
 Drift worth recording:
 
+- **2026-08-07: per-severity dashboard burn panels left the candidate list
+  and became the v1.4.0 milestone.** The deleted candidate bullet read
+  verbatim: `- Dashboard enhancements, for example per-severity burn panels
+  — deferred until any generated dashboard has live data to render.` Its
+  deferral premise was re-tested rather than inherited and is dispositioned
+  in the v1.4.0 section: the premise (no live data in this repo) still
+  holds, but the conclusion drawn from it did not survive re-examination,
+  and the scheduling is flagged as an overridable default.
 - **2026-08-01: the current-state section stopped asserting a registry state.**
   The 1.1.0 prep had written "prepared 2026-07-26, tag not yet cut" into
   `## Current state`, which the cut falsified hours later and a separate PR had
