@@ -226,17 +226,33 @@ definition files (YAML/WASM) are deliberately out of scope for 0.9.
 
 ## OpenSLO interop
 
-slokit reads and writes [OpenSLO](https://openslo.com) v1 `kind: SLO`
-documents, so a spec can move in either direction rather than only into slokit.
+slokit reads [OpenSLO](https://openslo.com) `kind: SLO` documents in **both**
+published API versions and writes them back out in the current one, so a spec
+can move in either direction rather than only into slokit.
+
+| direction | `openslo/v1` | `openslo/v1alpha` |
+|---|---|---|
+| import (`-i`, `--input-format openslo`) | yes | yes, since 1.5.0 |
+| export (`slokit export --format openslo`) | yes, always | no: the export writes the current version |
 
 **Importing.** Every `-i` accepts OpenSLO. A file whose first YAML document
 sets a top-level `apiVersion: openslo/...` is detected automatically;
-`--input-format openslo|slokit` overrides the detection either way.
+`--input-format openslo|slokit` overrides the detection either way. The version
+is read **per document**, so one multi-document stream may mix the two, and an
+`apiVersion` that is neither is still a hard error naming the value.
 
 ```sh
 slokit generate -i openslo-slos.yaml            # auto-detected
 slokit generate -i slos.yaml --input-format openslo
 ```
+
+`openslo/v1alpha` is the version the [sloth](https://github.com/slok/sloth)
+reference examples declare, so those documents import unchanged. It states the
+same ideas with a different shape — the metric lives on each objective as
+`ratioMetrics.{good,total}` rather than in one document-level `spec.indicator`,
+and the period is `timeWindows[0].{count, unit}` rather than
+`timeWindow[0].duration` — and slokit reports the same fidelity notes and
+fail-closed errors for it as for v1.
 
 **Exporting.** `slokit export` is the inverse: one `kind: SLO` document per
 slokit SLO, written to stdout as a multi-document stream, or to a directory as
@@ -253,7 +269,14 @@ not a breaking change later.
 The conversion is a **semantic** round trip, not a byte-for-byte one: the two
 models are not isomorphic, so `slokit export | slokit validate` gives back an
 equivalent spec with exactly three documented differences, each reported as a
-`note:` on stderr (stdout stays a clean YAML stream you can pipe or redirect):
+`note:` on stderr (stdout stays a clean YAML stream you can pipe or redirect).
+
+A v1alpha document that goes in comes back out as `openslo/v1`: the trip
+upgrades the version rather than preserving it. What is preserved is the
+meaning — `slokit generate` produces byte-identical rules before and after the
+round trip, which
+`tests/openslo_v1alpha_cli.rs::a_v1alpha_document_exports_as_openslo_v1_and_regenerates_the_same_rules`
+asserts on both sloth fixtures.
 
 | slokit construct | on export |
 |---|---|

@@ -88,6 +88,15 @@
 //! OpenSLO v1 documents, so conversion is not a one-way door. The inverse
 //! mapping table, the constructs reported as [`ExportNote`]s, and the
 //! fail-closed error set are documented in the [`export`] submodule.
+//!
+//! The export writes `openslo/v1` **only**, so the round trip is asymmetric:
+//! a `v1alpha` document that is imported and exported again comes back as
+//! `v1`. That is a version upgrade, not a loss — the two dialects express the
+//! same model, and the rules `generate` produces are byte-identical on both
+//! sides of the trip (asserted for both sloth fixtures by
+//! `tests/openslo_v1alpha_cli.rs`). Nothing here round-trips a document back
+//! to `v1alpha`, and nothing is planned to: the newer version is what a
+//! consumer should be handed.
 
 pub mod export;
 mod v1alpha;
