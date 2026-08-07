@@ -1,10 +1,19 @@
-//! OpenSLO v1 import: convert `kind: SLO` documents into slokit [`Spec`]s.
+//! OpenSLO import: convert `kind: SLO` documents into slokit [`Spec`]s.
 //!
 //! [OpenSLO](https://openslo.com) is a vendor-neutral SLO specification. This
-//! module maps `apiVersion: openslo/v1` documents (single documents or
-//! multi-document YAML streams) onto the sloth-compatible slokit model, so
-//! every downstream feature (validate, lint, generate, check, dashboard)
-//! works on imported specs unchanged.
+//! module maps `apiVersion: openslo/v1` and `apiVersion: openslo/v1alpha`
+//! documents (single documents or multi-document YAML streams) onto the
+//! sloth-compatible slokit model, so every downstream feature (validate, lint,
+//! generate, check, dashboard) works on imported specs unchanged. The version
+//! is dispatched per document, so one stream may mix both.
+//!
+//! Everything below describes the **v1** mapping. `openslo/v1alpha` states the
+//! same ideas with a different document shape (the metric lives on each
+//! objective rather than on the document, and the period is a `count`/`unit`
+//! pair rather than a duration string); its mapping table, notes and error set
+//! live in the [`v1alpha`] submodule, which reuses the window rewriting, the
+//! good/total derivation, the threshold mapping and the objective naming
+//! documented here.
 //!
 //! The import is honest about fidelity: constructs slokit cannot represent at
 //! all are hard errors naming the OpenSLO path (see "Errors" below), while
@@ -59,7 +68,7 @@
 //!
 //! # Errors (unrepresentable documents)
 //!
-//! - `apiVersion` other than `openslo/v1`.
+//! - `apiVersion` other than `openslo/v1` or `openslo/v1alpha`.
 //! - Calendar-aligned time windows (`timeWindow[0].calendar` or
 //!   `isRolling: false`) and calendar duration units (`M`, `Q`, `Y`): slokit
 //!   periods are fixed-length rolling windows.
@@ -81,6 +90,7 @@
 //! fail-closed error set are documented in the [`export`] submodule.
 
 pub mod export;
+mod v1alpha;
 
 pub use export::{to_yaml, to_yaml_reported, Export, ExportNote};
 
@@ -97,8 +107,21 @@ use crate::window::Window;
 use super::validate::is_metric_name;
 use super::{Alerting, EventsSli, LatencySli, RawSli, SliSpec, SloSpec, Spec};
 
-/// The only OpenSLO API version this importer understands.
+/// The current OpenSLO API version, and the one [`to_yaml`] exports.
 const API_VERSION: &str = "openslo/v1";
+
+/// The predecessor API version, still what the sloth reference examples and
+/// most published OpenSLO documents declare. Imported by [`v1alpha`].
+const API_VERSION_V1ALPHA: &str = "openslo/v1alpha";
+
+/// Which OpenSLO schema one parsed document declares. Detected once per
+/// document in [`from_yaml`] so every later step dispatches on an enum rather
+/// than re-comparing version strings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApiVersion {
+    V1,
+    V1Alpha,
+}
 
 /// The result of importing an OpenSLO YAML input: the converted specs plus
 /// lint-style notes about constructs that were dropped or transformed.
@@ -158,13 +181,14 @@ pub fn is_openslo(yaml: &str) -> bool {
     false
 }
 
-/// Import OpenSLO v1 YAML (a single document or a multi-document stream) into
-/// slokit [`Spec`]s. See the module docs for the exact mapping, the window
-/// rewrite convention, and which constructs error versus which produce
-/// [`ImportNote`]s.
+/// Import OpenSLO YAML (a single document or a multi-document stream, in
+/// `openslo/v1` or `openslo/v1alpha`) into slokit [`Spec`]s. See the module
+/// docs for the v1 mapping, the window rewrite convention, and which
+/// constructs error versus which produce [`ImportNote`]s; see [`v1alpha`] for
+/// the v1alpha mapping.
 pub fn from_yaml(yaml: &str) -> Result<Import> {
     let mut notes: Vec<ImportNote> = Vec::new();
-    let mut docs: Vec<(usize, Envelope)> = Vec::new();
+    let mut docs: Vec<(usize, ApiVersion, Envelope)> = Vec::new();
 
     for (idx, de) in YamlDeserializer::from_str(yaml).enumerate() {
         let n = idx + 1;
@@ -175,13 +199,16 @@ pub fn from_yaml(yaml: &str) -> Result<Import> {
         }
         let env: Envelope = serde_norway::from_value(value)
             .map_err(|e| SlokitError::Spec(format!("openslo document {n}: {e}")))?;
-        if env.api_version != API_VERSION {
-            return Err(SlokitError::Spec(format!(
-                "openslo document {n}: unsupported apiVersion '{}' (expected {API_VERSION})",
-                env.api_version
-            )));
-        }
-        docs.push((n, env));
+        let version = match env.api_version.as_str() {
+            API_VERSION => ApiVersion::V1,
+            API_VERSION_V1ALPHA => ApiVersion::V1Alpha,
+            other => {
+                return Err(SlokitError::Spec(format!(
+                    "openslo document {n}: unsupported apiVersion '{other}' (expected {API_VERSION} or {API_VERSION_V1ALPHA})"
+                )));
+            }
+        };
+        docs.push((n, version, env));
     }
 
     if docs.is_empty() {
@@ -191,9 +218,11 @@ pub fn from_yaml(yaml: &str) -> Result<Import> {
     }
 
     // Index kind: SLI documents so SLO documents can resolve indicatorRef.
+    // Only v1 has standalone SLI documents; a v1alpha `kind: SLI` falls
+    // through to the ignored-kind note below.
     let mut slis: BTreeMap<String, SliSpecDoc> = BTreeMap::new();
-    for (n, env) in &docs {
-        if env.kind != "SLI" {
+    for (n, version, env) in &docs {
+        if *version != ApiVersion::V1 || env.kind != "SLI" {
             continue;
         }
         let name = env.metadata.name.trim();
@@ -218,27 +247,24 @@ pub fn from_yaml(yaml: &str) -> Result<Import> {
 
     let mut specs: Vec<Spec> = Vec::new();
     let mut saw_slo = false;
-    for (n, env) in &docs {
-        match env.kind.as_str() {
-            "SLO" => {
-                saw_slo = true;
-                let (service, slos) = convert_slo(*n, env, &slis, &mut notes)?;
-                match specs.iter_mut().find(|s| s.service == service) {
-                    Some(spec) => spec.slos.extend(slos),
-                    None => specs.push(Spec {
-                        version: super::default_version(),
-                        service,
-                        labels: BTreeMap::new(),
-                        slos,
-                    }),
-                }
-            }
-            // Already indexed above.
-            "SLI" => {}
-            "" => {
+    for (n, version, env) in &docs {
+        match (version, env.kind.as_str()) {
+            (_, "") => {
                 return Err(err(&format!("document {n}"), "`kind` is missing"));
             }
-            other => notes.push(ImportNote {
+            (ApiVersion::V1, "SLO") => {
+                saw_slo = true;
+                let (service, slos) = convert_slo(*n, env, &slis, &mut notes)?;
+                merge_into_specs(&mut specs, service, slos);
+            }
+            (ApiVersion::V1Alpha, "SLO") => {
+                saw_slo = true;
+                let (service, slos) = v1alpha::convert_slo(*n, env, &mut notes)?;
+                merge_into_specs(&mut specs, service, slos);
+            }
+            // Already indexed above.
+            (ApiVersion::V1, "SLI") => {}
+            (_, other) => notes.push(ImportNote {
                 location: format!("document {n}"),
                 message: format!(
                     "kind '{other}' does not map to the slokit model and was ignored (only SLO and referenced SLI documents import)"
@@ -262,6 +288,21 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<Import> {
     let contents = std::fs::read_to_string(path)
         .map_err(|e| SlokitError::Spec(format!("reading {}: {e}", path.display())))?;
     from_yaml(&contents)
+}
+
+/// Append converted SLOs to the [`Spec`] for their service, creating it on
+/// first sight. SLO documents that share a `spec.service` merge into one spec
+/// regardless of which OpenSLO version each declared.
+fn merge_into_specs(specs: &mut Vec<Spec>, service: String, slos: Vec<SloSpec>) {
+    match specs.iter_mut().find(|s| s.service == service) {
+        Some(spec) => spec.slos.extend(slos),
+        None => specs.push(Spec {
+            version: super::default_version(),
+            service,
+            labels: BTreeMap::new(),
+            slos,
+        }),
+    }
 }
 
 /// Build an import error whose message names the OpenSLO location and path.
@@ -297,6 +338,11 @@ struct Envelope {
 struct Metadata {
     #[serde(default)]
     name: String,
+    /// OpenSLO's human-readable name. slokit has no field for it, so the
+    /// v1alpha importer notes when one is dropped (v1 import behavior is
+    /// unchanged; see the backlog follow-up).
+    #[serde(default, rename = "displayName")]
+    display_name: String,
     #[serde(default)]
     labels: BTreeMap<String, LabelValue>,
     #[serde(default)]
@@ -499,7 +545,7 @@ fn convert_slo(
             );
         }
         let slo_name = if multi {
-            format!("{name}-{}", objective_suffix(obj, i))
+            format!("{name}-{}", objective_suffix(&obj.display_name, i))
         } else {
             name.to_string()
         };
@@ -628,8 +674,9 @@ fn objective_percent(obj: &ObjectiveDoc, loc: &str, opath: &str) -> Result<f64> 
 
 /// The per-objective SLO-name suffix for multi-objective documents: the
 /// slugified `displayName`, or the 1-based objective index when there is none.
-fn objective_suffix(obj: &ObjectiveDoc, index: usize) -> String {
-    let slug = slugify(&obj.display_name);
+/// Shared by both importers so v1 and v1alpha name multi-objective SLOs alike.
+fn objective_suffix(display_name: &str, index: usize) -> String {
+    let slug = slugify(display_name);
     if slug.is_empty() {
         (index + 1).to_string()
     } else {
@@ -755,12 +802,7 @@ fn convert_ratio(
     } else if let Some(good) = &ratio.good {
         let good_query = metric_query(good, loc, &format!("{path}.good"))?;
         let good_query = windowize(&good_query, loc, &format!("{path}.good"), notes)?;
-        note(
-            notes,
-            loc,
-            format!("{path}.good: derived the error query as total minus good"),
-        );
-        format!("({total_query}) - ({good_query})")
+        error_query_from_good(&good_query, &total_query, loc, path, notes)
     } else {
         return Err(err(loc, format!("{path} needs `good`, `bad`, or `raw`")));
     };
@@ -774,6 +816,24 @@ fn convert_ratio(
     })
 }
 
+/// The good/total error-query derivation: slokit models the ERROR side of a
+/// ratio, so a `good` numerator becomes `(total) - (good)` plus a note.
+/// Shared by both importers so the derivation and its wording cannot drift.
+fn error_query_from_good(
+    good_query: &str,
+    total_query: &str,
+    loc: &str,
+    path: &str,
+    notes: &mut Vec<ImportNote>,
+) -> String {
+    note(
+        notes,
+        loc,
+        format!("{path}.good: derived the error query as total minus good"),
+    );
+    format!("({total_query}) - ({good_query})")
+}
+
 fn convert_threshold(
     threshold: &MetricDoc,
     obj: &ObjectiveDoc,
@@ -783,7 +843,32 @@ fn convert_threshold(
     notes: &mut Vec<ImportNote>,
 ) -> Result<SliSpec> {
     let query = metric_query(threshold, loc, path)?;
-    let (histogram_metric, selector) = parse_bare_histogram(&query, loc, path)?;
+    latency_from_threshold_query(
+        &query,
+        obj.op.as_deref(),
+        obj.value,
+        loc,
+        opath,
+        path,
+        notes,
+    )
+}
+
+/// Map an already-extracted `thresholdMetric` query plus its objective
+/// `op`/`value` onto slokit's latency SLI. Shared by both importers: only the
+/// way the query is reached differs between the versions (v1 nests it under
+/// `metricSource.spec.query`, v1alpha states `source`/`queryType`/`query`
+/// inline), while the histogram convention and the operator rules are the same.
+fn latency_from_threshold_query(
+    query: &str,
+    op: Option<&str>,
+    value: Option<f64>,
+    loc: &str,
+    opath: &str,
+    path: &str,
+    notes: &mut Vec<ImportNote>,
+) -> Result<SliSpec> {
+    let (histogram_metric, selector) = parse_bare_histogram(query, loc, path)?;
     for suffix in ["_bucket", "_count", "_sum"] {
         if histogram_metric.ends_with(suffix) {
             note(
@@ -796,7 +881,7 @@ fn convert_threshold(
         }
     }
 
-    match obj.op.as_deref() {
+    match op {
         Some("lte") => {}
         Some("lt") => note(
             notes,
@@ -825,7 +910,7 @@ fn convert_threshold(
         }
     }
 
-    let value = obj.value.ok_or_else(|| {
+    let value = value.ok_or_else(|| {
         err(
             loc,
             format!("{opath}.value is required for thresholdMetric SLIs"),

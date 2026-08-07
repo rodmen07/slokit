@@ -1,0 +1,24 @@
+# The hand-written native slokit twin of `getting-started.yaml`.
+#
+# `tests/openslo_v1alpha.rs` asserts that generating from the imported OpenSLO
+# v1alpha document and generating from this file produce byte-identical
+# Prometheus rules. A mapper that parses the document but mis-maps it fails
+# here even though the import itself succeeds, so this file is the mapping's
+# real acceptance criterion. Keep it hand-written: never regenerate it from the
+# importer, or it stops being an independent statement of the expected result.
+#
+# Two things it states that the v1alpha document does not say literally:
+#   * `period: 30d` is `timeWindows[0].{count: 30, unit: Day}` joined.
+#   * `error_query` is `(total) - (good)`, because OpenSLO counts good events
+#     while slokit models the error side.
+version: "prometheus/v1"
+service: my-service
+slos:
+  - name: sloth-slo-my-service
+    objective: 99.9
+    description: "Common SLO based on availability for HTTP request responses."
+    period: 30d
+    sli:
+      events:
+        error_query: (sum(rate(http_request_duration_seconds_count{job="myservice"}[{{.window}}]))) - (sum(rate(http_request_duration_seconds_count{job="myservice",code!~"(5..|429)"}[{{.window}}])))
+        total_query: sum(rate(http_request_duration_seconds_count{job="myservice"}[{{.window}}]))
