@@ -1,7 +1,14 @@
-//! OpenSLO v1 import tests: fixture mapping, the golden snapshot, equivalence
-//! with a hand-written slokit spec, unrepresentable-document errors, and
-//! round-trip consistency (imported specs pass validate and lint cleanly
-//! except for the documented alerting advisories).
+//! OpenSLO **v1** import tests: fixture mapping, the golden snapshot,
+//! equivalence with a hand-written slokit spec, unrepresentable-document
+//! errors, and round-trip consistency (imported specs pass validate and lint
+//! cleanly except for the documented alerting advisories).
+//!
+//! The scope is the `openslo/v1` dialect only, which is what it has always
+//! been; since 1.5.0 it is no longer the whole importer. The sibling dialect
+//! is covered by `tests/openslo_v1alpha.rs` (library-level mapping) and
+//! `tests/openslo_v1alpha_cli.rs` (binary-level `validate`, `generate` and the
+//! export round trip), and the test that one stream may mix both versions
+//! lives in the former. Add a v1 case here; add a v1alpha case there.
 
 #![cfg(feature = "spec")]
 
