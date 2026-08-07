@@ -134,7 +134,8 @@ enum ExportFormat {
 enum InputFormat {
     /// Native slokit spec (sloth-compatible `prometheus/v1` YAML).
     Slokit,
-    /// OpenSLO v1 `kind: SLO` documents (single or multi-document YAML).
+    /// OpenSLO `kind: SLO` documents, `openslo/v1` or `openslo/v1alpha`
+    /// (single or multi-document YAML; the version is read per document).
     Openslo,
 }
 
