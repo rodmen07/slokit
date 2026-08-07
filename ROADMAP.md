@@ -39,7 +39,7 @@ naming the release, and the registry confirmed afterwards. The v1.1.0 cut on
 2026-07-26 ran under exactly that delegation. Secret writes (`gh secret set`)
 remain USER-ONLY.
 
-## Current state: v1.3.0
+## Current state: v1.4.0
 
 slokit is a stable, published SLO and error-budget engine with two pillars:
 
@@ -51,8 +51,8 @@ slokit is a stable, published SLO and error-budget engine with two pillars:
    `dashboard`, and `schema` commands behind feature flags (`cli`, `spec`,
    `check`, `dashboard`).
 
-`Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say 1.3.0. Under the standing
-release delegation the cut (tag `v1.3.0`, GitHub release, the publish it fires)
+`Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say 1.4.0. Under the standing
+release delegation the cut (tag `v1.4.0`, GitHub release, the publish it fires)
 follows the prep commit directly, and the history row below records the date it
 ran.
 
@@ -69,9 +69,10 @@ curl -s -A "your-name (you@example.com)" https://crates.io/api/v1/crates/slokit 
 
 The public API is frozen per [docs/SEMVER.md](docs/SEMVER.md): 1.x changes are
 additive only, generated rule output is byte-stable within a minor line, and
-the tag-pinned JSON Schema URLs are immutable. 1.3.0 keeps all three: it adds
-`Spec::from_yaml_stream` (multi-document input) and the `SLI_FALLBACK_ASYMMETRY`
-lint rule without touching any 1.0.0, 1.1.0, or 1.2.0 signature.
+the tag-pinned JSON Schema URLs are immutable. 1.4.0 keeps all three: it adds
+per-severity burn panels to the emitted dashboard (plus two fail-closed CLI
+fixes on `generate --format operator`) without touching any earlier 1.x
+signature, and generated Prometheus rule output is byte-identical to 1.3.0.
 
 MSRV is 1.82 and it **is** CI-enforced: the `MSRV 1.82` job in
 `.github/workflows/ci.yml` builds the default, all-features, and lean-core
@@ -81,97 +82,12 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
-## Unreleased on main
-
-- `generate --format operator` fails closed on colliding `metadata.name`
-  resources (`--name` fanned out over several specs, or two specs sharing a
-  service), and `--name` with `--format prometheus` is rejected instead of
-  silently discarded. Found by the 2026-08-06 QA adversarial review of the
-  v1.3.0 multi-document input; pinned by `tests/generate_operator_cli.rs`.
-- v1.4.0 slice 1 (per-severity dashboard burn panels): one burn-rate
-  timeseries panel per enabled alert condition, threshold line at the
-  condition's factor, disabled severities skipped; expression drift against
-  the generator's recordings guarded by `tests/dashboard_drift.rs`. Generated
-  rule output untouched.
-
 ## Next milestones
 
-### v1.4.0: per-severity dashboard burn panels
-
-Scheduled 2026-08-07 by the product scoping pass that followed the v1.3.0
-cut, executing the approved D5 candidate order (lint rules, then dashboard
-panels) from
-[docs/design/POST_1_0_EXPANSION.md](docs/design/POST_1_0_EXPANSION.md).
-
-**The D5 deferral premise, re-tested rather than inherited (flagged
-override, 2026-08-07).** D5 deferred this candidate because "the generated
-dashboards have no live consumer today". That premise is unchanged inside
-this repo (`examples/infraportal/` is still SLO-definitions-as-code), but it
-argued the wrong consequence: the dashboards' consumers are the crates.io
-users who run `slokit dashboard` against their own Prometheus, not the
-committed example set, and the feature is checkable without live data by
-exactly the criterion D1 used to rank OpenSLO export first. Every panel
-expression is derivable from series the generator already records, so "the
-dashboard shows what the alerts gate" is a property a test can pin, not an
-opinion about polish. The maintainer can override this scheduling by naming
-a different theme; nothing below is built until a dev increment picks up
-slice 1.
-
-**Grounding (read from source 2026-08-07, not inherited):**
-
-- `src/dashboard.rs` (275 lines, read in full) emits five panels per SLO: a
-  row, three stats (budget remaining, current burn rate, objective), and one
-  SLI timeseries. The only burn-rate surface is the single all-window
-  `slo:current_burn_rate:ratio` stat; no panel names a severity.
-- The generator records `slo:sli_error:ratio_rate<window>` at every MWMBR
-  lookback window (`src/generate/recording.rs`), and the alert conditions
-  gate exactly those series with `threshold = factor * error budget`
-  (`src/generate/alert.rs`, `src/burn_rate.rs`). So a per-severity panel can
-  plot the very quantity each alert condition compares, from
-  already-recorded series only, with the window's `factor` as its threshold
-  line. No new rule bytes are needed and none are permitted: rule output is
-  byte-stable within a minor line per [docs/SEMVER.md](docs/SEMVER.md).
-- Alert windows carry `severity` and `disable`
-  (`src/spec/mod.rs`, `AlertWindowSpec`), so the panel set must mirror alert
-  generation: a disabled severity gets no panel.
-
-**Scope (one theme, the D4 discipline):** for each enabled alert window of
-each SLO, a burn-rate timeseries panel plotting the long and short lookback
-burn rates (`slo:sli_error:ratio_rate<w>` divided by
-`slo:error_budget:ratio`, the `GROUPING` idiom `src/generate/metadata.rs`
-already uses) with a threshold line at the window's factor, titled by
-severity. Default unit is burn-rate multiples, so the threshold lines are
-the plain SRE-table factors; rendering raw error ratios with scaled
-thresholds is the recorded alternative (flagged default, 2026-08-07).
-
-**Slices (dependency-ordered; nothing calendar-sized):**
-
-1. PR 1 (dev): the panels plus the expression drift guard, in
-   `src/dashboard.rs` or a sibling submodule if the file would pass the
-   ~400-line comprehension ceiling (the `src/spec/openslo/export.rs`
-   precedent). Public API additive only.
-2. PR 2 (dev): release prep and the cut. Folds the two entries already
-   staged under CHANGELOG `[Unreleased]` (CI workflow permissions, operator
-   naming fail-closed) into 1.4.0; a separate 1.3.1 patch is deliberately
-   not cut first (flagged default, 2026-08-07). The cut also closes the
-   pending "observe publish.yml's least-privilege block on a real run"
-   follow-up, since any tag at or after `a674339` runs the
-   permissions-bearing workflow.
-
-**Done-when (checkable; no clause satisfiable by prose alone):**
-
-1. For a spec with page and ticket windows, `slokit dashboard` emits one
-   burn panel per severity per SLO whose threshold equals that window's
-   factor, and a spec with a disabled ticket alert emits no ticket panel,
-   both directions asserted by unit tests over the emitted JSON.
-2. A drift guard reads BOTH the emitted dashboard and the generator's
-   recording rules for the same spec and fails if any dashboard PromQL
-   expression references a `slo:` series the generator does not record for
-   that spec. This is the property that makes the feature checkable without
-   live data.
-3. Generated Prometheus rule output is byte-identical before and after: the
-   existing snapshot suite passes unchanged.
-4. crates.io reports `newest_version` 1.4.0 (the registry check above).
+Nothing is scheduled. The v1.4.0 per-severity-dashboard-burn-panels milestone
+closed with this release prep (its implementation slice shipped as PR #31 and
+the QA fixes rode along; see the history table below), and the theme after it
+is not yet scoped — that is a product increment, not an implementation task.
 
 ## Later / candidates (unscheduled)
 
@@ -252,6 +168,29 @@ happened:
 | 1.1.0 | 2026-07-26 | `slokit simulate` + the public `slokit::simulate` module, `examples/infraportal/`, `cargo audit` CI gate; released and published the same day under the release delegation |
 | 1.2.0 | 2026-08-01 | OpenSLO v1 export: the `spec::openslo::export` module (`to_yaml` / `to_yaml_reported`, `Export` / `ExportNote`) and the `slokit export --format openslo` subcommand, with a semantic round-trip property proven over every committed spec; proposed, approved and built the same day |
 | 1.3.0 | 2026-08-05 | Lint rules grounded in real-world specs: `Spec::from_yaml_stream` (multi-document input, the enabler) plus the `SLI_FALLBACK_ASYMMETRY` rule (grounded on sloth's `home-wifi.yml`); the same grounding pass wild-validated the shipped rule set for the first time (`THRESHOLD_UNREACHABLE` on `victoria-metrics.yml`, `ALL_ALERTS_DISABLED` on `no-alerts.yml`) |
+| 1.4.0 | 2026-08-07 | Per-severity dashboard burn panels: one burn-rate timeseries panel per enabled alert condition (long and short lookbacks, threshold line at the condition's factor, disabled severities skipped), expression drift against the generator's recordings guarded by `tests/dashboard_drift.rs`; plus fail-closed `generate --format operator` naming and explicit least-privilege workflow token permissions |
+
+The v1.4.0 milestone as it was scoped, for the record, since the section
+itself is gone from `## Next milestones` now that it shipped. Theme (D5,
+approved 2026-08-01, scheduled 2026-08-07 after the deferral premise was
+re-tested and its conclusion overturned in the open): per-severity dashboard
+burn panels — for each enabled alert window of each SLO, a burn-rate
+timeseries panel plotting the long and short lookback burn rates
+(`slo:sli_error:ratio_rate<w>` divided by `slo:error_budget:ratio`, the
+generator's own `GROUPING` idiom) with a threshold line at the window's
+factor, titled by severity; disabled severities get no panel, mirroring alert
+generation. Values are burn-rate multiples so the threshold lines are the
+plain SRE-table factors (the raw-error-ratio alternative was the recorded
+flagged default). Slices: PR 1 the panels plus the expression drift guard
+(`#31`, shipped as the `src/dashboard/burn.rs` submodule per the ~400-line
+ceiling), PR 2 this release prep and the cut, folding the QA fail-closed
+fixes (`#29`) and the workflow-permissions hardening (`#28`) staged since
+1.3.0. Its done-when was checkable and the first three clauses are asserted
+by `cargo test` (`src/dashboard/burn.rs` unit tests both directions,
+`tests/dashboard_drift.rs` reading both real artifacts, the byte-identity
+snapshot suite unchanged); the fourth — crates.io reporting `newest_version`
+1.4.0 — is the registry check above, which nothing in this repo can assert on
+its own.
 
 The v1.3.0 milestone as it was scoped, for the record, since the section
 itself is gone from `## Next milestones` now that it shipped. Theme (D5,

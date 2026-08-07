@@ -6,7 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
-## [Unreleased]
+## [1.4.0] - 2026-08-07
+
+Per-severity dashboard burn panels: the dashboard now plots, for each enabled
+alert condition of each SLO, the exact burn-rate quantities that condition
+compares, with the condition's factor as the threshold line. Everything here
+is additive per [docs/SEMVER.md](docs/SEMVER.md); generated Prometheus rule
+output is byte-identical to 1.3.0. The release also carries two fail-closed
+CLI fixes from the 2026-08-06 QA review of `generate --format operator` and
+explicit least-privilege CI token permissions.
 
 ### Added
 
@@ -40,6 +48,17 @@ From 1.0.0, slokit follows the semver guarantees documented in
   ignored.** Only the operator arm ever read the flag; the merged Prometheus
   rules document has no `metadata.name` to set, so the flag was a shipped
   no-op on the default format.
+
+### Security
+
+- **Explicit least-privilege `GITHUB_TOKEN` permissions on every workflow.**
+  `ci.yml` granted an explicit `contents: read` on only one of five jobs and
+  `publish.yml` on none, so the rest ran on the repository-default token
+  scope (measurably including `Packages: read`). Both workflows now declare
+  a workflow-level `permissions: contents: read` block, and
+  `tests/workflow_permissions.rs` pins the contract: every workflow file
+  must declare a workflow-level block and no grant anywhere may exceed
+  `contents: read`.
 
 ## [1.3.0] - 2026-08-05
 
