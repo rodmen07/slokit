@@ -140,6 +140,26 @@ slos:
           severity: ticket
 "#;
 
+/// Both severities disabled, so the SLO's alerts group is emitted empty. The
+/// recording and metadata groups are unaffected, so the file promtool sees is a
+/// realistic mixture rather than an entirely empty document.
+const ALL_ALERTS_DISABLED: &str = r#"
+service: quietsvc
+slos:
+  - name: availability
+    objective: 99.9
+    description: "every severity disabled; recordings still generated"
+    sli:
+      events:
+        error_query: sum(rate(http_requests_total{code=~"5.."}[{{.window}}]))
+        total_query: sum(rate(http_requests_total[{{.window}}]))
+    alerting:
+      page_alert:
+        disable: true
+      ticket_alert:
+        disable: true
+"#;
+
 fn temp_dir(tag: &str) -> PathBuf {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -290,4 +310,25 @@ fn custom_and_scaled_alerting_rules_pass_promtool() {
         "scaled period missing"
     );
     check_rules_with_promtool("custom-alerting", &yaml);
+}
+
+/// Disabling every severity emits the alerts group with `rules: []`, because
+/// `generate_rules_with` pushes three groups per SLO unconditionally. Whether
+/// Prometheus accepts an empty group is a real question about a shipped output
+/// shape, and only promtool can answer it -- so the case goes here rather than
+/// staying a unit assertion about the in-memory `RuleSet`.
+#[test]
+fn all_alerts_disabled_still_produces_loadable_rules() {
+    let spec = Spec::from_yaml(ALL_ALERTS_DISABLED).expect("all-disabled spec parses");
+    let yaml = generate_rules(&spec).unwrap().to_prometheus_yaml().unwrap();
+    // Sanity: the empty group really is what promtool is being handed.
+    assert!(
+        yaml.contains("rules: []"),
+        "expected an empty alerts group in the output promtool sees:\n{yaml}"
+    );
+    assert!(
+        !yaml.contains("alert:"),
+        "no alerting rule should survive with both severities disabled:\n{yaml}"
+    );
+    check_rules_with_promtool("all-alerts-disabled", &yaml);
 }
