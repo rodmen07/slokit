@@ -18,6 +18,7 @@ fn dashboard_json_snapshot() {
 fn dashboard_has_a_block_per_slo() {
     let spec = Spec::from_yaml(SAMPLE).unwrap();
     let value = slokit::dashboard::dashboard_value(&spec);
-    // Two SLOs => 2 rows + 2 * (3 stats + 1 timeseries) = 10 panels.
-    assert_eq!(value["panels"].as_array().unwrap().len(), 10);
+    // Two SLOs => 2 rows + 2 * (3 stats + 1 SLI timeseries + 4 default-table
+    // burn panels) = 18 panels.
+    assert_eq!(value["panels"].as_array().unwrap().len(), 18);
 }

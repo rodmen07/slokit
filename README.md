@@ -84,10 +84,12 @@ generates from them) lives in [`examples/infraportal/`](examples/infraportal/).
 json` prints the statuses as a JSON array for piping into other tools.
 
 `dashboard` emits Grafana dashboard JSON with a block per SLO (error budget
-remaining, current burn rate, objective, and the SLI error ratio over time),
-querying the same `slo:...` metrics the generator produces. It declares a
-`datasource` template variable, so it imports into any Grafana with a Prometheus
-data source.
+remaining, current burn rate, objective, the SLI error ratio over time, and one
+burn-rate panel per enabled alert condition with a threshold line at that
+condition's burn-rate factor, titled by severity), querying the same `slo:...`
+metrics the generator produces. A severity whose alert is disabled gets no burn
+panel, mirroring alert generation. It declares a `datasource` template
+variable, so it imports into any Grafana with a Prometheus data source.
 
 `check` evaluates each SLO's SLI directly against Prometheus (no deployed
 recording rules required) and prints a status table:
@@ -407,9 +409,9 @@ alerting:
       factor: 2
 ```
 
-Recording rules, the Grafana dashboard's SLI panel, and the current-burn-rate
-metadata rule all follow the effective windows, so the generated rule set stays
-self-consistent. `slokit lint` warns when custom windows leave an enabled
+Recording rules, the Grafana dashboard's SLI and burn-rate panels, and the
+current-burn-rate metadata rule all follow the effective windows, so the
+generated rule set stays self-consistent. `slokit lint` warns when custom windows leave an enabled
 severity with no conditions (`NO_SEVERITY_WINDOWS`) or outgrow the SLO period
 (`PERIOD_TOO_SHORT`).
 

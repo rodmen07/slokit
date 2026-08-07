@@ -2,9 +2,13 @@
 //!
 //! The dashboard renders one block per SLO, querying the same `slo:...` metrics
 //! the rule [generator](crate::generate) emits: error budget remaining, current
-//! burn rate, objective, and the SLI error ratio over time. It declares a
-//! `datasource` template variable so it imports cleanly into any Grafana with a
-//! Prometheus data source.
+//! burn rate, objective, the SLI error ratio over time, and one burn-rate
+//! panel per enabled alert condition with a threshold line at that condition's
+//! burn-rate factor (see [`burn`]). It declares a `datasource` template
+//! variable so it imports cleanly into any Grafana with a Prometheus data
+//! source.
+
+mod burn;
 
 use serde_json::{json, Value};
 
@@ -13,14 +17,19 @@ use crate::error::{Result, SlokitError};
 use crate::spec::{SloSpec, Spec, DEFAULT_PERIOD};
 use crate::window::Window;
 
-/// The shortest lookback window this SLO's rules record, which is the metric
-/// the SLI timeseries panel must query. Mirrors the generator's resolution:
-/// custom `alerting.windows` win, else the default table scaled to the period.
-fn sli_panel_window(slo: &SloSpec) -> Window {
-    let mwmbr = slo.custom_mwmbr().ok().flatten().unwrap_or_else(|| {
+/// The effective burn-rate configuration for one SLO, mirroring the
+/// generator's resolution: custom `alerting.windows` win, else the default
+/// table scaled to the SLO period.
+fn resolved_mwmbr(slo: &SloSpec) -> MwmbrConfig {
+    slo.custom_mwmbr().ok().flatten().unwrap_or_else(|| {
         let period = slo.resolve_period(DEFAULT_PERIOD).unwrap_or(DEFAULT_PERIOD);
         MwmbrConfig::sre_default_for_period(period)
-    });
+    })
+}
+
+/// The shortest lookback window this SLO's rules record, which is the metric
+/// the SLI timeseries panel must query.
+fn sli_panel_window(mwmbr: &MwmbrConfig) -> Window {
     mwmbr
         .lookback_windows()
         .first()
@@ -37,7 +46,8 @@ pub fn dashboard_value(spec: &Spec) -> Value {
     for slo in &spec.slos {
         let sloth_id = slo.sloth_id(&spec.service);
         let sel = format!("{{sloth_id=\"{sloth_id}\"}}");
-        let sli_window = sli_panel_window(slo).prometheus();
+        let mwmbr = resolved_mwmbr(slo);
+        let sli_window = sli_panel_window(&mwmbr).prometheus();
 
         panels.push(row_panel(id, &slo.name, y));
         id += 1;
@@ -81,6 +91,8 @@ pub fn dashboard_value(spec: &Spec) -> Value {
         ));
         id += 1;
         y += 8;
+
+        panels.extend(burn::panels(slo, &mwmbr, &sel, &mut id, &mut y));
     }
 
     json!({
@@ -208,8 +220,9 @@ slos:
         let v = dashboard_value(&spec());
         assert_eq!(v["uid"], "slokit-myservice");
         let panels = v["panels"].as_array().unwrap();
-        // One SLO => 1 row + 3 stats + 1 timeseries.
-        assert_eq!(panels.len(), 5);
+        // One SLO => 1 row + 3 stats + 1 SLI timeseries + 4 default-table
+        // burn-rate panels.
+        assert_eq!(panels.len(), 9);
         assert_eq!(panels[0]["type"], "row");
     }
 
