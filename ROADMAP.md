@@ -1,8 +1,7 @@
 # slokit Roadmap
 
 Canonical planning document for slokit. Last updated 2026-08-07, when the
-product scoping pass after the v1.4.0 cut scheduled v1.5.0 (OpenSLO v1alpha
-import).
+v1.5.0 (OpenSLO v1alpha import) release prep closed that milestone.
 Backward-looking detail lives in [CHANGELOG.md](CHANGELOG.md); this file
 covers where the crate is going.
 
@@ -39,7 +38,7 @@ naming the release, and the registry confirmed afterwards. The v1.1.0 cut on
 2026-07-26 ran under exactly that delegation. Secret writes (`gh secret set`)
 remain USER-ONLY.
 
-## Current state: v1.4.0
+## Current state: v1.5.0
 
 slokit is a stable, published SLO and error-budget engine with two pillars:
 
@@ -51,8 +50,8 @@ slokit is a stable, published SLO and error-budget engine with two pillars:
    `dashboard`, and `schema` commands behind feature flags (`cli`, `spec`,
    `check`, `dashboard`).
 
-`Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say 1.4.0. Under the standing
-release delegation the cut (tag `v1.4.0`, GitHub release, the publish it fires)
+`Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say 1.5.0. Under the standing
+release delegation the cut (tag `v1.5.0`, GitHub release, the publish it fires)
 follows the prep commit directly, and the history row below records the date it
 ran.
 
@@ -69,10 +68,12 @@ curl -s -A "your-name (you@example.com)" https://crates.io/api/v1/crates/slokit 
 
 The public API is frozen per [docs/SEMVER.md](docs/SEMVER.md): 1.x changes are
 additive only, generated rule output is byte-stable within a minor line, and
-the tag-pinned JSON Schema URLs are immutable. 1.4.0 keeps all three: it adds
-per-severity burn panels to the emitted dashboard (plus two fail-closed CLI
-fixes on `generate --format operator`) without touching any earlier 1.x
-signature, and generated Prometheus rule output is byte-identical to 1.3.0.
+the tag-pinned JSON Schema URLs are immutable. 1.5.0 keeps all three: it widens
+what the OpenSLO importer accepts (`openslo/v1alpha` alongside `openslo/v1`),
+which is the "the spec format only grows" clause of the freeze — input that used
+to error now parses, no earlier 1.x signature changes, `openslo/v1` imports are
+unchanged, and generated Prometheus rule output for every existing spec is
+byte-identical to 1.4.0. It adds no dependency, so the lean core is untouched.
 
 MSRV is 1.82 and it **is** CI-enforced: the `MSRV 1.82` job in
 `.github/workflows/ci.yml` builds the default, all-features, and lean-core
@@ -84,108 +85,10 @@ generated rules` against a pinned Prometheus release, and `coverage`.
 
 ## Next milestones
 
-### v1.5.0: OpenSLO v1alpha import
-
-**Theme.** Teach the OpenSLO importer to read `apiVersion: openslo/v1alpha`
-alongside the `openslo/v1` it reads today, so the OpenSLO specs the ecosystem
-slokit targets actually publishes can be imported at all.
-
-**Why this and not the held candidates.** The two lint-rule candidates in
-`## Later / candidates` are each held on an input that has not arrived
-(window-coverage needs a real spec exhibiting the gap; objective-precision
-needs event volume), and the `examples/infraportal/` live-status work is
-blocked outside this repo. This one is blocked on nothing and is grounded in
-a corpus that exists today.
-
-**Grounding, read from source on 2026-08-07 rather than inherited.** The
-observation that started it is one sentence in the v1.3.0 milestone record
-below ("sloth's two openslo/v1alpha examples were noted as a possible future
-import widening"); it was re-verified end to end before being scheduled:
-
-- `slok/sloth@main`'s `examples/` directory holds 21 entries, of which exactly
-  two are OpenSLO documents — `openslo-getting-started.yml` and
-  `openslo-kubernetes-apiserver.yml` — and **both declare
-  `apiVersion: openslo/v1alpha`**, not `openslo/v1`. (GitHub contents API for
-  the listing, raw fetch for the two files.)
-- **slokit rejects both.** Built from the v1.4.0 tree, `slokit validate -i
-  <file>` exits 1 with `spec error: openslo document 1: unsupported apiVersion
-  'openslo/v1alpha' (expected openslo/v1)`, on the auto-detected path and on
-  explicit `--input-format openslo` alike. So the whole OpenSLO interop story
-  — import since v0.10.0, export since v1.2.0 — cannot read the reference
-  corpus of the project slokit is spec-compatible with.
-- The rejection is narrow and the surrounding machinery already fits.
-  `src/spec/openslo.rs` pins `const API_VERSION: &str = "openslo/v1"` (line
-  101) and errors on anything else (line 180), while detection (`is_openslo`,
-  line 145) already routes on the `openslo/` **prefix** — which is exactly why
-  the failure above reproduces through auto-detection. The importer's
-  good/total handling (`error_query = (total) - (good)`, with a note), its
-  `{{.window}}` rewriting (`windowize`), its multi-objective SLO naming
-  (`objective_suffix`) and its label conversion are all version-independent
-  and are meant to be reused, not re-implemented.
-
-**What is genuinely new work** is the shape difference between the two
-versions, visible in the fetched documents: v1alpha carries the metric
-**per objective** (`spec.objectives[].ratioMetrics.{good,total}` with
-`source`/`queryType`/`query`) where v1 carries one `spec.indicator` for the
-document, and v1alpha states the period as
-`spec.timeWindows[].{count, unit}` (`count: 30`, `unit: Day`) where v1 states
-`spec.timeWindow[].duration` (`30d`). The k8s-apiserver document also exercises
-both multi-document input and a two-objective SLO, so it is a real test case
-rather than a smoke test.
-
-**Fidelity contract: fail closed, the D3 rule the export already follows.**
-Any v1alpha construct with no slokit representation is an error naming the
-field, never a silent drop; anything representable-but-lossy is an
-`ImportNote`, the mechanism the v1 importer already uses.
-
-**Constraints this milestone inherits.** 1.x is additive-only per
-[docs/SEMVER.md](docs/SEMVER.md), and this fits its "the spec format only
-grows" clause: input that used to error now parses, no existing signature
-changes, and generated rule bytes for every existing spec stay byte-identical.
-No new dependency (`serde_norway` already parses these documents), so the lean
-core is untouched. `src/spec/openslo.rs` is 1132 lines and already over the
-code-health threshold, so the v1alpha mapping lands in a **new sibling module**
-(`src/spec/openslo/v1alpha.rs`), the `openslo/export.rs` precedent from v1.2.0,
-rather than growing the oversized file.
-
-**Slices, dependency-ordered** (no calendar sizing; the order below is the only
-sequencing constraint):
-
-- **PR 1 — the mapper.** Per-document `apiVersion` dispatch in `from_yaml`,
-  the v1alpha mapping in the new sibling module, both sloth documents committed
-  as fixtures under `tests/fixtures/openslo/v1alpha/`, and unit plus
-  integration coverage including the fail-closed direction.
-- **PR 2 — end-to-end proof and docs.** Binary-level tests running the real
-  `slokit` over the committed fixtures through `validate` and `generate`, the
-  import → `export --format openslo` → re-import round trip (extending the
-  property `tests/export_cli.rs` already proves for v1), plus the module docs,
-  README and `--input-format` help text stating that both versions are
-  accepted.
-- **PR 3 — release prep and the cut**, under the standing release delegation:
-  `CHANGELOG` `[1.5.0]`, `Cargo.toml`/`Cargo.lock`, the history row and
-  `## Current state` here, then tag, release, and confirm the registry.
-
-**Done when** (every clause checkable by build, test, CI, or the registry):
-
-1. `slokit validate -i tests/fixtures/openslo/v1alpha/<either fixture>` exits
-   0, asserted at the binary level by a committed test. Both fixtures exit 1
-   today with the message quoted above, so the assertion fails without the
-   feature.
-2. The rules generated from the imported getting-started document are
-   **byte-identical** to those generated from a hand-written native spec
-   committed beside it — the twin-test idiom
-   [docs/SEMVER.md](docs/SEMVER.md) already names as the enforcement mechanism
-   for OpenSLO imports. A mapper that parses but mis-maps fails this even
-   though clause 1 passes.
-3. Existing v1 imports are unchanged: `tests/openslo.rs`,
-   `tests/openslo_export.rs` and the insta snapshot suites pass **unmodified**,
-   and `tests/generate.rs`'s byte-identity snapshots are untouched.
-4. A v1alpha construct slokit cannot represent produces an error naming the
-   offending field, asserted by a negative test on the message path.
-5. `cargo test --no-default-features --lib` still passes and `Cargo.toml`
-   gains no dependency.
-6. crates.io reports `newest_version` 1.5.0 (the one clause nothing in this
-   repo can assert on its own; see the `curl` in `## Current state`).
+Nothing is scheduled. The v1.5.0 OpenSLO-v1alpha-import milestone closed
+with this release prep (the mapper shipped as PR #35, the end-to-end proof
+and docs as PR #36; see the history table below), and the theme after it is
+not yet scoped — that is a product increment, not an implementation task.
 
 ## Later / candidates (unscheduled)
 
@@ -267,6 +170,33 @@ happened:
 | 1.2.0 | 2026-08-01 | OpenSLO v1 export: the `spec::openslo::export` module (`to_yaml` / `to_yaml_reported`, `Export` / `ExportNote`) and the `slokit export --format openslo` subcommand, with a semantic round-trip property proven over every committed spec; proposed, approved and built the same day |
 | 1.3.0 | 2026-08-05 | Lint rules grounded in real-world specs: `Spec::from_yaml_stream` (multi-document input, the enabler) plus the `SLI_FALLBACK_ASYMMETRY` rule (grounded on sloth's `home-wifi.yml`); the same grounding pass wild-validated the shipped rule set for the first time (`THRESHOLD_UNREACHABLE` on `victoria-metrics.yml`, `ALL_ALERTS_DISABLED` on `no-alerts.yml`) |
 | 1.4.0 | 2026-08-07 | Per-severity dashboard burn panels: one burn-rate timeseries panel per enabled alert condition (long and short lookbacks, threshold line at the condition's factor, disabled severities skipped), expression drift against the generator's recordings guarded by `tests/dashboard_drift.rs`; plus fail-closed `generate --format operator` naming and explicit least-privilege workflow token permissions |
+| 1.5.0 | 2026-08-07 | OpenSLO `v1alpha` import: per-document `apiVersion` dispatch plus the v1alpha mapping in a new sibling `src/spec/openslo/v1alpha.rs` (per-objective `ratioMetrics`, `timeWindows[].{count, unit}`, document-level `thresholdMetric`), reusing the version-independent v1 machinery; both sloth OpenSLO examples committed as fixtures, byte-identity against a hand-written native twin asserted at the binary level, and the v1alpha → `export --format openslo` → re-import round trip proven |
+
+The v1.5.0 milestone as it was scoped, for the record, since the section
+itself is gone from `## Next milestones` now that it shipped. Theme: teach the
+OpenSLO importer to read `apiVersion: openslo/v1alpha` alongside `openslo/v1`,
+because the OpenSLO corpus the ecosystem actually publishes is in the older
+dialect. The grounding was read from source on 2026-08-07 rather than
+inherited: `slok/sloth@main`'s `examples/` holds exactly two OpenSLO documents
+(`openslo-getting-started.yml`, `openslo-kubernetes-apiserver.yml`) and **both**
+declare `openslo/v1alpha`, and a binary built from the v1.4.0 tree rejected both
+with `spec error: openslo document 1: unsupported apiVersion 'openslo/v1alpha'
+(expected openslo/v1)` — so the whole OpenSLO interop story, import since 0.10.0
+and export since 1.2.0, could not read the reference corpus of the project
+slokit is spec-compatible with. Fidelity contract: fail closed, the same D3 rule
+the export follows. Slices (dependency-ordered): PR 1 the mapper (`#35`), PR 2
+the end-to-end proof and docs (`#36`), PR 3 this release prep and the cut. Five
+of its six done-when clauses are mechanical and green in CI — `validate` exits 0
+on both fixtures
+(`tests/openslo_v1alpha_cli.rs::validate_accepts_both_sloth_v1alpha_fixtures_by_auto_detection`
+and its `_with_an_explicit_format` sibling), the generated rules are
+byte-identical to the hand-written native twin
+(`generating_from_the_sloth_getting_started_matches_its_native_twin_byte_for_byte`),
+`tests/openslo.rs` / `tests/openslo_export.rs` / the insta snapshots pass with
+no v1 behaviour change, the fail-closed direction is asserted on the message
+path, and `cargo test --no-default-features --lib` still passes with no new
+dependency. The sixth — crates.io reporting `newest_version` 1.5.0 — is the
+registry check above, which nothing in this repo can assert on its own.
 
 The v1.4.0 milestone as it was scoped, for the record, since the section
 itself is gone from `## Next milestones` now that it shipped. Theme (D5,

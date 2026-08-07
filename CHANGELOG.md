@@ -6,6 +6,62 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
+## [1.5.0] - 2026-08-07
+
+OpenSLO **v1alpha** import: the OpenSLO importer now reads
+`apiVersion: openslo/v1alpha` alongside the `openslo/v1` it has read since
+0.10.0, so the reference corpus of the project slokit is spec-compatible with
+can be imported at all — both of sloth's committed OpenSLO examples declare
+v1alpha, and every slokit up to 1.4.0 rejected them with `unsupported
+apiVersion 'openslo/v1alpha' (expected openslo/v1)`. Everything here is
+additive per [docs/SEMVER.md](docs/SEMVER.md): input that used to error now
+parses, no existing signature changes, `openslo/v1` imports are unchanged, and
+generated Prometheus rule output for every existing spec is byte-identical to
+1.4.0. No new dependency — `serde_norway` already parses these documents, so
+the lean core (`--no-default-features`) is untouched.
+
+### Added
+
+- **`openslo/v1alpha` import** (v1.5.0 slice 1): `Spec::from_yaml` /
+  `from_yaml_stream` and every `-i` path now dispatch on each document's own
+  `apiVersion`, so a stream may mix dialects. The v1alpha mapping lives in a
+  new sibling module (`src/spec/openslo/v1alpha.rs`) rather than growing the
+  already-oversized `src/spec/openslo.rs`, and it reuses the version-independent
+  v1 machinery instead of re-implementing it: `{{.window}}` rewriting, the
+  `(total) - (good)` error-query derivation, the histogram/threshold latency
+  convention and multi-objective SLO naming are all shared code. The shape
+  differences it owns are the per-objective metric
+  (`spec.objectives[].ratioMetrics.{good,total}` with flat
+  `source`/`queryType`/`query`, where v1 carries one document-level
+  `spec.indicator`), the period as `spec.timeWindows[].{count, unit}` (where v1
+  uses `spec.timeWindow[].duration`), the document-level
+  `spec.indicator.thresholdMetric`, and `target` with no `targetPercent`.
+- **Fidelity stays fail-closed**, the rule the v1 importer and the OpenSLO
+  export already follow: any v1alpha construct with no slokit representation is
+  an error naming the offending field (`spec.objectives[0].target is required
+  (openslo/v1alpha has no targetPercent)`,
+  `...ratioMetrics.total.source is missing (expected prometheus)`), never a
+  silent drop; representable-but-lossy constructs emit an `ImportNote`.
+- **Both sloth OpenSLO examples are committed as fixtures**
+  (`tests/fixtures/openslo/v1alpha/getting-started.yaml` and
+  `kubernetes-apiserver.yaml`), the second exercising multi-document input, two
+  documents sharing a service, and a two-objective SLO. A hand-written native
+  twin of the first is committed beside it, and
+  `tests/openslo_v1alpha_cli.rs` asserts at the binary level that `slokit
+  generate` over the imported document is **byte-identical** to `generate` over
+  that twin — so a mapper that parses but mis-maps fails even though `validate`
+  exits 0. The same suite proves the import → `export --format openslo` →
+  re-import round trip (deliberately asymmetric: v1alpha in, `openslo/v1` out,
+  because the export always writes the current version).
+
+### Changed
+
+- **README and module docs name both dialects.** The OpenSLO interop section
+  gains a direction/version table, states that v1alpha is what sloth's examples
+  declare, and states the upgrade-on-round-trip behaviour;
+  `src/spec/openslo.rs`'s docs say the same where a library user looks, and
+  `tests/openslo.rs` records which dialect it owns.
+
 ## [1.4.0] - 2026-08-07
 
 Per-severity dashboard burn panels: the dashboard now plots, for each enabled
