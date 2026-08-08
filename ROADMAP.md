@@ -1,7 +1,7 @@
 # slokit Roadmap
 
-Canonical planning document for slokit. Last updated 2026-08-07, when v1.6.0
-(sloth Kubernetes CRD input) was scoped.
+Canonical planning document for slokit. Last updated 2026-08-08, when the
+v1.6.0 (sloth Kubernetes CRD input) release prep closed that milestone.
 Backward-looking detail lives in [CHANGELOG.md](CHANGELOG.md); this file
 covers where the crate is going.
 
@@ -38,7 +38,7 @@ naming the release, and the registry confirmed afterwards. The v1.1.0 cut on
 2026-07-26 ran under exactly that delegation. Secret writes (`gh secret set`)
 remain USER-ONLY.
 
-## Current state: v1.5.0
+## Current state: v1.6.0
 
 slokit is a stable, published SLO and error-budget engine with two pillars:
 
@@ -50,8 +50,8 @@ slokit is a stable, published SLO and error-budget engine with two pillars:
    `dashboard`, and `schema` commands behind feature flags (`cli`, `spec`,
    `check`, `dashboard`).
 
-`Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say 1.5.0. Under the standing
-release delegation the cut (tag `v1.5.0`, GitHub release, the publish it fires)
+`Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say 1.6.0. Under the standing
+release delegation the cut (tag `v1.6.0`, GitHub release, the publish it fires)
 follows the prep commit directly, and the history row below records the date it
 ran.
 
@@ -68,12 +68,16 @@ curl -s -A "your-name (you@example.com)" https://crates.io/api/v1/crates/slokit 
 
 The public API is frozen per [docs/SEMVER.md](docs/SEMVER.md): 1.x changes are
 additive only, generated rule output is byte-stable within a minor line, and
-the tag-pinned JSON Schema URLs are immutable. 1.5.0 keeps all three: it widens
-what the OpenSLO importer accepts (`openslo/v1alpha` alongside `openslo/v1`),
-which is the "the spec format only grows" clause of the freeze — input that used
-to error now parses, no earlier 1.x signature changes, `openslo/v1` imports are
-unchanged, and generated Prometheus rule output for every existing spec is
-byte-identical to 1.4.0. It adds no dependency, so the lean core is untouched.
+the tag-pinned JSON Schema URLs are immutable. 1.6.0 keeps all three: it teaches
+the spec loader a third input dialect (sloth's Kubernetes CRD,
+`apiVersion: sloth.slok.dev/v1`), which is the same "the spec format only grows"
+clause of the freeze that v1.5.0 ran on — input that used to error now parses,
+no earlier 1.x signature changes, native and OpenSLO imports are unchanged, and
+generated Prometheus rule output for every existing spec is byte-identical to
+1.5.0. It adds no dependency, so the lean core is untouched. The dashboard
+option fix it also carries is additive in the same sense: `dashboard` gains two
+flags and three `_with` functions, while `dashboard_value` / `dashboard_json` /
+`dashboards_json` keep their signatures and their default-options output.
 
 MSRV is 1.82 and it **is** CI-enforced: the `MSRV 1.82` job in
 `.github/workflows/ci.yml` builds the default, all-features, and lean-core
@@ -83,169 +87,13 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
-## Unreleased on main
-
-- **Fixed: `slokit dashboard` ignored `generate`'s window-resolving options**,
-  so a dashboard built beside `slokit generate --period 7d` (or
-  `--no-period-scaling`) queried `slo:sli_error:ratio_rate<window>` series
-  those rules never record and every window-scoped panel rendered "No data".
-  `dashboard` now takes the same two flags, both commands resolve through one
-  seam, and `tests/dashboard_drift.rs` runs its two-source check across the
-  whole option space rather than only under defaults. Found by a QA pass on
-  the dashboard/generator contract, not by a user report.
-- **Added: sloth Kubernetes CRD input** (v1.6.0 PR 1). A file whose first
-  document declares `apiVersion: sloth.slok.dev/v1`, `kind:
-  PrometheusServiceLevel` is now auto-detected and imported by
-  `spec::sloth_crd` instead of dying in the native parser with `missing field
-  'service'`. Kubernetes object metadata is ignored with an import note, and
-  sloth's SLO plugin chains plus the native `page_alert`/`ticket_alert`
-  spellings fail closed by name.
-- **Added: `--input-format sloth-crd`** (v1.6.0 PR 2), the flag's third value,
-  so the dialect can be pinned as well as detected — and pinned off, which is
-  what makes the pin observable at all: every committed fixture detects
-  correctly on its own, so a pin that silently fell back to detection would
-  pass unless something asserted the *other* direction, which
-  `tests/sloth_crd_cli.rs::the_pinned_dialect_overrides_detection_in_both_directions`
-  does. Done-when clauses 1 and 2 now hold at the binary level, README carries
-  a `## sloth Kubernetes CRD input` section, and only the release cut (PR 3) is
-  left.
-
 ## Next milestones
 
-### v1.6.0: sloth Kubernetes CRD input
-
-**Theme:** teach the spec loader to read `apiVersion: sloth.slok.dev/v1`,
-`kind: PrometheusServiceLevel` documents alongside the native
-`version: prometheus/v1` YAML. That CRD is how sloth is used inside
-Kubernetes, and slokit — a tool that already *emits* a Kubernetes CRD from
-`generate --format operator` — cannot read it. Same shape of one-way door
-that picked OpenSLO export for v1.2.0 and OpenSLO v1alpha import for v1.5.0.
-
-**Grounding, read from source on 2026-08-07, not inherited:**
-
-- `slok/sloth@main`'s `examples/` holds 21 entries and **five** are in this
-  dialect (`k8s-getting-started.yml`, `k8s-home-wifi.yml`, `k8s-multifile.yml`,
-  `plugin-k8s-getting-started.yml`, `slo-plugin-k8s-getting-started.yml`) —
-  more than the two OpenSLO documents that justified v1.5.0.
-- A binary built from the v1.5.0 tree rejects them, and the failure is worse
-  than the OpenSLO one was. `slokit validate -i k8s-getting-started.yml` exits
-  1 with `spec error: document 1: missing field 'service'`, on auto-detection
-  *and* on explicit `--input-format slokit`: the message names neither the
-  dialect nor the fact that the input is a sloth format at all. The OpenSLO
-  path at least said `unsupported apiVersion 'openslo/v1alpha'`.
-- Nothing in the repo supports it in any form:
-  `grep -rni 'slok\.dev|PrometheusServiceLevel'` over the whole tree (excluding
-  `target/` and `.git/`) returns zero hits, and `InputFormat` in
-  `src/bin/slokit.rs` has exactly two variants, `Slokit` and `Openslo`.
-- The field mapping was derived from sloth's own type definitions
-  (`pkg/kubernetes/api/sloth/v1/types.go`, 244 lines), not from the examples.
-  The CRD is the **same model** as the native spec with camelCase JSON names
-  (`errorQuery`, `totalQuery`, `errorRatioQuery`, `pageAlert`, `ticketAlert`)
-  wrapped in `metadata` plus `spec`. It is a rename-and-unwrap layer, not a
-  second model the way OpenSLO is — which is why this milestone is small.
-- **The byte-identity clause below is already proven satisfiable**, which is
-  why it is the done-when and not an aspiration. Mechanically unwrapping
-  `k8s-getting-started.yml` and `k8s-home-wifi.yml` into native form (strip the
-  envelope, rename the camelCase keys) and running the v1.5.0 `slokit generate`
-  over each produced output byte-identical to the same command over sloth's own
-  native twins `getting-started.yml` and `home-wifi.yml` (8729 bytes,
-  sha256 `deb721d8df254359…`; 18765 bytes, sha256 `3411e923027e2354…`). sloth
-  declares those pairings itself: each `k8s-*.yml` opens with "the same example
-  as `<native>.yml` but using Sloth Kubernetes CRD".
-
-**Fidelity contract:** the split the OpenSLO importer already uses, not a new
-philosophy. Envelope fields with no home in a slokit `Spec` (`metadata.name`,
-`metadata.namespace`, `metadata.labels`) are **ignored with an import note**,
-mirroring `spec::openslo`'s treatment of `metadata.annotations`. Constructs
-that would silently generate the WRONG rules — sloth's SLO plugin chains,
-`spec.sloPlugins` and `slos[].plugins`, which slokit has no equivalent for
-(its `sli.plugin` is a different mechanism and *does* map to `sli.plugin.{id,
-options}`) — **fail closed with an error naming the field**, the D3 rule the
-export follows.
-
-**Why not the other candidates** (each re-tested at its source this pass, see
-`## Later / candidates` below for the arithmetic): both remaining lint rules
-are still held, window-coverage because the only real custom-window
-configurations that exist upstream both close the budget by construction and
-objective-precision because no field of any supported dialect carries event
-volume; and the `examples/infraportal/` live-status item's blocker lives in
-another repo that this scoping run was not scoped to read.
-
-**Slices (dependency-ordered; nothing calendar-sized):**
-
-1. **PR 1 — the mapper.** Per-document dispatch in `spec::from_yaml` grows a
-   branch for the `sloth.slok.dev/` `apiVersion` prefix beside the existing
-   `openslo/` routing, and the mapping lands in a **new sibling module
-   `src/spec/sloth_crd.rs`** — not in `src/spec/openslo.rs` (1226 lines) or
-   `src/spec/mod.rs` (1041), both already over the 1000-line hard threshold;
-   the `src/spec/openslo/v1alpha.rs` and `src/dashboard/burn.rs` precedent.
-   All three CRD fixtures committed under `tests/fixtures/sloth_crd/` together
-   with the two native twins, plus the fail-closed direction.
-   **Corrected 2026-08-08 while implementing this slice** (the scoping pass got
-   the reason right and the fact wrong): a committed guard *does* scan
-   `tests/fixtures/` — `tests/schema.rs:531` `native_fixture_files()` reads
-   that directory and feeds `positive_specs()`, which
-   `every_native_spec_validates_against_the_schema` and
-   `schema_positives_also_pass_the_rust_validator` both iterate. What saves the
-   slice is that the `read_dir` is **not recursive** and filters on
-   `p.is_file()`, so a `sloth_crd/` subdirectory is invisible to it, exactly as
-   `tests/fixtures/openslo/` already is. The obligation is therefore still
-   unschedulable-free, but only while the fixtures stay in a subdirectory:
-   dropping a CRD document at the top level of `tests/fixtures/` reddens
-   `schema.rs` on the commit that adds the file (control run 2026-08-08, quoted
-   in the PR body).
-2. **PR 2 — end-to-end proof and docs.** `--input-format` gains its third
-   value (`sloth-crd`, an overridable default name), binary-level
-   `validate`/`generate` tests over the committed fixtures (PR 1 asserts the
-   twin byte-identity at the library level across the generate option space;
-   PR 2 does it through the CLI), and the docs surface: README's input-format
-   section and the `src/spec/sloth_crd.rs` module docs carrying the field
-   table.
-   **Shipped 2026-08-08, with one clause of the plan already discharged before
-   the slice opened**: the module-doc field table landed in PR 1 (the `#
-   It is the native model, renamed and wrapped` table in
-   `src/spec/sloth_crd.rs`), so PR 2's docs work was README only — a new
-   `## sloth Kubernetes CRD input` section, the CLI example block, and the
-   OpenSLO section's `--input-format openslo|slokit` line, which had gone stale
-   the moment a third value existed. Checked before writing rather than
-   assumed. The `--input-format` value is pinned with
-   `#[value(name = "sloth-crd")]` instead of inherited from clap's derivation,
-   so the variant can be renamed without breaking a caller's script, and
-   `tests/sloth_crd_cli.rs::the_pinned_value_is_advertised_under_this_exact_name`
-   reads the name back out of `--help`.
-3. **PR 3 — release prep and the cut.** `CHANGELOG.md` gains a dated
-   `## [1.6.0]` section folding the `[Unreleased]` dashboard fix already on
-   `main`, `Cargo.toml` plus `Cargo.lock` bump, this section retires into the
-   history table, then the tag, the GitHub release and the registry check.
-
-**v1.6.0 done-when (every clause checkable; none is an existence search):**
-
-1. `slokit validate -i <fixture>` exits **0** on all three committed CRD
-   fixtures, by auto-detection AND with the explicit `--input-format` value,
-   asserted at the binary level. All three exit 1 today with
-   `spec error: document 1: missing field 'service'`.
-2. Rules generated from the `k8s-getting-started.yml` fixture are
-   **byte-for-byte identical** to rules generated from the committed native
-   twin `getting-started.yml`, and likewise for the `k8s-home-wifi.yml` /
-   `home-wifi.yml` pair. An implementation that parses but mis-maps passes
-   clause 1 and fails this one.
-3. A document carrying `spec.sloPlugins` or `slos[].plugins` errors with a
-   message naming that field, and a document carrying `metadata.name`,
-   `metadata.namespace` and `metadata.labels` imports cleanly while reporting
-   an import note naming each ignored field.
-4. Existing behaviour is unchanged: `tests/openslo.rs`, `tests/generate.rs`,
-   `tests/examples_infraportal.rs` and the insta snapshots pass **unmodified**
-   (`git status --porcelain` over those paths empty on the shipping PR).
-5. `cargo test --no-default-features --lib` passes and
-   `git status --porcelain Cargo.toml Cargo.lock` is empty on PRs 1 and 2: the
-   lean core is untouched and the dialect costs no new dependency.
-6. crates.io reports `newest_version` **1.6.0**.
-
-**Semver:** additive under [docs/SEMVER.md](docs/SEMVER.md)'s "the spec format
-only grows" clause, the same argument v1.5.0 ran on. Input that used to error
-now parses, no existing 1.x signature changes, native and OpenSLO imports are
-untouched, and generated rule bytes for every existing spec stay identical —
-clause 4 is what holds that.
+Nothing is scheduled. The v1.6.0 sloth-Kubernetes-CRD-input milestone closed
+with this release prep (the mapper shipped as PR #40, the CLI pin plus the
+end-to-end proof and docs as PR #41; see the history table below), and the
+theme after it is not yet scoped — that is a product increment, not an
+implementation task.
 
 ## Later / candidates (unscheduled)
 
@@ -347,6 +195,54 @@ happened:
 | 1.3.0 | 2026-08-05 | Lint rules grounded in real-world specs: `Spec::from_yaml_stream` (multi-document input, the enabler) plus the `SLI_FALLBACK_ASYMMETRY` rule (grounded on sloth's `home-wifi.yml`); the same grounding pass wild-validated the shipped rule set for the first time (`THRESHOLD_UNREACHABLE` on `victoria-metrics.yml`, `ALL_ALERTS_DISABLED` on `no-alerts.yml`) |
 | 1.4.0 | 2026-08-07 | Per-severity dashboard burn panels: one burn-rate timeseries panel per enabled alert condition (long and short lookbacks, threshold line at the condition's factor, disabled severities skipped), expression drift against the generator's recordings guarded by `tests/dashboard_drift.rs`; plus fail-closed `generate --format operator` naming and explicit least-privilege workflow token permissions |
 | 1.5.0 | 2026-08-07 | OpenSLO `v1alpha` import: per-document `apiVersion` dispatch plus the v1alpha mapping in a new sibling `src/spec/openslo/v1alpha.rs` (per-objective `ratioMetrics`, `timeWindows[].{count, unit}`, document-level `thresholdMetric`), reusing the version-independent v1 machinery; both sloth OpenSLO examples committed as fixtures, byte-identity against a hand-written native twin asserted at the binary level, and the v1alpha → `export --format openslo` → re-import round trip proven |
+| 1.6.0 | 2026-08-08 | sloth **Kubernetes CRD** input (`apiVersion: sloth.slok.dev/v1`, `kind: PrometheusServiceLevel`): auto-detected and importable through the new sibling `src/spec/sloth_crd.rs`, pinnable with `--input-format sloth-crd`, fail-closed on sloth's SLO plugin chains and on the native `page_alert`/`ticket_alert` spellings inside a CRD document; byte-identity against sloth's own native twins asserted at the binary level across the whole `generate` option space. Plus the dashboard/generator option fix (`dashboard --period` / `--no-period-scaling`, one shared window-resolving seam) that had every window-scoped panel rendering "No data" beside non-default rules since 1.0.0 |
+
+The v1.6.0 milestone as it was scoped, for the record, since the section
+itself is gone from `## Next milestones` now that it shipped. Theme: teach the
+spec loader to read `apiVersion: sloth.slok.dev/v1`, `kind:
+PrometheusServiceLevel` documents alongside the native `version: prometheus/v1`
+YAML — the same one-way-door shape that picked OpenSLO export for v1.2.0 and
+OpenSLO v1alpha import for v1.5.0. The grounding was read from source on
+2026-08-07 rather than inherited: `slok/sloth@main`'s `examples/` holds 21
+entries and **five** are in this dialect (more than the two OpenSLO documents
+that justified v1.5.0), a binary built from the v1.5.0 tree rejected them with
+`spec error: document 1: missing field 'service'` on auto-detection *and* on
+explicit `--input-format slokit`, `grep -rni 'slok\.dev|PrometheusServiceLevel'`
+over the whole tree returned zero hits, and the field mapping was derived from
+sloth's own `pkg/kubernetes/api/sloth/v1/types.go` rather than from the
+examples. Fidelity contract: envelope fields with no home in a slokit `Spec`
+(`metadata.name`, `.namespace`, `.labels`) ignored with an import note; sloth's
+SLO plugin chains (`spec.sloPlugins`, `slos[].plugins`) fail closed naming the
+field. **One clause of the scope was corrected while it was implemented, not
+after** (PR #40): the plan claimed no committed guard scans `tests/fixtures/`,
+and `tests/schema.rs:531` `native_fixture_files()` does — what actually saves
+the slice is that its `read_dir` is non-recursive and filters on
+`p.is_file()`, so a `sloth_crd/` subdirectory is invisible to it. **And one
+hazard was sharpened** (also PR #40): sloth's own
+`plugin-k8s-getting-started.yml` writes `page_alert:`/`ticket_alert:` in a
+`kind: PrometheusServiceLevel` document, where the CRD's Go tags say
+`pageAlert`/`ticketAlert` — a *faithful* camelCase-only mapper does not error
+on that, it imports it and silently drops both severities' routing labels, so
+those two spellings are refused by name rather than merely documented. Slices
+(dependency-ordered): PR 1 the mapper (`#40`), PR 2 `--input-format sloth-crd`
+plus the end-to-end proof and docs (`#41`), PR 3 this release prep and the cut.
+Five of its six done-when clauses are mechanical and green in CI — `validate`
+exits 0 on all three committed CRD fixtures by auto-detection and with the
+explicit format
+(`tests/sloth_crd_cli.rs::every_committed_fixture_validates_by_auto_detection`
+and `::every_committed_fixture_validates_with_the_dialect_pinned`), the
+generated rules are byte-identical to sloth's native twins across the
+`--period` / `--no-period-scaling` option space
+(`::the_getting_started_fixture_generates_its_native_twins_bytes` and
+`::the_home_wifi_fixture_generates_its_native_twins_bytes`, both routed through
+`assert_cli_twins_agree` over `option_matrix()`, itself guarded against
+collapse by `::the_option_matrix_is_not_decorative`), the fail-closed and
+import-note directions are asserted on the message path,
+`tests/openslo.rs` / `tests/generate.rs` / `tests/examples_infraportal.rs` and
+the insta snapshots pass unmodified, and `cargo test --no-default-features
+--lib` still passes with no new dependency. The sixth — crates.io reporting
+`newest_version` 1.6.0 — is the registry check above, which nothing in this
+repo can assert on its own.
 
 The v1.5.0 milestone as it was scoped, for the record, since the section
 itself is gone from `## Next milestones` now that it shipped. Theme: teach the
