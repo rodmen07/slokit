@@ -99,8 +99,16 @@ generated rules` against a pinned Prometheus release, and `coverage`.
   `spec::sloth_crd` instead of dying in the native parser with `missing field
   'service'`. Kubernetes object metadata is ignored with an import note, and
   sloth's SLO plugin chains plus the native `page_alert`/`ticket_alert`
-  spellings fail closed by name. `--input-format sloth-crd` and the
-  binary-level tests are PR 2.
+  spellings fail closed by name.
+- **Added: `--input-format sloth-crd`** (v1.6.0 PR 2), the flag's third value,
+  so the dialect can be pinned as well as detected — and pinned off, which is
+  what makes the pin observable at all: every committed fixture detects
+  correctly on its own, so a pin that silently fell back to detection would
+  pass unless something asserted the *other* direction, which
+  `tests/sloth_crd_cli.rs::the_pinned_dialect_overrides_detection_in_both_directions`
+  does. Done-when clauses 1 and 2 now hold at the binary level, README carries
+  a `## sloth Kubernetes CRD input` section, and only the release cut (PR 3) is
+  left.
 
 ## Next milestones
 
@@ -193,6 +201,18 @@ another repo that this scoping run was not scoped to read.
    PR 2 does it through the CLI), and the docs surface: README's input-format
    section and the `src/spec/sloth_crd.rs` module docs carrying the field
    table.
+   **Shipped 2026-08-08, with one clause of the plan already discharged before
+   the slice opened**: the module-doc field table landed in PR 1 (the `#
+   It is the native model, renamed and wrapped` table in
+   `src/spec/sloth_crd.rs`), so PR 2's docs work was README only — a new
+   `## sloth Kubernetes CRD input` section, the CLI example block, and the
+   OpenSLO section's `--input-format openslo|slokit` line, which had gone stale
+   the moment a third value existed. Checked before writing rather than
+   assumed. The `--input-format` value is pinned with
+   `#[value(name = "sloth-crd")]` instead of inherited from clap's derivation,
+   so the variant can be renamed without breaking a caller's script, and
+   `tests/sloth_crd_cli.rs::the_pinned_value_is_advertised_under_this_exact_name`
+   reads the name back out of `--help`.
 3. **PR 3 — release prep and the cut.** `CHANGELOG.md` gains a dated
    `## [1.6.0]` section folding the `[Unreleased]` dashboard fix already on
    `main`, `Cargo.toml` plus `Cargo.lock` bump, this section retires into the
