@@ -1,7 +1,8 @@
 # slokit Roadmap
 
 Canonical planning document for slokit. Last updated 2026-08-08, when the
-v1.6.0 (sloth Kubernetes CRD input) release prep closed that milestone.
+v1.7.0 (sloth corpus parity) milestone was scoped; the v1.6.0 (sloth Kubernetes
+CRD input) release prep earlier the same day closed the milestone before it.
 Backward-looking detail lives in [CHANGELOG.md](CHANGELOG.md); this file
 covers where the crate is going.
 
@@ -89,11 +90,163 @@ generated rules` against a pinned Prometheus release, and `coverage`.
 
 ## Next milestones
 
-Nothing is scheduled. The v1.6.0 sloth-Kubernetes-CRD-input milestone closed
-with this release prep (the mapper shipped as PR #40, the CLI pin plus the
-end-to-end proof and docs as PR #41; see the history table below), and the
-theme after it is not yet scoped — that is a product increment, not an
-implementation task.
+### v1.7.0 — sloth corpus parity (scoped 2026-08-08)
+
+**Theme.** slokit has claimed sloth `prometheus/v1` compatibility since 0.1.0
+and has widened it one dialect at a time — OpenSLO v1 import (0.10.0), OpenSLO
+export (1.2.0), OpenSLO v1alpha import (1.5.0), sloth Kubernetes CRD input
+(1.6.0). Every one of those was grounded on a handful of upstream documents
+chosen because they were the ones that failed. No run has ever put the **whole**
+upstream corpus to a shipped binary at once and recorded the answer. v1.7.0 does
+that, pins every answer as a committed contract so it cannot silently drift, and
+closes the three places where the answer is wrong.
+
+**The grounding is a census, run from source on 2026-08-08, not inherited.**
+`slok/sloth@main`'s `examples/` holds 21 entries: 18 documents plus three
+directories (`_gen`, `plugins`, `windows`), and `examples/windows/` holds two
+more documents. All 20 documents were fetched and put to a binary built from
+`ac0434f` (`slokit --version` → 1.6.0, from a real 30.44s compile rather than a
+cached `Finished`, per the stale-binary hazard):
+
+| Disposition | Count | Documents |
+|---|---|---|
+| accepted, exit 0 | 13 | `contrib-slo-plugins.yml`, `getting-started.yml`, `home-wifi.yml`, `k8s-getting-started.yml`, `k8s-home-wifi.yml`, `k8s-multifile.yml`, `kubernetes-apiserver.yml`, `multifile.yml`, `no-alerts.yml`, `openslo-getting-started.yml`, `openslo-kubernetes-apiserver.yml`, `raw-home-wifi.yml`, `slo-plugin-getting-started.yml` |
+| refused, and **correctly** | 4 | `plugin-getting-started.yml` (unregistered Go SLI plugin — sloth needs `--sli-plugins-path` for it too), `plugin-k8s-getting-started.yml` (upstream's own `page_alert` spelling bug in a CRD document), `slo-plugin-k8s-getting-started.yml` and `contrib-denominator-corrected.yaml` (`spec.sloPlugins`, refused by name since 1.6.0) |
+| **rejected, and should not be** | 1 | `victoria-metrics.yml` |
+| **unsupported document kind** | 2 | `windows/7d.yaml`, `windows/custom-30d.yaml` |
+
+13 + 7 = 20. Two of the 13 accepted documents are accepted **with content
+silently discarded**, which the row above cannot show and which is the third
+defect: `slo-plugin-getting-started.yml` and `contrib-slo-plugins.yml` both
+carry sloth SLO plugin chains in the native spelling.
+
+**Defect 1 — a document sloth generates from, slokit cannot read.**
+`victoria-metrics.yml` fails with `spec error: document 1: invalid type: boolean
+'true', expected a string`, an error naming neither the field nor its path.
+Upstream ships `examples/_gen/victoria-metrics.yaml`, so sloth reads this exact
+document and emits rules from it. The whole difference is **nine label values
+across three scalar types** in three different label maps: one bool at service
+level (`generated: true`), four floats at SLO level (`actual_le`/`target_le`,
+`0.2` and `0.4`), and four ints in `alerting.labels` (`objective` 90/99,
+`objective_reversed` 10/1). Quoting exactly those nine and changing nothing else
+makes the document validate (`ok: 'foo-bar' is valid (2 SLOs)`); the three
+rejections surface one at a time, as `boolean`, then `floating point '0.2'`,
+then `integer '90'`. slokit types every label map as `BTreeMap<String, String>`
+(`src/spec/mod.rs:75`, `:96`, `:324`, `:409`), so an unquoted YAML scalar is a
+hard type error where sloth's own decode coerces it.
+
+**Defect 2 — an entire sloth document kind is unreadable.** `kind:
+AlertWindows` is how sloth supplies a custom burn-rate window catalogue per SLO
+period. slokit has per-SLO `alerting.windows` (0.7.0) but no way to consume a
+catalogue, so both upstream catalogues die inside the CRD importer with
+`sloth-crd: no kind: PrometheusServiceLevel documents in input (nothing to
+import)` — auto-detection routes on `apiVersion: sloth.slok.dev/v1`, then finds
+nothing it knows. The mapping is arithmetic slokit already owns: each
+`{page,ticket}.{quick,slow}` block becomes one `AlertWindowSpec` with
+`factor = (errorBudgetPercent / 100) x (sloPeriod / longWindow)`.
+
+**Defect 3 — the same construct is refused in one dialect and silently dropped
+in the other.** Since 1.6.0 a `kind: PrometheusServiceLevel` document carrying
+`spec.sloPlugins` is refused by name, on the stated grounds that a plugin chain
+*rewrites the generated rules*, so dropping it would be silent data loss. The
+native dialect spells the same thing `slo_plugins:` and `slos[].plugins:`, and
+the native parser ignores unknown keys for forward-compatibility — so it drops
+exactly what the CRD path refuses. Proven, not inferred: generating from
+`slo-plugin-getting-started.yml` (a seven-entry chain across both scopes) and
+from the same file with both blocks deleted produces **byte-identical** output,
+sha256 `0e66157f2ff7f8d43ea1ba20da9b7e4ba98d7c83ba534a1003f06fc282a71451` on
+both sides.
+
+**Slices (dependency-ordered).**
+
+- **PR 1 — the corpus contract, plus the two fixes small enough to ride with
+  it.** Commit all 20 upstream documents under `tests/fixtures/sloth_corpus/`
+  with their upstream sha256, and a guard that runs slokit over every one and
+  asserts its exact disposition (accepted, or refused with this message
+  substring), failing loudly on a zero-length discovery and on any fixture whose
+  recomputed sha256 does not match its recorded value — so the guard cannot be
+  made green by editing a fixture. Fix defect 1 (label scalars) and defect 3
+  (report the dropped chain) in the same PR, because a contract that records
+  "accepted" for a document whose content is discarded is not an honest
+  contract.
+- **PR 2 — `kind: AlertWindows` catalogue input.** A new sibling
+  `src/spec/alert_windows.rs`, a `--alert-windows <path>` flag accepting a file
+  or a directory, and an additive `GenerateOptions` field. Both upstream
+  catalogues become fixtures and flip their disposition in PR 1's guard.
+- **PR 3 — release prep and the cut.**
+
+**Done-when** (every clause checkable by build, test, CI, or the registry; none
+is an existence search):
+
+1. `cargo test --all-features --test sloth_corpus` passes and covers all 20
+   committed documents, with the fixture-hash assertion and the zero-discovery
+   assertion both live. A control that edits one fixture must redden it.
+2. `slokit validate -i tests/fixtures/sloth_corpus/victoria-metrics.yml` exits 0
+   **and** all nine previously-rejected label values appear verbatim as label
+   values on the rules `slokit generate` emits from it, asserted at the binary
+   level. (Parsing alone is not the claim: a coercion that parsed and then
+   dropped the labels would satisfy a weaker clause.)
+3. `slokit lint` reports a finding naming the discarded plugin chain on both
+   native upstream documents that carry one, reports none on the eight
+   `examples/infraportal/slos/` specs, and
+   `tests/lint_fallback_asymmetry.rs::the_committed_example_set_stays_lint_clean`
+   stays green unmodified.
+4. A hand-written 30d `kind: AlertWindows` document carrying **sloth's own
+   defaults** (page quick 2% / 1h / 5m, page slow 5% / 6h / 30m, ticket quick
+   10% / 1d / 2h, ticket slow 10% / 3d / 6h) generates rules **byte-identical**
+   to generating the same spec with no catalogue at all, because those
+   percentages map through the factor formula onto slokit's own
+   `MwmbrConfig::sre_default()` (14.4 / 6 / 3 / 1, `src/burn_rate.rs:158-176`).
+   Both upstream catalogues import with the factors this scoping pass computed —
+   `7d.yaml` 13.44 / 3.5 / 1.4 / 0.98 and `custom-30d.yaml` 14.4 / 4.8 / 3.0 /
+   1.0 — asserted at the binary level.
+5. No regression and no new dependency: `tests/generate.rs`,
+   `tests/examples_infraportal.rs`, `tests/openslo.rs`, `tests/sloth_crd*.rs`
+   and the insta snapshots pass **unmodified**, `cargo test
+   --no-default-features --lib` still passes, and the `MSRV 1.82` job is green.
+6. crates.io reports `newest_version` 1.7.0 (the one clause nothing in this repo
+   can assert on its own; see the check under `## Current state`).
+
+**Decisions taken here, each an overridable default.**
+
+- **D1: the discarded plugin chain is reported by a LINT rule, not by refusing
+  the document and not by a new parse channel.** Refusing is not available in
+  1.x: [docs/SEMVER.md](docs/SEMVER.md) line 58 promises "YAML that parses and
+  validates under 1.a also parses and validates under 1.b", and
+  `slo-plugin-getting-started.yml` parses and validates under 1.6.0 today. A
+  note-returning native entry point would need a channel the native path has
+  never had — `Import`/`ImportNote` are importer-only and `src/spec/parse.rs`
+  exposes just `from_yaml` and `from_yaml_stream` — whereas `lint` already has
+  the machinery and eleven shipped rule ids. Override by refusing in 2.0
+  instead, or by adding the parse channel.
+- **D2: unquoted YAML scalars in label maps are coerced to their canonical
+  string** (`true`, `0.2`, `90`), matching what sloth's decode does, rather than
+  rejected with a better message. The alternative keeps `victoria-metrics.yml`
+  unreadable and leaves the parity gap open, which is the thing this milestone
+  exists to close. This direction is legal under the freeze: YAML that does not
+  parse today parses tomorrow, which is growth.
+- **D3: catalogue precedence is most-specific-wins** — a per-SLO
+  `alerting.windows` beats a catalogue, a catalogue beats the built-in defaults,
+  and a catalogue applies to an SLO only when `spec.sloPeriod` equals that SLO's
+  resolved period. Override by letting the catalogue win over per-SLO windows.
+- **D4: the corpus is committed with recorded hashes, not fetched at test
+  time.** CI stays offline-safe and the hash blocks the "edit the fixture until
+  it passes" failure. Override with a scheduled job that re-fetches and diffs.
+
+**One hazard, checked before the split rather than after** (the guard reads the
+filesystem, not the plan, so a fixture-adding PR reddens on the commit that adds
+the file). Every disk-scanning guard whose directory this milestone touches was
+opened: `tests/schema.rs:531` `native_fixture_files()` reads `tests/fixtures`
+**non-recursively** and filters `p.is_file()`, so a `sloth_corpus/`
+subdirectory is invisible to it — the same discharge the `sloth_crd/`
+subdirectory got in 1.6.0, and the reason the fixtures go in a subdirectory
+rather than at the fixtures root. `tests/lint_fallback_asymmetry.rs:138`,
+`tests/check_generate_agreement.rs:230` and `tests/dashboard_drift.rs:47` all
+scan `examples/`, not `tests/fixtures/`, so no fixture may be added under
+`examples/`. The one guard PR 1 genuinely perturbs is
+`the_committed_example_set_stays_lint_clean`: a new lint rule must not fire on
+the eight infraportal specs, which is why done-when clause 3 asserts both
+directions.
 
 ## Later / candidates (unscheduled)
 
@@ -122,18 +275,52 @@ schedules them:
     The rule would fire on nothing that exists. Clears when a real spec or
     window set whose minimum factor is above 1 turns up — a user report, or an
     upstream catalogue that is not one of those two.
+    **Re-tested again 2026-08-08 by the v1.7.0 scoping census, at the source
+    rather than by re-reading this bullet: both catalogues were re-fetched and
+    both sets of factors recomputed from the documents themselves (13.44 / 3.5 /
+    1.4 / 0.98 and 14.4 / 4.8 / 3.0 / 1.0). The hold stands, and for the first
+    time it has a route out.** What starved this rule is that slokit could not
+    *accept* a window catalogue at all, so the only custom-window configurations
+    it could ever see were per-SLO `alerting.windows` overrides someone had
+    already hand-written into a slokit spec. v1.7.0 PR 2 makes `kind:
+    AlertWindows` importable, which turns a user-supplied catalogue into an
+    input this rule can be grounded on. Still held today, because teaching
+    slokit a document kind does not conjure a document that exhibits the gap.
   - **objective-precision** (whether an objective's digits exceed what the
     period can measure) needs event volume, and the re-test makes that
     structural rather than circumstantial: no field of `SloSpec`
     (`src/spec/mod.rs`) carries traffic, event rate or sample count, and no
     supported input dialect has one either, so no corpus sweep can ever ground
     it. It needs a user report or a traffic-annotated grounding pass instead.
+    **Re-tested again 2026-08-08 by the v1.7.0 scoping census, and the structural
+    claim is now stated with its search rather than asserted:** `SloSpec` carries
+    exactly `name`, `objective`, `description`, `labels`, `sli`, `alerting` and
+    `period` and nothing else, and a case-insensitive sweep of `src/` for
+    `traffic|volume|event_rate|sample_count|requests_per|rps|throughput` returns
+    hits in one file only, `src/bin/slokit.rs:337-340` and `:701-703`, `:752-756`
+    and `:818-820` — the `--traffic` flag on `calc` and `simulate`, an
+    operator-supplied rate at call time that no spec dialect carries. **That
+    sharpens the disposition rather than repeating it: this was never a lint
+    candidate.** `lint` sees only a spec, and no spec has the input. If the check
+    is ever built it belongs to `calc`, where the traffic number already arrives.
+    Held, and re-filed against the right command.
 - Carrying `examples/infraportal/` from SLO-definitions-as-code to live status,
   which is blocked on the InfraPortal services exposing `/metrics` at all (that
   work lives in the microservices repo, not here). **Deliberately NOT re-tested
   on 2026-08-07**: its source of truth is that other repo, which the scoping
   run was not scoped to read, so this bullet is an inherited claim rather than
   a checked one. Re-test it before either scheduling or re-deferring it.
+  **Still NOT re-tested on 2026-08-08, and the reason is now named precisely
+  rather than left as "was not scoped to read".** The v1.7.0 scoping ran as one
+  lane of a parallel wave, where the partition across repos *is* the safety
+  property; the microservices repo belongs to a different lane and this worker
+  may not read it. That is a boundary on the READ, not evidence about the claim,
+  so the claim stays unchecked rather than quietly re-confirmed. **Clearing
+  condition (2026-08-08): one `curl` against any deployed InfraPortal service's
+  `/metrics` returning a Prometheus exposition body that contains
+  `http_request_duration_seconds_bucket`** — runnable by a sequential
+  `/autodev` run, by the portfolio lane, or by the maintainer, and settling the
+  bullet either way in a single command.
 - USER-ONLY: backfill missing git tags v0.5.0 and v0.6.1 through v0.6.8
   (published to crates.io without tags; opportunistic).
 
@@ -333,6 +520,27 @@ and the round-trip suite is green in CI. The third — crates.io reporting
 repo can assert on its own.
 
 Drift worth recording:
+
+- **2026-08-08: the fourth consecutive milestone came from outside the candidate
+  list, and the practice that keeps finding them is written down here so the
+  next scoping pass inherits the method instead of rediscovering it.** v1.4.0
+  came off the candidate list; v1.5.0, v1.6.0 and now v1.7.0 did not. All three
+  came from the same move: **run the shipped binary over the upstream corpus
+  first, then read this file.** The candidate list is a list of ideas someone
+  had, and ideas do not go stale in a way anyone notices; a census is a
+  measurement, and it goes stale the moment upstream commits. v1.7.0 is the
+  clearest case yet — the census found a document sloth generates from that
+  slokit cannot parse at all (`victoria-metrics.yml`), a whole document kind
+  slokit rejects (`kind: AlertWindows`), and a construct refused in one dialect
+  while silently dropped in another, and **not one of the three was on the
+  candidate list or in any backlog**. So this milestone also turns the census
+  itself into a committed guard, which is the part that stops the next four
+  scoping passes from having to run it by hand: after PR 1, the corpus is a test
+  that fails when upstream and slokit disagree, and a scoping pass reads a
+  failing test instead of re-deriving a table. The candidate list is not
+  retired — it holds two lint rules and a cross-repo item, all three re-tested
+  above — but it has now failed to produce a theme four times running, and the
+  next pass should read it *second*.
 
 - **2026-08-07: sloth's own Kubernetes CRD became the v1.6.0 milestone, and it
   was never on the candidate list at all.** Like the v1.5.0 theme before it, it
