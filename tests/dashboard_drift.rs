@@ -70,6 +70,28 @@ fn committed_specs() -> Vec<(String, Spec)> {
     specs
 }
 
+/// The committed specs plus two synthetic ones whose periods are NOT 30d.
+///
+/// The synthetic pair is not decoration. Every committed spec declares
+/// `period: 30d`, which is `DEFAULT_PERIOD`, so `--period 30d` is a no-op on
+/// them and `scaled(30d, 30d)` returns the table unchanged — a matrix run over
+/// the committed set alone exercises the `--no-period-scaling` axis VACUOUSLY.
+/// Measured, not assumed: a control that made the resolution ignore
+/// `period_aware` outright left the matrix test green until these two were
+/// added, and only the named regression tests caught it.
+fn drift_specs() -> Vec<(String, Spec)> {
+    let mut specs = committed_specs();
+    specs.push((
+        "<synthetic: no period, so --period decides>".to_string(),
+        Spec::from_yaml(NO_PERIOD_SPEC).unwrap(),
+    ));
+    specs.push((
+        "<synthetic: period 7d>".to_string(),
+        Spec::from_yaml(SEVEN_DAY_SPEC).unwrap(),
+    ));
+    specs
+}
+
 /// The generator option space a `slokit generate` user can actually reach from
 /// the CLI, each entry labelled with the invocation that produces it.
 ///
@@ -191,8 +213,11 @@ fn every_dashboard_expression_references_only_recorded_series() {
 
 #[test]
 fn every_dashboard_expression_stays_recorded_under_every_generate_option() {
-    let specs = committed_specs();
-    assert!(!specs.is_empty(), "no committed specs discovered");
+    let specs = drift_specs();
+    assert!(
+        specs.len() > 2,
+        "only the two synthetic specs survived discovery; the committed set is empty"
+    );
     let matrix = option_matrix();
     assert!(
         matrix.len() >= 5,
