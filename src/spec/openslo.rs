@@ -278,6 +278,7 @@ fn merge_into_specs(specs: &mut Vec<Spec>, service: String, slos: Vec<SloSpec>) 
             service,
             labels: BTreeMap::new(),
             slos,
+            slo_plugins: None,
         }),
     }
 }
@@ -532,6 +533,7 @@ fn convert_slo(
             objective,
             description: doc.description.clone(),
             labels: labels.clone(),
+            plugins: None,
             sli,
             alerting: Alerting::default(),
             period: period.clone(),

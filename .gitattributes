@@ -1,0 +1,7 @@
+# The sloth upstream corpus is committed byte-for-byte and its sha256 is
+# pinned in tests/sloth_corpus.rs. Without this line, a checkout on Windows
+# under core.autocrlf=true rewrites every one of those files to CRLF and the
+# recorded hashes become unverifiable there (they would still pass on the
+# ubuntu CI runner, which is the worst version of that failure: green in CI,
+# red on a contributor's machine, for a reason no message names).
+tests/fixtures/sloth_corpus/** text eol=lf

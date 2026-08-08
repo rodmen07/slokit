@@ -174,6 +174,7 @@ pub(super) fn convert_slo(
             objective,
             description: doc.description.clone(),
             labels: Default::default(),
+            plugins: None,
             sli,
             alerting: Alerting::default(),
             period: period.clone(),
