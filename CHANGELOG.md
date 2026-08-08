@@ -6,7 +6,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
-## [Unreleased]
+## [1.6.0] - 2026-08-08
+
+sloth **Kubernetes CRD** input: `apiVersion: sloth.slok.dev/v1`,
+`kind: PrometheusServiceLevel` documents are now auto-detected and imported,
+and the dialect can be pinned with `--input-format sloth-crd`. That CRD is how
+sloth is used inside Kubernetes and it is the largest dialect in sloth's own
+`examples/` (five of twenty-one entries); slokit already *emitted* one from
+`generate --format operator` without being able to read one, and every slokit
+up to 1.5.0 dropped such a document into the native parser, which exited 1 with
+`spec error: document 1: missing field 'service'` — naming neither the dialect
+nor the fact that the input was a sloth format at all. Everything here is
+additive per [docs/SEMVER.md](docs/SEMVER.md) under the "the spec format only
+grows" clause: input that used to error now parses, no existing 1.x signature
+changes, native and OpenSLO imports are untouched, and generated Prometheus
+rule output for every existing spec is byte-identical to 1.5.0. No new
+dependency — `serde_norway` already parses these documents — so the lean core
+(`--no-default-features`) is untouched.
+
+This release also carries the dashboard/generator option fix below, found by a
+QA pass rather than by a user report: every window-scoped panel of a dashboard
+built beside `slokit generate --period 7d` or `--no-period-scaling` rendered
+"No data" against a real Prometheus, on every release from 1.0.0 to 1.5.0.
 
 ### Fixed
 
