@@ -83,6 +83,17 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
+## Unreleased on main
+
+- **Fixed: `slokit dashboard` ignored `generate`'s window-resolving options**,
+  so a dashboard built beside `slokit generate --period 7d` (or
+  `--no-period-scaling`) queried `slo:sli_error:ratio_rate<window>` series
+  those rules never record and every window-scoped panel rendered "No data".
+  `dashboard` now takes the same two flags, both commands resolve through one
+  seam, and `tests/dashboard_drift.rs` runs its two-source check across the
+  whole option space rather than only under defaults. Found by a QA pass on
+  the dashboard/generator contract, not by a user report.
+
 ## Next milestones
 
 Nothing is scheduled. The v1.5.0 OpenSLO-v1alpha-import milestone closed

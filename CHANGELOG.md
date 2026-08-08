@@ -6,6 +6,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
+## [Unreleased]
+
+### Fixed
+
+- **`slokit dashboard` no longer ignores how the rules were generated.** The
+  dashboard resolves each SLO's burn-rate windows to name the
+  `slo:sli_error:ratio_rate<window>` series its panels query, but it hardcoded
+  the 30d default period and always scaled — so a dashboard built beside
+  `slokit generate --period 7d` queried seven window-scoped series those rules
+  never record (`5m`, `30m`, `1h`, `2h`, `6h`, `1d`, `3d` against a recorded
+  `1m`/`7m`/`14m`/`28m`/`84m`/`336m`/`7d`), and `--no-period-scaling` produced
+  the same disagreement in the opposite direction. Every burn-rate panel and
+  the SLI timeseries panel rendered "No data" against a real Prometheus, with
+  nothing in either command's output saying so. `slokit dashboard` now accepts
+  `--period` and `--no-period-scaling` to match `slokit generate`, and both
+  commands resolve their windows through one shared seam.
+
+### Added
+
+- `dashboard::dashboard_value_with`, `dashboard::dashboard_json_with`, and
+  `dashboard::dashboards_json_with`, taking the `GenerateOptions` the rules
+  were generated with. The existing `dashboard_value` / `dashboard_json` /
+  `dashboards_json` are unchanged and equal to the `_with` forms under
+  `GenerateOptions::default()`, which `tests/dashboard_drift.rs` asserts
+  directly — additive per [docs/SEMVER.md](docs/SEMVER.md).
+- `slokit dashboard --period <window>` and `slokit dashboard
+  --no-period-scaling`, mirroring `slokit generate`.
+
 ## [1.5.0] - 2026-08-07
 
 OpenSLO **v1alpha** import: the OpenSLO importer now reads
