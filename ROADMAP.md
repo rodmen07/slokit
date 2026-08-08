@@ -1,10 +1,11 @@
 # slokit Roadmap
 
-Canonical planning document for slokit. Last updated 2026-08-08, when the
-v1.7.0 (sloth corpus parity) release prep closed that milestone; it had been
-scoped earlier the same day, and the v1.6.0 (sloth Kubernetes CRD input) prep
-closed the milestone before it. Backward-looking detail lives in
-[CHANGELOG.md](CHANGELOG.md); this file covers where the crate is going.
+Canonical planning document for slokit. Last updated 2026-08-08, when v1.8.0
+(import dialect parity) was scoped; the v1.7.0 (sloth corpus parity) release
+prep had closed the previous milestone earlier the same day, and the v1.6.0
+(sloth Kubernetes CRD input) prep the one before it. Backward-looking detail
+lives in [CHANGELOG.md](CHANGELOG.md); this file covers where the crate is
+going.
 
 This file is machine-checked. `tests/roadmap_truth.rs` reads it against
 `Cargo.toml` and `CHANGELOG.md` on every `cargo test` run and fails when they
@@ -95,12 +96,121 @@ generated rules` against a pinned Prometheus release, and `coverage`.
 
 ## Next milestones
 
-Nothing is scheduled. The v1.7.0 sloth-corpus-parity milestone closed with
-this release prep (the corpus contract plus the label-scalar fix and the
-`SLO_PLUGIN_CHAIN_DROPPED` lint shipped as PR #46, `kind: AlertWindows`
-catalogue input as PR #47; see the history table below), and the theme after
-it is not yet scoped — that is a product increment, not an implementation
-task.
+### v1.8.0 — import dialect parity
+
+slokit reads four input dialects today, each added in a different milestone:
+native slokit specs since 0.1.0, OpenSLO `v1` in 0.10.0, OpenSLO `v1alpha` in
+1.5.0, the sloth Kubernetes CRD in 1.6.0, plus `kind: AlertWindows` catalogues
+in 1.7.0. Every one of them was verified against sloth or against a native
+twin. **Nothing has ever checked that they agree with each other**, and the
+v1.7.0 corpus census — re-run to scope this milestone — found two constructs
+where the answer slokit gives depends on which dialect the document arrived
+in. In one of them the two shipped surfaces state opposite reasons for it, and
+one of those reasons is measurably false.
+
+**Grounding, run 2026-08-08 before this section was written.** The census
+needed no refresh: `slok/sloth@main` is
+`8a3be4fab79defa4448d09d91b48422615980b05`, the same commit
+`tests/sloth_corpus.rs:51` pins, so no upstream document has appeared since the
+corpus was committed; and `cargo test --all-features --test sloth_corpus` is
+8/8 green, so all 20 recorded dispositions still hold. Those 20 are 16 accepted
+(3 lossy, reporting `SLO_PLUGIN_CHAIN_DROPPED`) and 4 refused — and the four
+refusals are not one class:
+
+1. **A sloth SLO plugin chain is a hard error in the CRD dialect and a warning
+   in the native one.** `slokit lint -i
+   tests/fixtures/sloth_corpus/slo-plugin-getting-started.yml` exits 0 with two
+   `WARN … SLO_PLUGIN_CHAIN_DROPPED` rows; the CRD twin
+   `slo-plugin-k8s-getting-started.yml` (and `contrib-denominator-corrected.yaml`)
+   dies in the importer at `src/spec/sloth_crd.rs:199` and `:268`. The refusal
+   text argues the chain "would rewrite the generated rules, so it is refused
+   rather than dropped". Against slokit's own generator that is **false**, and
+   one command shows it: generating from the native document with the chain and
+   from the same document with `slo_plugins` and `plugins` deleted produced
+   **byte-identical** output, 8729 bytes each, `cmp` clean. The v1.6.0 refusal
+   and the v1.7.0 lint were each right about a different referent — sloth's
+   output versus slokit's — and shipped as a contradiction because no test
+   compares dialects.
+2. **`metadata.displayName` is noted on OpenSLO `v1alpha` import and dropped in
+   silence on `v1`.** The shared envelope parses it either way
+   (`src/spec/openslo.rs:322`), but only `src/spec/openslo/v1alpha.rs:128`
+   mentions it. Probed at the binary level on two documents differing in
+   nothing but `apiVersion`: the v1alpha run printed `metadata.displayName does
+   not map and was ignored`, the v1 run printed no note at all. This is the
+   open follow-up filed 2026-08-07 and it belongs to this theme rather than to
+   a loose one-line fix.
+
+The other two refusals are **deliberate and stay refusals**:
+`plugin-getting-started.yml` names an SLI plugin id (`getting_started_availability`)
+that is user-supplied Go code upstream, and slokit's `SliPlugin` registry is a
+closed set by the 0.9.0 design — refusing an unknown id is the fail-closed
+behaviour, not a gap. `plugin-k8s-getting-started.yml` writes the native
+`page_alert` spelling inside a CRD document; slokit's message names it as
+sloth's own bug and refuses rather than silently dropping that severity's
+labels, which is exactly what v1.6.0 chose.
+
+**Slices, dependency-ordered.**
+
+- **PR 1 (agent-doable): the CRD stops refusing what the native route lints.**
+  `src/spec/sloth_crd.rs` captures `spec.sloPlugins` and `slos[].plugins` into
+  the same fields the native parser fills, so the existing
+  `SLO_PLUGIN_CHAIN_DROPPED` lint reports them, and the two corpus rows move
+  `Refused` → `Accepted` with lint codes in `tests/sloth_corpus.rs`. The
+  byte-identity claim is **proven for the CRD route, not inherited** from the
+  native probe above: if generating from a CRD document with its chain is not
+  byte-identical to generating from the same document with the chain removed,
+  PR 1's premise is wrong and this milestone re-scopes instead of shipping. The
+  false half of the old refusal text is deleted rather than reworded.
+- **PR 2 (agent-doable): the parity contract, and the OpenSLO `v1` note.**
+  A committed `tests/dialect_parity.rs` running the shipped binary over one
+  matched document per dialect for every construct more than one importer can
+  receive, recording the disposition each gives; plus the `metadata.displayName`
+  note on the `v1` path, which closes the 2026-08-07 follow-up. The contract is
+  the durable half — the analogue of what `tests/sloth_corpus.rs` did for
+  upstream compatibility — because it turns the next asymmetry into a named
+  test failure rather than a census someone has to think to run.
+- **PR 3 (agent-doable): release prep and the cut**, under the standing release
+  delegation and its checklist.
+
+**Done when**, every clause checkable by build, test, CI or the registry:
+
+1. `tests/sloth_corpus.rs` records `Accepted` with
+   `lint_codes: &["SLO_PLUGIN_CHAIN_DROPPED"]` for both
+   `contrib-denominator-corrected.yaml` and `slo-plugin-k8s-getting-started.yml`,
+   and `cargo test --all-features --test sloth_corpus` is green: corpus
+   refusals fall 4 → 2, and the two that remain are the SLI-plugin pair.
+2. A committed test asserts, at the binary level, that a CRD document carrying
+   a plugin chain generates byte-identical rules to the same document with the
+   chain removed — the claim PR 1 rests on, run rather than assumed.
+3. `tests/dialect_parity.rs` fails by name when one dialect's disposition for a
+   covered construct is changed and the others are left alone; the perturbation
+   and the failing run are both quoted in PR 2's body.
+4. The OpenSLO `v1` route emits the `metadata.displayName` note: the same
+   document that printed none prints it, and deleting the note reddens the new
+   test.
+5. `cargo test --all-features` is green with every existing byte-identity and
+   OpenSLO test file **unchanged** except the two corpus rows in clause 1, so
+   no document that generates rules today generates different ones — the
+   additive-only clause of [docs/SEMVER.md](docs/SEMVER.md).
+6. `Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all read 1.8.0,
+   `## Current state:` here reads v1.8.0 with a history row to match,
+   `tests/roadmap_truth.rs` is green, all five required contexts are green on
+   the prep commit, and crates.io `newest_version` reads 1.8.0 afterwards.
+
+**Decisions this milestone takes, both overridable defaults (USER-ONLY to
+change, agent-doable as written).**
+
+- **D1.8-1: unify toward accept-and-lint, not toward fail-closed.** The
+  symmetric alternative — making the native route refuse a plugin chain the way
+  the CRD does — would turn three documents that generate rules today into hard
+  errors, which the 1.x additive-only guarantee forbids. So within 1.x there is
+  exactly one legal direction, and the real choice is whether to take it now or
+  hold uniform fail-closed for a hypothetical 2.0. Default: take it now; the
+  construct is already dropped on the native route and the lint already says so.
+- **D1.8-2: the SLI-plugin refusals stay.** They are the two remaining corpus
+  refusals and this milestone does not touch them, for the reasons above.
+  Default: leave both fail-closed and let the corpus record 18/20 accepted
+  rather than chase 20/20 by weakening a gate.
 
 ## Later / candidates (unscheduled)
 
