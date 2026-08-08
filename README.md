@@ -68,6 +68,10 @@ slokit export -i slos.yaml --format openslo > slos.openslo.yaml
 # (auto-detected too; see "sloth Kubernetes CRD input" below)
 slokit generate -i k8s-slos.yaml --input-format sloth-crd
 
+# Use sloth's burn-rate window catalogue for the SLO period instead of the
+# defaults (see "sloth alert-window catalogues" below)
+slokit generate -i slos.yaml --period 7d --alert-windows windows/7d.yaml
+
 # Print the spec JSON Schema (see "Editor integration" below)
 slokit schema
 ```
@@ -504,6 +508,53 @@ current-burn-rate metadata rule all follow the effective windows, so the
 generated rule set stays self-consistent. `slokit lint` warns when custom windows leave an enabled
 severity with no conditions (`NO_SEVERITY_WINDOWS`) or outgrow the SLO period
 (`PERIOD_TOO_SHORT`).
+
+### sloth alert-window catalogues (`kind: AlertWindows`)
+
+Where `alerting.windows` sets the conditions for **one SLO**, sloth's
+`kind: AlertWindows` document sets them for **one SLO period**, across every
+SLO that uses it. slokit reads those catalogues:
+
+```sh
+# One catalogue file...
+slokit generate -i slos.yaml --period 7d --alert-windows windows/7d.yaml
+
+# ...or a directory of them, one per period
+slokit generate -i slos.yaml --alert-windows windows/
+
+# The dashboard takes the same flag, and must: its panels query the series
+# those rules record, and the burn-rate window is part of the series name
+slokit dashboard -i slos.yaml --period 7d --alert-windows windows/7d.yaml
+
+# Read a catalogue to check it and see the factors it would apply
+slokit validate -i windows/7d.yaml
+# ok: windows/7d.yaml is a valid AlertWindows catalogue for 7d
+#     (page 1h/5m x13.44, page 6h/30m x3.5, ticket 1d/2h x1.4, ticket 3d/6h x0.98)
+```
+
+A catalogue states each condition as the share of the error budget it may burn
+over the long window; slokit states the same thing as a burn-rate multiplier,
+and the two are the same number:
+
+```text
+factor = (errorBudgetPercent / 100) x (sloPeriod / longWindow)
+```
+
+So sloth's own defaults, written out as a 30-day catalogue, come out as
+`14.4 / 6 / 3 / 1` — the table slokit already uses — and generate byte-identical
+rules to passing no catalogue at all.
+
+Four rules worth knowing:
+
+- **Precedence.** An SLO's own `alerting.windows` wins over a catalogue, which
+  wins over the default table.
+- **Catalogue windows are used verbatim**, never period-scaled again: the
+  catalogue already states the windows for its own period.
+- **A period no catalogue covers is an error**, naming the period and what the
+  set does cover, rather than a silent fall back to the defaults.
+- **Catalogues arrive on `--alert-windows`, not `-i`.** Passing one to `-i` on
+  a command that consumes specs is refused by name, because it carries no SLOs
+  and would otherwise generate an empty rules document.
 
 ## Stability and MSRV
 

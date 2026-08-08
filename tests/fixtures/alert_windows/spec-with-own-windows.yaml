@@ -1,0 +1,26 @@
+# A 7d SLO that sets its own `alerting.windows`. slokit has had that extension
+# since 0.7.0, and it stays the highest-precedence source: a catalogue for the
+# same period must NOT override it. The factors here (99 and 88) are
+# deliberately unlike anything the upstream 7d catalogue produces
+# (13.44 / 3.5 / 1.4 / 0.98), so "the catalogue won" and "the spec won" cannot
+# be confused for each other in the emitted rules.
+version: "prometheus/v1"
+service: own-windows
+slos:
+  - name: weekly-availability
+    objective: 99.9
+    period: 7d
+    sli:
+      events:
+        error_query: sum(rate(http_requests_total{job="own",code=~"5.."}[{{.window}}]))
+        total_query: sum(rate(http_requests_total{job="own"}[{{.window}}]))
+    alerting:
+      windows:
+        - severity: page
+          long: 2h
+          short: 10m
+          factor: 99
+        - severity: ticket
+          long: 2d
+          short: 4h
+          factor: 88

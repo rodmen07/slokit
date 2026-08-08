@@ -9,10 +9,30 @@ From 1.0.0, slokit follows the semver guarantees documented in
 ## [Unreleased]
 
 Toward **v1.7.0, sloth corpus parity**: the whole of `slok/sloth`'s `examples/`
-tree is now committed as a pinned contract, and two of the three defects that
+tree is now committed as a pinned contract, and all three of the defects that
 census found are fixed.
 
 ### Added
+
+- **`kind: AlertWindows` catalogue input, via `--alert-windows <path>` on
+  `generate` and `dashboard`.** This is how sloth supplies a burn-rate window
+  table for one SLO period instead of the 30-day SRE Workbook defaults, and it
+  was the last whole sloth document kind slokit could not read: both
+  catalogues upstream ships died inside the CRD importer with `sloth-crd: no
+  kind: PrometheusServiceLevel documents in input`, because auto-detection
+  routed on the `apiVersion` group alone and nothing there knew the kind.
+  A catalogue's `errorBudgetPercent` maps onto slokit's burn-rate factor as
+  `(percent / 100) x (sloPeriod / longWindow)`, so sloth's own defaults written
+  out as a 30-day catalogue reproduce `MwmbrConfig::sre_default()` exactly and
+  generate byte-identical rules to passing no catalogue at all — the property
+  `tests/alert_windows_cli.rs` pins. The path may be one file or a directory of
+  them; catalogue windows are applied verbatim (never period-scaled again), an
+  SLO's own `alerting.windows` still wins, and an SLO period no catalogue
+  covers is an error naming the period rather than a silent fall back to the
+  defaults. `slokit validate -i <catalogue>` reads one and reports the factors
+  it would apply. Library equivalent: the additive
+  `GenerateOptions::alert_windows` and the new `slokit::spec::alert_windows`
+  module.
 
 - **The sloth upstream corpus is a committed contract.** All 20 documents of
   `slok/sloth@8a3be4f`'s `examples/` tree live under

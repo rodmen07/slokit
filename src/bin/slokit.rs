@@ -12,6 +12,7 @@ use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
 use slokit::dashboard::dashboards_json_with;
 use slokit::generate::{generate_all, generate_rules_with, GenerateOptions};
 use slokit::simulate::simulate;
+use slokit::spec::alert_windows::{self, AlertWindowsCatalogue, AlertWindowsSet};
 use slokit::spec::{openslo, sloth_crd, validate_all, Lint, LintLevel, Spec, SCHEMA_JSON};
 use slokit::{BurnRate, MwmbrConfig, Objective, Slo, Window};
 
@@ -46,17 +47,33 @@ enum Dialect {
     Slokit,
     Openslo,
     SlothCrd,
+    AlertWindows,
 }
 
-/// Load one spec (file) or many (directory of `*.yaml`/`*.yml`), honoring the
-/// input format flag. Without an explicit format, each file is auto-detected
-/// from its first document's top-level `apiVersion`: `openslo/...` is imported
-/// as OpenSLO, `sloth.slok.dev/...` as a sloth Kubernetes CRD, anything else
+/// Everything an `--input` path yielded.
+///
+/// Two of sloth's document kinds share one `apiVersion` group, and only one of
+/// them is a spec: `kind: AlertWindows` is a burn-rate window catalogue, so it
+/// comes back beside the specs rather than as one. Commands that consume specs
+/// go through [`load_specs`], which refuses a catalogue by name instead of
+/// counting it as zero specs.
+struct LoadedInput {
+    specs: Vec<Spec>,
+    /// Catalogues read from `--input`, with the file each came from.
+    catalogues: Vec<(PathBuf, AlertWindowsCatalogue)>,
+}
+
+/// Load one file, or a directory of `*.yaml`/`*.yml`, honoring the input
+/// format flag. Without an explicit format, each file is auto-detected from
+/// its first document: `openslo/...` is imported as OpenSLO, `sloth.slok.dev/`
+/// with `kind: AlertWindows` is read as a burn-rate window catalogue,
+/// `sloth.slok.dev/...` otherwise as a sloth Kubernetes CRD, anything else
 /// parses as native slokit specs. Either way a file may be a multi-document
 /// YAML stream (sloth's `multifile.yml` layout, or the stream `slokit export`
 /// writes), and every document is loaded. Import notes are printed to stderr.
-fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
+fn load_input(input: &InputArgs) -> Result<LoadedInput> {
     let mut specs = Vec::new();
+    let mut catalogues = Vec::new();
     for file in spec_files(&input.input)? {
         let contents = std::fs::read_to_string(&file)
             .with_context(|| format!("reading {}", file.display()))?;
@@ -65,6 +82,9 @@ fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
             Some(InputFormat::SlothCrd) => Dialect::SlothCrd,
             Some(InputFormat::Slokit) => Dialect::Slokit,
             None if openslo::is_openslo(&contents) => Dialect::Openslo,
+            // Before the CRD test: that one matches on the `apiVersion` group
+            // alone, which a catalogue also declares.
+            None if alert_windows::is_alert_windows(&contents) => Dialect::AlertWindows,
             None if sloth_crd::is_sloth_crd(&contents) => Dialect::SlothCrd,
             None => Dialect::Slokit,
         };
@@ -79,6 +99,14 @@ fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
                     file.display()
                 )
             })?),
+            Dialect::AlertWindows => {
+                for catalogue in alert_windows::from_yaml(&contents).with_context(|| {
+                    format!("reading alert-window catalogues from {}", file.display())
+                })? {
+                    catalogues.push((file.clone(), catalogue));
+                }
+                None
+            }
             Dialect::Slokit => None,
         };
         match import {
@@ -88,13 +116,73 @@ fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
                 }
                 specs.extend(import.specs);
             }
+            None if dialect == Dialect::AlertWindows => {}
             None => specs.extend(
                 Spec::from_yaml_stream(&contents)
                     .with_context(|| format!("loading specs from {}", file.display()))?,
             ),
         }
     }
-    Ok(specs)
+    Ok(LoadedInput { specs, catalogues })
+}
+
+/// The specs `--input` yielded, refusing a `kind: AlertWindows` catalogue by
+/// name.
+///
+/// A catalogue is not an SLO spec and it does not reach generation through
+/// `--input`; letting it through as "zero specs" would make `slokit generate
+/// -i windows.yaml` print an empty rules document and exit 0, which is the
+/// shipped-no-op shape this repo refuses. `slokit validate` reads catalogues
+/// through [`load_input`] instead, so checking one is still possible.
+fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
+    let loaded = load_input(input)?;
+    if let Some((path, catalogue)) = loaded.catalogues.first() {
+        bail!(
+            "{} is a sloth alert-window catalogue (kind: {}, sloPeriod {}), not an SLO spec; \
+             pass it to `slokit generate` or `slokit dashboard` with --alert-windows, and pass \
+             SLO specs with --input (`slokit validate -i` reads a catalogue to check it)",
+            path.display(),
+            alert_windows::KIND,
+            catalogue.slo_period.prometheus(),
+        );
+    }
+    Ok(loaded.specs)
+}
+
+/// Load the catalogues `--alert-windows` names and reject a set that does not
+/// cover every SLO period in `specs`.
+///
+/// The library seam that applies a catalogue
+/// ([`slokit::generate::resolve_mwmbr`]) is infallible by design — the
+/// dashboard shares it and returns no `Result` — so it falls back to the
+/// default table for a period no catalogue covers. That is the right
+/// resolution rule and the wrong user experience: a mistyped `sloPeriod` would
+/// leave the default thresholds in place while the flag looked applied. The
+/// CLI is where that becomes an error.
+fn load_alert_windows(
+    path: Option<&Path>,
+    specs: &[Spec],
+    opts: &GenerateOptions,
+) -> Result<AlertWindowsSet> {
+    let Some(path) = path else {
+        return Ok(AlertWindowsSet::new());
+    };
+    let set = AlertWindowsSet::load(path)
+        .with_context(|| format!("loading alert-window catalogues from {}", path.display()))?;
+    let uncovered = set.uncovered_periods(specs, opts.default_period)?;
+    if !uncovered.is_empty() {
+        let missing: Vec<String> = uncovered.iter().map(|w| w.prometheus()).collect();
+        let have: Vec<String> = set.periods().iter().map(|w| w.prometheus()).collect();
+        bail!(
+            "--alert-windows {} has no catalogue for SLO period{} {} (it covers {}); \
+             those SLOs would silently keep the default burn-rate windows",
+            path.display(),
+            if missing.len() == 1 { "" } else { "s" },
+            missing.join(", "),
+            have.join(", "),
+        );
+    }
+    Ok(set)
 }
 
 #[derive(Parser)]
@@ -215,6 +303,13 @@ struct GenerateArgs {
     /// them to each SLO's period.
     #[arg(long)]
     no_period_scaling: bool,
+    /// sloth `kind: AlertWindows` catalogue file, or a directory of them.
+    /// An SLO whose period matches a catalogue uses that catalogue's
+    /// burn-rate windows instead of the default table; an SLO with its own
+    /// `alerting.windows` still wins. Errors when a loaded SLO's period has
+    /// no catalogue.
+    #[arg(long, value_name = "PATH")]
+    alert_windows: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -251,6 +346,11 @@ struct DashboardArgs {
     /// them to each SLO's period. Must match `slokit generate`.
     #[arg(long)]
     no_period_scaling: bool,
+    /// sloth `kind: AlertWindows` catalogue file, or a directory of them.
+    /// Must match `slokit generate`: the panels query the series those rules
+    /// record, and the burn-rate window is part of the series name.
+    #[arg(long, value_name = "PATH")]
+    alert_windows: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -379,6 +479,7 @@ fn run_dashboard(args: DashboardArgs) -> Result<()> {
     opts.default_period = Window::parse(&args.period)?;
     opts.mwmbr = MwmbrConfig::sre_default();
     opts.period_aware = !args.no_period_scaling;
+    opts.alert_windows = load_alert_windows(args.alert_windows.as_deref(), &specs, &opts)?;
     write_output(
         dashboards_json_with(&specs, &opts)?,
         args.output,
@@ -498,6 +599,7 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
     opts.default_period = Window::parse(&args.period)?;
     opts.mwmbr = MwmbrConfig::sre_default();
     opts.period_aware = !args.no_period_scaling;
+    opts.alert_windows = load_alert_windows(args.alert_windows.as_deref(), &specs, &opts)?;
 
     let rendered = match args.format {
         // All specs merge into one rules document.
@@ -556,17 +658,57 @@ fn operator_resource_names(specs: &[Spec], flag_name: Option<&str>) -> Result<Ve
     Ok(names)
 }
 
+/// Render a burn-rate factor the way the generated rules render it.
+///
+/// The same round-to-10-places-then-trim rule as `generate`'s internal
+/// `fmt_num`, restated here because that helper is crate-private and this
+/// binary is a separate crate. Deriving `13.44 x 7d/1h` in `f64` lands on
+/// `1.4000000000000001` for the ticket-quick condition, and a `validate` line
+/// that printed that while the emitted rule said `1.4` would look like two
+/// different numbers.
+fn fmt_factor(x: f64) -> String {
+    let s = format!("{x:.10}");
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
 fn run_validate(args: ValidateArgs) -> Result<()> {
-    let specs = load_specs(&args.input)?;
+    // `validate` answers "can slokit read this document", so it is the one
+    // command that reads a `kind: AlertWindows` catalogue through --input.
+    // The parse is the check: an out-of-range budget percent, an unparseable
+    // window or a missing block all fail here, and the reported factors are
+    // the ones `generate --alert-windows` would apply.
+    let loaded = load_input(&args.input)?;
     // Per-spec validation plus cross-spec checks (duplicate service/SLO pairs
     // would collide when the specs' rules are merged into one file).
-    validate_all(&specs)?;
-    for spec in &specs {
+    validate_all(&loaded.specs)?;
+    for spec in &loaded.specs {
         println!(
             "ok: '{}' is valid ({} SLO{})",
             spec.service,
             spec.slos.len(),
             if spec.slos.len() == 1 { "" } else { "s" }
+        );
+    }
+    for (path, catalogue) in &loaded.catalogues {
+        let factors: Vec<String> = catalogue
+            .windows
+            .iter()
+            .map(|w| {
+                format!(
+                    "{} {}/{} x{}",
+                    w.severity.label(),
+                    w.long.prometheus(),
+                    w.short.prometheus(),
+                    fmt_factor(w.factor)
+                )
+            })
+            .collect();
+        println!(
+            "ok: {} is a valid {} catalogue for {} ({})",
+            path.display(),
+            alert_windows::KIND,
+            catalogue.slo_period.prometheus(),
+            factors.join(", "),
         );
     }
     Ok(())

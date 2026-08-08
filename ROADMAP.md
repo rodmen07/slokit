@@ -102,8 +102,19 @@ Merged since v1.6.0 and not yet released. Kept in step with
   silently dropped sloth SLO plugin chain is reported by a lint rule on the
   native route (defect 3). Done-when clauses 1, 2 and 3 hold. Clause 3's own
   count was corrected in this PR — see the note under the census table.
-  **PR 2 (`kind: AlertWindows` catalogue input, defect 2) and PR 3 (release
-  prep and the cut) are what remain before v1.7.0 ships.**
+- **v1.7.0 PR 2 — `kind: AlertWindows` catalogue input.** New sibling module
+  `src/spec/alert_windows.rs`, the additive `GenerateOptions::alert_windows`
+  option, and `--alert-windows <path>` on both `generate` and `dashboard` (both,
+  because the two must resolve the same windows or every window-scoped panel
+  queries a series no rule records). The two upstream catalogues flip from
+  `Refused` to `Accepted` in `tests/sloth_corpus.rs`'s contract table, which is
+  the only change to that table. **Done-when clause 4 holds:** a 30-day
+  catalogue carrying sloth's own defaults generates byte-identical rules to no
+  catalogue at all, and both upstream catalogues import with the factors this
+  milestone's scoping computed (`7d.yaml` 13.44 / 3.5 / 1.4 / 0.98,
+  `custom-30d.yaml` 14.4 / 4.8 / 3 / 1), re-derived at the binary rather than
+  inherited. **PR 3 (release prep and the cut) is what remains before v1.7.0
+  ships.**
 
 ## Next milestones
 

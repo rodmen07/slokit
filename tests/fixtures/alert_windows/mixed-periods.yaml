@@ -1,0 +1,22 @@
+# Two SLOs with DIFFERENT per-SLO periods, so a catalogue set that covers one
+# of them leaves the other on the default table. That is the case the CLI turns
+# into an error: the library seam falls back silently by design (the dashboard
+# shares it and cannot return a Result), so a mistyped `sloPeriod` would look
+# applied while half the alerts kept the defaults.
+version: "prometheus/v1"
+service: mixed-periods
+slos:
+  - name: weekly-availability
+    objective: 99.9
+    period: 7d
+    sli:
+      events:
+        error_query: sum(rate(http_requests_total{job="mixed",code=~"5.."}[{{.window}}]))
+        total_query: sum(rate(http_requests_total{job="mixed"}[{{.window}}]))
+  - name: monthly-availability
+    objective: 99.9
+    period: 30d
+    sli:
+      events:
+        error_query: sum(rate(http_requests_total{job="mixed",code=~"5.."}[{{.window}}]))
+        total_query: sum(rate(http_requests_total{job="mixed"}[{{.window}}]))

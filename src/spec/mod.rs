@@ -15,7 +15,12 @@
 //! [`sloth_crd`] for sloth's Kubernetes custom resource
 //! (`apiVersion: sloth.slok.dev/v1`, `kind: PrometheusServiceLevel`). Both
 //! return an [`openslo::Import`].
+//!
+//! A third sloth dialect is read but is not a spec at all: [`alert_windows`]
+//! parses `kind: AlertWindows` catalogues, which supply a burn-rate window
+//! table for one SLO period rather than describing an SLO.
 
+pub mod alert_windows;
 mod import;
 mod lint;
 pub mod openslo;
