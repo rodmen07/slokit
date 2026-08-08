@@ -1,0 +1,32 @@
+# A catalogue that must NOT validate. It exists so "slokit accepts
+# kind: AlertWindows documents" is a claim with a false half: an acceptance
+# that came from ignoring the document would accept this one too.
+#
+# Two independent defects, both of which change the emitted thresholds
+# silently if they are let through:
+#   - page.quick.errorBudgetPercent is 0, which makes the factor 0 (an alert
+#     that fires on any error at all);
+#   - ticket.slow.shortWindow (2d) is LONGER than its longWindow (1d), so the
+#     confirmation window is wider than the window it confirms.
+apiVersion: sloth.slok.dev/v1
+kind: AlertWindows
+spec:
+  sloPeriod: 30d
+  page:
+    quick:
+      errorBudgetPercent: 0
+      shortWindow: 5m
+      longWindow: 1h
+    slow:
+      errorBudgetPercent: 5
+      shortWindow: 30m
+      longWindow: 6h
+  ticket:
+    quick:
+      errorBudgetPercent: 10
+      shortWindow: 2h
+      longWindow: 1d
+    slow:
+      errorBudgetPercent: 10
+      shortWindow: 2d
+      longWindow: 1d

@@ -8,6 +8,12 @@
 //! disposition slokit gives it. A change in any of those three is a test
 //! failure with a name, not a surprise in the next release.
 //!
+//! **Updated by v1.7.0 PR 2.** The two `windows/` rows moved from `Refused`
+//! to `Accepted` when `kind: AlertWindows` became readable. The table is the
+//! record of that: what changed is two words here, and everything else about
+//! the corpus — the paths, the hashes, the other 18 dispositions — is asserted
+//! to be unchanged by the same run.
+//!
 //! **Why the fixtures live in a subdirectory.** `tests/schema.rs`'s
 //! `native_fixture_files()` (`tests/schema.rs:531`) reads `tests/fixtures`
 //! **non-recursively** and validates everything it finds against the native
@@ -213,15 +219,27 @@ const CORPUS: &[Entry] = &[
     Entry {
         path: "windows/7d.yaml",
         sha256: "dca7a946901575a1b3f4beb95ad7387bc50f31251a3aa5bc5f0859abf478a56f",
-        // `kind: AlertWindows` is a whole sloth document kind slokit cannot
-        // read. v1.7.0 PR 2 adds it and flips this row to `Accepted`.
-        disposition: Refused("no kind: PrometheusServiceLevel documents in input"),
+        // FLIPPED by v1.7.0 PR 2, which added `kind: AlertWindows`. It was
+        // `Refused("no kind: PrometheusServiceLevel documents in input")`:
+        // auto-detection routed on the `apiVersion` group alone, handed the
+        // document to the CRD importer, and nothing there knew the kind.
+        // `validate` now reads it as a burn-rate window catalogue and reports
+        // the factors it would apply (13.44 / 3.5 / 1.4 / 0.98); the rules
+        // those factors produce are asserted in `tests/alert_windows_cli.rs`.
+        //
+        // The empty `lint_codes` is a claim, not a default: nothing in this
+        // document is discarded. A catalogue is applied whole or refused —
+        // every one of its four blocks is required, so there is no partial
+        // acceptance to report.
+        disposition: Accepted,
         lint_codes: &[],
     },
     Entry {
         path: "windows/custom-30d.yaml",
         sha256: "b9c08ec3efe5b218e13283f6c3460aedcd4d87004550866508c114f8018fb566",
-        disposition: Refused("no kind: PrometheusServiceLevel documents in input"),
+        // Flipped by the same PR; factors 14.4 / 4.8 / 3 / 1 over the
+        // 30m / 3h / 12h / 36h lookbacks it declares.
+        disposition: Accepted,
         lint_codes: &[],
     },
 ];

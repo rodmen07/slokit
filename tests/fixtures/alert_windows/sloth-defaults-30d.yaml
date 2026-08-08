@@ -1,0 +1,36 @@
+# sloth's OWN default burn-rate windows, written out as a `kind: AlertWindows`
+# catalogue. Hand-written (upstream ships no such file: the defaults are
+# compiled into sloth), which is exactly what makes it the control for v1.7.0
+# done-when clause 4.
+#
+# Every percentage here maps through
+#
+#     factor = (errorBudgetPercent / 100) x (sloPeriod / longWindow)
+#
+# onto slokit's own `MwmbrConfig::sre_default()` (14.4 / 6 / 3 / 1), so
+# generating with this catalogue must produce BYTE-IDENTICAL rules to
+# generating with no catalogue at all. If the arithmetic, the ordering, or the
+# "catalogue windows are used verbatim" rule ever drifts, that equality is what
+# breaks.
+apiVersion: sloth.slok.dev/v1
+kind: AlertWindows
+spec:
+  sloPeriod: 30d
+  page:
+    quick:
+      errorBudgetPercent: 2
+      shortWindow: 5m
+      longWindow: 1h
+    slow:
+      errorBudgetPercent: 5
+      shortWindow: 30m
+      longWindow: 6h
+  ticket:
+    quick:
+      errorBudgetPercent: 10
+      shortWindow: 2h
+      longWindow: 1d
+    slow:
+      errorBudgetPercent: 10
+      shortWindow: 6h
+      longWindow: 3d

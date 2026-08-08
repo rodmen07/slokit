@@ -30,6 +30,7 @@ use std::path::PathBuf;
 use serde_json::Value;
 use slokit::dashboard::dashboard_value_with;
 use slokit::generate::{generate_rules_with, GenerateOptions};
+use slokit::spec::alert_windows::AlertWindowsSet;
 use slokit::spec::Spec;
 use slokit::Window;
 
@@ -132,7 +133,45 @@ fn option_matrix() -> Vec<(&'static str, GenerateOptions)> {
     both.period_aware = false;
     out.push(("generate --period 7d --no-period-scaling", both));
 
+    // v1.7.0 PR 2 added a third axis to window resolution, and it is the one
+    // that moves the LOOKBACKS rather than the factors: a catalogue's windows
+    // are used verbatim, so `custom-30d.yaml` puts `30m`/`3h`/`12h`/`36h` into
+    // the series names at a period where every other entry above resolves to
+    // `1h`/`6h`/`1d`/`3d`. A guard pinned to the pre-catalogue option space
+    // would be blind to exactly the case the new option exists to serve.
+    let mut catalogue_30d = GenerateOptions::default();
+    catalogue_30d.alert_windows = upstream_catalogues();
+    out.push((
+        "generate --alert-windows tests/fixtures/sloth_corpus/windows",
+        catalogue_30d,
+    ));
+
+    let mut catalogue_7d = GenerateOptions::default();
+    catalogue_7d.default_period = Window::days(7);
+    catalogue_7d.alert_windows = upstream_catalogues();
+    out.push((
+        "generate --period 7d --alert-windows tests/fixtures/sloth_corpus/windows",
+        catalogue_7d,
+    ));
+
     out
+}
+
+/// Both upstream `kind: AlertWindows` catalogues (7d and 30d), loaded from the
+/// committed corpus directory rather than hand-built, so the matrix exercises
+/// the same bytes `tests/sloth_corpus.rs` pins.
+fn upstream_catalogues() -> AlertWindowsSet {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sloth_corpus/windows");
+    let set = AlertWindowsSet::load(&dir)
+        .unwrap_or_else(|e| panic!("loading catalogues from {}: {e}", dir.display()));
+    assert_eq!(
+        set.len(),
+        2,
+        "expected the 7d and 30d upstream catalogues in {}; a short load would make \
+         the catalogue rows of this matrix silently equal to the default ones",
+        dir.display()
+    );
+    set
 }
 
 /// Every `slo:` metric name referenced by any expression in `value`, found by

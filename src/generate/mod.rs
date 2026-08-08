@@ -22,6 +22,7 @@ use crate::burn_rate::MwmbrConfig;
 use crate::error::{Result, SlokitError};
 use crate::sli::Sli;
 use crate::slo::Slo;
+use crate::spec::alert_windows::AlertWindowsSet;
 use crate::spec::plugin::SliPluginRegistry;
 use crate::spec::{SloSpec, Spec, DEFAULT_PERIOD};
 use crate::window::Window;
@@ -51,6 +52,12 @@ pub struct GenerateOptions {
     /// default). With scaling off, every SLO uses `mwmbr`'s windows verbatim,
     /// which are only meaningful for 30-day periods.
     pub period_aware: bool,
+    /// sloth `kind: AlertWindows` catalogues, keyed by SLO period (empty by
+    /// default). An SLO whose resolved period has a catalogue uses that
+    /// catalogue's windows verbatim, in place of `mwmbr` and its scaling; an
+    /// SLO with its own `alerting.windows` still wins over both. See
+    /// [`resolve_mwmbr`] and [`crate::spec::alert_windows`].
+    pub alert_windows: AlertWindowsSet,
     /// The registry used to resolve `sli.plugin` SLIs (defaults to slokit's
     /// built-in plugins). Wrapped in an [`Arc`] because `GenerateOptions` is
     /// `Clone` and a boxed-trait registry is not.
@@ -63,6 +70,7 @@ impl Default for GenerateOptions {
             default_period: DEFAULT_PERIOD,
             mwmbr: MwmbrConfig::sre_default(),
             period_aware: true,
+            alert_windows: AlertWindowsSet::new(),
             plugins: Arc::new(SliPluginRegistry::with_builtins()),
         }
     }
@@ -265,8 +273,13 @@ pub fn generate_rules_with(spec: &Spec, opts: &GenerateOptions) -> Result<RuleSe
 }
 
 /// The effective burn-rate configuration for one SLO under `opts`: explicit
-/// spec windows win, then the option table scaled to the SLO's period, then
-/// the option table verbatim.
+/// spec windows win, then a loaded `kind: AlertWindows` catalogue for the
+/// SLO's period, then the option table scaled to that period, then the option
+/// table verbatim.
+///
+/// A catalogue's windows are applied VERBATIM rather than scaled: a catalogue
+/// states the windows for its own `sloPeriod`, so scaling them again would
+/// correct twice for a difference its author already accounted for.
 ///
 /// This is a SEAM, not a convenience: the [dashboard](crate::dashboard) panels
 /// query the very series these windows name, so the two must resolve
@@ -285,8 +298,11 @@ pub(crate) fn resolve_mwmbr(
 ) -> MwmbrConfig {
     match custom {
         Some(custom) => custom,
-        None if opts.period_aware => opts.mwmbr.scaled(DEFAULT_PERIOD, period),
-        None => opts.mwmbr.clone(),
+        None => match opts.alert_windows.for_period(period) {
+            Some(catalogue) => catalogue.clone(),
+            None if opts.period_aware => opts.mwmbr.scaled(DEFAULT_PERIOD, period),
+            None => opts.mwmbr.clone(),
+        },
     }
 }
 
