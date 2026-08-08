@@ -14,17 +14,23 @@ use serde_json::{json, Value};
 
 use crate::burn_rate::MwmbrConfig;
 use crate::error::{Result, SlokitError};
-use crate::spec::{SloSpec, Spec, DEFAULT_PERIOD};
+use crate::generate::GenerateOptions;
+use crate::spec::{SloSpec, Spec};
 use crate::window::Window;
 
-/// The effective burn-rate configuration for one SLO, mirroring the
-/// generator's resolution: custom `alerting.windows` win, else the default
-/// table scaled to the SLO period.
-fn resolved_mwmbr(slo: &SloSpec) -> MwmbrConfig {
-    slo.custom_mwmbr().ok().flatten().unwrap_or_else(|| {
-        let period = slo.resolve_period(DEFAULT_PERIOD).unwrap_or(DEFAULT_PERIOD);
-        MwmbrConfig::sre_default_for_period(period)
-    })
+/// The effective burn-rate configuration for one SLO under the same options
+/// the rule generator ran with, resolved through the generator's own seam
+/// ([`crate::generate::resolve_mwmbr`]) rather than re-derived here.
+///
+/// Re-deriving it is exactly what used to go wrong: this function hardcoded
+/// the 30d default period and always scaled, so `slokit generate --period 7d`
+/// or `--no-period-scaling` produced rules whose window-scoped series names no
+/// panel here referenced, and every burn panel rendered "No data".
+fn resolved_mwmbr(slo: &SloSpec, opts: &GenerateOptions) -> MwmbrConfig {
+    let period = slo
+        .resolve_period(opts.default_period)
+        .unwrap_or(opts.default_period);
+    crate::generate::resolve_mwmbr(slo.custom_mwmbr().ok().flatten(), period, opts)
 }
 
 /// The shortest lookback window this SLO's rules record, which is the metric
@@ -37,8 +43,28 @@ fn sli_panel_window(mwmbr: &MwmbrConfig) -> Window {
         .unwrap_or(Window::minutes(5))
 }
 
-/// Build the Grafana dashboard as a [`serde_json::Value`].
+/// Build the Grafana dashboard as a [`serde_json::Value`], using default
+/// generation options.
+///
+/// Equivalent to [`dashboard_value_with`] with
+/// [`GenerateOptions::default`]. Use the `_with` form whenever the rules were
+/// generated with non-default options (`slokit generate --period`,
+/// `--no-period-scaling`), or the panels will query series those rules do not
+/// record.
 pub fn dashboard_value(spec: &Spec) -> Value {
+    dashboard_value_with(spec, &GenerateOptions::default())
+}
+
+/// Build the Grafana dashboard as a [`serde_json::Value`] for rules generated
+/// with `opts`.
+///
+/// The dashboard's panels query the `slo:` series
+/// [`generate_rules_with`](crate::generate::generate_rules_with) records, and
+/// the window-scoped ones (`slo:sli_error:ratio_rate<window>`) carry the
+/// resolved burn-rate window in their NAME. Passing the same options both
+/// commands ran with is therefore what keeps the dashboard pointed at series
+/// that exist.
+pub fn dashboard_value_with(spec: &Spec, opts: &GenerateOptions) -> Value {
     let mut panels = Vec::new();
     let mut id: i64 = 1;
     let mut y: i64 = 0;
@@ -46,7 +72,7 @@ pub fn dashboard_value(spec: &Spec) -> Value {
     for slo in &spec.slos {
         let sloth_id = slo.sloth_id(&spec.service);
         let sel = format!("{{sloth_id=\"{sloth_id}\"}}");
-        let mwmbr = resolved_mwmbr(slo);
+        let mwmbr = resolved_mwmbr(slo, opts);
         let sli_window = sli_panel_window(&mwmbr).prometheus();
 
         panels.push(row_panel(id, &slo.name, y));
@@ -109,18 +135,36 @@ pub fn dashboard_value(spec: &Spec) -> Value {
     })
 }
 
-/// Build the Grafana dashboard as pretty-printed JSON.
+/// Build the Grafana dashboard as pretty-printed JSON, using default
+/// generation options.
 pub fn dashboard_json(spec: &Spec) -> Result<String> {
-    serde_json::to_string_pretty(&dashboard_value(spec))
+    dashboard_json_with(spec, &GenerateOptions::default())
+}
+
+/// Build the Grafana dashboard as pretty-printed JSON for rules generated with
+/// `opts`. See [`dashboard_value_with`].
+pub fn dashboard_json_with(spec: &Spec, opts: &GenerateOptions) -> Result<String> {
+    serde_json::to_string_pretty(&dashboard_value_with(spec, opts))
         .map_err(|e| SlokitError::Spec(e.to_string()))
 }
 
 /// Build dashboards for one or many specs: a single spec renders one dashboard
-/// object, multiple specs render a JSON array of dashboards.
+/// object, multiple specs render a JSON array of dashboards. Uses default
+/// generation options.
 pub fn dashboards_json(specs: &[Spec]) -> Result<String> {
+    dashboards_json_with(specs, &GenerateOptions::default())
+}
+
+/// Build dashboards for one or many specs for rules generated with `opts`.
+/// See [`dashboard_value_with`].
+pub fn dashboards_json_with(specs: &[Spec], opts: &GenerateOptions) -> Result<String> {
     let out = match specs {
-        [one] => dashboard_value(one),
-        many => Value::Array(many.iter().map(dashboard_value).collect()),
+        [one] => dashboard_value_with(one, opts),
+        many => Value::Array(
+            many.iter()
+                .map(|spec| dashboard_value_with(spec, opts))
+                .collect(),
+        ),
     };
     serde_json::to_string_pretty(&out).map_err(|e| SlokitError::Spec(e.to_string()))
 }

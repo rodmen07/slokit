@@ -7,9 +7,20 @@
 //! Prometheus, and this suite fails instead.
 //!
 //! Both sources are the real artifacts: the dashboard side walks
-//! [`slokit::dashboard::dashboard_value`] output, and the recorded side parses
-//! the YAML that [`slokit::generate::generate_rules`] renders (the same bytes
-//! `slokit generate` writes), not any internal intermediate.
+//! [`slokit::dashboard::dashboard_value_with`] output, and the recorded side
+//! parses the YAML that [`slokit::generate::generate_rules_with`] renders (the
+//! same bytes `slokit generate` writes), not any internal intermediate.
+//!
+//! **The guard runs across the OPTION SPACE, not only under default options.**
+//! The window-scoped series carry the resolved burn-rate window in their NAME
+//! (`slo:sli_error:ratio_rate<window>`), so the two sides agree only while they
+//! resolve the same windows — and the resolution reads `GenerateOptions`. A
+//! guard pinned to `GenerateOptions::default()` was blind to exactly that: it
+//! stayed green while `slokit generate --period 7d` and `slokit dashboard`
+//! disagreed about all seven window-scoped series, and `--no-period-scaling`
+//! disagreed about the same seven in the opposite direction. Each of those two
+//! defects has its own named regression test below; the matrix test is what
+//! keeps a third one from being introduced by a future option.
 
 #![cfg(feature = "dashboard")]
 
@@ -17,9 +28,10 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use serde_json::Value;
-use slokit::dashboard::dashboard_value;
-use slokit::generate::generate_rules;
+use slokit::dashboard::dashboard_value_with;
+use slokit::generate::{generate_rules_with, GenerateOptions};
 use slokit::spec::Spec;
+use slokit::Window;
 
 /// Every committed spec the guard runs over: the sample fixture, the
 /// multi-document fixture, and the whole example set. Glob-discovered with a
@@ -56,6 +68,37 @@ fn committed_specs() -> Vec<(String, Spec)> {
         }
     }
     specs
+}
+
+/// The generator option space a `slokit generate` user can actually reach from
+/// the CLI, each entry labelled with the invocation that produces it.
+///
+/// Every one of these must also be reachable from `slokit dashboard`, which is
+/// what `tests/dashboard_cli_options.rs` proves against the real binary; here
+/// they exercise the library resolution both commands share.
+fn option_matrix() -> Vec<(&'static str, GenerateOptions)> {
+    let mut out = Vec::new();
+
+    out.push(("generate", GenerateOptions::default()));
+
+    let mut no_scaling = GenerateOptions::default();
+    no_scaling.period_aware = false;
+    out.push(("generate --no-period-scaling", no_scaling));
+
+    let mut short_period = GenerateOptions::default();
+    short_period.default_period = Window::days(7);
+    out.push(("generate --period 7d", short_period));
+
+    let mut long_period = GenerateOptions::default();
+    long_period.default_period = Window::days(90);
+    out.push(("generate --period 90d", long_period));
+
+    let mut both = GenerateOptions::default();
+    both.default_period = Window::days(7);
+    both.period_aware = false;
+    out.push(("generate --period 7d --no-period-scaling", both));
+
+    out
 }
 
 /// Every `slo:` metric name referenced by any expression in `value`, found by
@@ -97,10 +140,10 @@ fn collect_exprs(value: &Value, f: &mut impl FnMut(&str)) {
     }
 }
 
-/// Every series name the generator records for `spec`, read from the rendered
-/// Prometheus rules YAML (`record:` keys).
-fn recorded_series(spec: &Spec) -> BTreeSet<String> {
-    let yaml = generate_rules(spec)
+/// Every series name the generator records for `spec` under `opts`, read from
+/// the rendered Prometheus rules YAML (`record:` keys).
+fn recorded_series(spec: &Spec, opts: &GenerateOptions) -> BTreeSet<String> {
+    let yaml = generate_rules_with(spec, opts)
         .expect("generation must succeed for a committed spec")
         .to_prometheus_yaml()
         .expect("rendering must succeed");
@@ -120,32 +163,147 @@ fn recorded_series(spec: &Spec) -> BTreeSet<String> {
     out
 }
 
+/// The dashboard series that `opts` never records: empty is the contract.
+fn unrecorded(spec: &Spec, opts: &GenerateOptions) -> Vec<String> {
+    let referenced = referenced_series(&dashboard_value_with(spec, opts));
+    assert!(
+        !referenced.is_empty(),
+        "the dashboard for '{}' references no slo: series at all; \
+         the extractor or the dashboard is broken",
+        spec.service
+    );
+    let recorded = recorded_series(spec, opts);
+    referenced.difference(&recorded).cloned().collect()
+}
+
 #[test]
 fn every_dashboard_expression_references_only_recorded_series() {
     for (path, spec) in committed_specs() {
-        let referenced = referenced_series(&dashboard_value(&spec));
+        let missing = unrecorded(&spec, &GenerateOptions::default());
         assert!(
-            !referenced.is_empty(),
-            "{path}: the dashboard for '{}' references no slo: series at all; \
-             the extractor or the dashboard is broken",
-            spec.service
-        );
-        let recorded = recorded_series(&spec);
-        let unrecorded: Vec<&String> = referenced.difference(&recorded).collect();
-        assert!(
-            unrecorded.is_empty(),
+            missing.is_empty(),
             "{path}: dashboard for '{}' references series the generator does not \
-             record: {unrecorded:?}\nrecorded: {recorded:?}",
+             record: {missing:?}",
             spec.service
         );
     }
 }
 
 #[test]
+fn every_dashboard_expression_stays_recorded_under_every_generate_option() {
+    let specs = committed_specs();
+    assert!(!specs.is_empty(), "no committed specs discovered");
+    let matrix = option_matrix();
+    assert!(
+        matrix.len() >= 5,
+        "the option matrix collapsed to {} entries; it must cover both \
+         --period and --no-period-scaling",
+        matrix.len()
+    );
+    for (invocation, opts) in &matrix {
+        for (path, spec) in &specs {
+            let missing = unrecorded(spec, opts);
+            assert!(
+                missing.is_empty(),
+                "`slokit {invocation}` + the matching dashboard disagree for {path} \
+                 ('{}'): the dashboard references series those rules do not record: \
+                 {missing:?}",
+                spec.service
+            );
+        }
+    }
+}
+
+/// A spec that sets no `period`, so `--period` decides it. Under the defect
+/// the dashboard hardcoded 30d here and queried the unscaled default windows
+/// while the generator recorded windows scaled to 7d.
+const NO_PERIOD_SPEC: &str = r#"
+service: myservice
+slos:
+  - name: a
+    objective: 99.9
+    sli:
+      raw:
+        error_ratio_query: r[{{.window}}]
+"#;
+
+/// A spec with a non-30d `period`. Under the defect the dashboard always
+/// scaled while `--no-period-scaling` told the generator not to, so the two
+/// disagreed in the opposite direction.
+const SEVEN_DAY_SPEC: &str = r#"
+service: myservice
+slos:
+  - name: a
+    objective: 99.9
+    period: 7d
+    sli:
+      raw:
+        error_ratio_query: r[{{.window}}]
+"#;
+
+#[test]
+fn a_non_default_period_keeps_the_dashboard_on_recorded_series() {
+    let spec = Spec::from_yaml(NO_PERIOD_SPEC).unwrap();
+    let mut opts = GenerateOptions::default();
+    opts.default_period = Window::days(7);
+
+    // The generator scales the 30d table to 7d: 5m becomes 1m.
+    let recorded = recorded_series(&spec, &opts);
+    assert!(
+        recorded.contains("slo:sli_error:ratio_rate1m"),
+        "the 7d-scaled base window must be recorded: {recorded:?}"
+    );
+    assert!(
+        !recorded.contains("slo:sli_error:ratio_rate5m"),
+        "the unscaled 30d base window must NOT be recorded under --period 7d: {recorded:?}"
+    );
+
+    // ... and the dashboard must follow it there rather than to the 30d table.
+    let referenced = referenced_series(&dashboard_value_with(&spec, &opts));
+    assert!(
+        referenced.contains("slo:sli_error:ratio_rate1m"),
+        "the SLI panel must query the 7d-scaled base window: {referenced:?}"
+    );
+    let missing = unrecorded(&spec, &opts);
+    assert!(
+        missing.is_empty(),
+        "`generate --period 7d` records nothing for these dashboard series: {missing:?}"
+    );
+}
+
+#[test]
+fn no_period_scaling_keeps_the_dashboard_on_recorded_series() {
+    let spec = Spec::from_yaml(SEVEN_DAY_SPEC).unwrap();
+    let mut opts = GenerateOptions::default();
+    opts.period_aware = false;
+
+    // With scaling off the generator records the 30d table verbatim.
+    let recorded = recorded_series(&spec, &opts);
+    assert!(
+        recorded.contains("slo:sli_error:ratio_rate5m"),
+        "the verbatim 30d base window must be recorded: {recorded:?}"
+    );
+
+    // ... so the dashboard must NOT scale to the SLO's 7d period either.
+    let referenced = referenced_series(&dashboard_value_with(&spec, &opts));
+    assert!(
+        referenced.contains("slo:sli_error:ratio_rate5m"),
+        "the SLI panel must query the verbatim base window: {referenced:?}"
+    );
+    let missing = unrecorded(&spec, &opts);
+    assert!(
+        missing.is_empty(),
+        "`generate --no-period-scaling` records nothing for these dashboard series: {missing:?}"
+    );
+}
+
+#[test]
 fn custom_windows_stay_in_step_between_dashboard_and_generator() {
     // A spec whose custom windows record a non-default window set: if the
     // dashboard fell back to the default table anywhere, it would reference
-    // 5m/30m/6h/1d/3d series this generator run never records.
+    // 5m/30m/6h/1d/3d series this generator run never records. Custom windows
+    // are option-independent by design (they replace the table outright), so
+    // this must hold across the whole matrix.
     let spec = Spec::from_yaml(
         r#"
 service: myservice
@@ -164,15 +322,32 @@ slos:
 "#,
     )
     .unwrap();
-    let referenced = referenced_series(&dashboard_value(&spec));
-    let recorded = recorded_series(&spec);
-    assert!(
-        referenced.contains("slo:sli_error:ratio_rate4h"),
-        "the burn panel must query the custom long window: {referenced:?}"
-    );
-    let unrecorded: Vec<&String> = referenced.difference(&recorded).collect();
-    assert!(
-        unrecorded.is_empty(),
-        "dashboard references unrecorded series: {unrecorded:?}"
-    );
+    for (invocation, opts) in option_matrix() {
+        let referenced = referenced_series(&dashboard_value_with(&spec, &opts));
+        assert!(
+            referenced.contains("slo:sli_error:ratio_rate4h"),
+            "`slokit {invocation}`: the burn panel must query the custom long window, \
+             which no option may rescale: {referenced:?}"
+        );
+        let missing = unrecorded(&spec, &opts);
+        assert!(
+            missing.is_empty(),
+            "`slokit {invocation}`: dashboard references unrecorded series: {missing:?}"
+        );
+    }
+}
+
+#[test]
+fn the_default_dashboard_entry_points_still_mean_default_options() {
+    // `dashboard_value` is the 1.x entry point and its output is what every
+    // existing consumer already pins; the `_with` form must be a superset, not
+    // a replacement that quietly moved the default.
+    for (_, spec) in committed_specs() {
+        assert_eq!(
+            slokit::dashboard::dashboard_value(&spec),
+            dashboard_value_with(&spec, &GenerateOptions::default()),
+            "dashboard_value must equal dashboard_value_with(.., default) for '{}'",
+            spec.service
+        );
+    }
 }

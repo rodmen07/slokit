@@ -244,13 +244,9 @@ pub fn generate_rules_with(spec: &Spec, opts: &GenerateOptions) -> Result<RuleSe
     let mut groups = Vec::with_capacity(spec.slos.len() * 3);
     for slo_spec in &spec.slos {
         let slo = slo_spec.to_slo(opts.default_period)?;
-        // Effective burn-rate config for this SLO: explicit spec windows win,
-        // then the option table scaled to the SLO period, then the table as-is.
-        let mwmbr = match slo_spec.custom_mwmbr()? {
-            Some(custom) => custom,
-            None if opts.period_aware => opts.mwmbr.scaled(DEFAULT_PERIOD, slo.period),
-            None => opts.mwmbr.clone(),
-        };
+        // Effective burn-rate config for this SLO, resolved through the seam
+        // the dashboard shares (see `resolve_mwmbr`).
+        let mwmbr = resolve_mwmbr(slo_spec.custom_mwmbr()?, slo.period, opts);
         let ctx = SloContext {
             service: &spec.service,
             spec_labels: &spec.labels,
@@ -266,6 +262,32 @@ pub fn generate_rules_with(spec: &Spec, opts: &GenerateOptions) -> Result<RuleSe
     }
 
     Ok(RuleSet { groups })
+}
+
+/// The effective burn-rate configuration for one SLO under `opts`: explicit
+/// spec windows win, then the option table scaled to the SLO's period, then
+/// the option table verbatim.
+///
+/// This is a SEAM, not a convenience: the [dashboard](crate::dashboard) panels
+/// query the very series these windows name, so the two must resolve
+/// identically or every window-scoped panel queries a series no recording rule
+/// produces. Both callers go through this function for that reason — see
+/// `tests/dashboard_drift.rs`, which runs the check across the option space.
+///
+/// `period` is the SLO's already-resolved period, and `custom` its
+/// already-resolved `alerting.windows`; taking both as values keeps this
+/// infallible, which is what lets the dashboard (whose entry points return no
+/// `Result`) share it.
+pub(crate) fn resolve_mwmbr(
+    custom: Option<MwmbrConfig>,
+    period: Window,
+    opts: &GenerateOptions,
+) -> MwmbrConfig {
+    match custom {
+        Some(custom) => custom,
+        None if opts.period_aware => opts.mwmbr.scaled(DEFAULT_PERIOD, period),
+        None => opts.mwmbr.clone(),
+    }
 }
 
 /// Format an `f64` for embedding in PromQL, trimming trailing zeros and never

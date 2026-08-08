@@ -413,6 +413,17 @@ Pass `--no-period-scaling` to `slokit generate` (or set
 `GenerateOptions::period_aware = false`) to use the 30d table verbatim for
 every SLO.
 
+**`slokit dashboard` takes the same `--period` and `--no-period-scaling` flags,
+and it must be given the same values.** The resolved lookback window is part of
+the recorded series NAME (`slo:sli_error:ratio_rate5m` versus
+`slo:sli_error:ratio_rate1m`), so a dashboard built with different window
+options queries series the rules do not record and every burn-rate panel
+renders "No data". Library callers pass the same [`GenerateOptions`] to
+`dashboard::dashboard_value_with` (and its `_json` siblings) that they passed
+to `generate::generate_rules_with`.
+
+[`GenerateOptions`]: https://docs.rs/slokit/latest/slokit/generate/struct.GenerateOptions.html
+
 ### Custom burn-rate windows
 
 Per SLO, `alerting.windows` (a slokit extension) replaces the default table

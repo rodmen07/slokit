@@ -9,7 +9,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
-use slokit::dashboard::dashboards_json;
+use slokit::dashboard::dashboards_json_with;
 use slokit::generate::{generate_all, generate_rules_with, GenerateOptions};
 use slokit::simulate::simulate;
 use slokit::spec::{openslo, validate_all, Lint, LintLevel, Spec, SCHEMA_JSON};
@@ -212,6 +212,15 @@ struct DashboardArgs {
     /// Output file. Defaults to stdout.
     #[arg(short, long)]
     output: Option<PathBuf>,
+    /// Default SLO period for SLOs that do not set their own. Must match the
+    /// value `slokit generate` ran with: the panels query the series those
+    /// rules record, and the burn-rate window is part of the series name.
+    #[arg(long, default_value = "30d")]
+    period: String,
+    /// Use the 30d-calibrated burn-rate windows verbatim instead of scaling
+    /// them to each SLO's period. Must match `slokit generate`.
+    #[arg(long)]
+    no_period_scaling: bool,
 }
 
 #[derive(Args)]
@@ -334,7 +343,17 @@ fn write_output(rendered: String, output: Option<PathBuf>, what: &str) -> Result
 fn run_dashboard(args: DashboardArgs) -> Result<()> {
     let specs = load_specs(&args.input)?;
     validate_all(&specs)?;
-    write_output(dashboards_json(&specs)?, args.output, "dashboard")
+    // The same window resolution `generate` uses, so the panels query series
+    // the emitted rules actually record.
+    let mut opts = GenerateOptions::default();
+    opts.default_period = Window::parse(&args.period)?;
+    opts.mwmbr = MwmbrConfig::sre_default();
+    opts.period_aware = !args.no_period_scaling;
+    write_output(
+        dashboards_json_with(&specs, &opts)?,
+        args.output,
+        "dashboard",
+    )
 }
 
 fn run_schema(args: SchemaArgs) -> Result<()> {
