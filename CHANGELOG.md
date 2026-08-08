@@ -6,11 +6,33 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
-## [Unreleased]
+## [1.7.0] - 2026-08-08
 
-Toward **v1.7.0, sloth corpus parity**: the whole of `slok/sloth`'s `examples/`
-tree is now committed as a pinned contract, and all three of the defects that
-census found are fixed.
+**sloth corpus parity.** slokit has claimed sloth `prometheus/v1` compatibility
+since 0.1.0 and has widened it one dialect at a time — OpenSLO v1 import,
+OpenSLO export, OpenSLO v1alpha import, sloth Kubernetes CRD input — each one
+grounded on the handful of upstream documents that happened to fail. This
+release puts the **whole** of `slok/sloth@8a3be4f`'s `examples/` tree, all 20
+documents, to a shipped binary at once, commits every one of them with its
+upstream sha256 and the exact answer slokit gives it, and closes the three
+places where that answer was wrong: a document sloth itself generates rules
+from was unreadable (`victoria-metrics.yml`, over nine unquoted label scalars),
+an entire document kind was unreadable (`kind: AlertWindows`, both upstream
+catalogues), and a construct the Kubernetes CRD dialect refuses by name was
+silently dropped on the native route (sloth SLO plugin chains, which three
+upstream documents carry — one more than the scoping census could see, because
+the third was refused at parse time by the first defect and its body was never
+modelled).
+
+Everything here is additive per [docs/SEMVER.md](docs/SEMVER.md) under the "the
+spec format only grows" clause: input that used to error now parses, no
+existing 1.x signature changes, and generated Prometheus rule output for every
+existing spec is byte-identical to 1.6.0 — including through the new catalogue
+path, since a 30-day `kind: AlertWindows` document carrying sloth's own
+defaults generates exactly what passing no catalogue at all generates. No new
+dependency (the corpus contract's sha256 is implemented in the test file and
+pinned against the published NIST vectors), so the lean core
+(`--no-default-features`) is untouched.
 
 ### Added
 
