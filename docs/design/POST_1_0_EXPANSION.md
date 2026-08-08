@@ -112,6 +112,17 @@ and the done-when crisp.
 Both remain candidates, not commitments; each gets its own scoping when its
 turn comes.
 
+**D5 is EXHAUSTED as of 2026-08-07, and its dashboard-panel reasoning was
+overturned rather than fulfilled.** Both candidates it ordered have shipped:
+lint rules as v1.3.0 (grounded exactly as required, each rule citing a real
+spec) and per-severity dashboard burn panels as v1.4.0. The paragraph above
+defers the panels until `examples/infraportal/` has live data; that premise
+still holds and the conclusion drawn from it did not survive re-examination —
+the v1.4.0 scoping re-tested it in the open and scheduled the panels anyway.
+The [ROADMAP](../../ROADMAP.md) records both dispositions. Themes after v1.4.0
+are therefore grounded from source rather than taken from this ordering; see
+the `Drift worth recording` entries there.
+
 ### D6. Milestone mechanics (default)
 
 Slices are dependency-ordered; nothing is calendar-sized.
@@ -147,9 +158,11 @@ Maintainer review of D1 through D6 was the only gate. It **closed on
 2026-08-01: approved as written**, the whole set, with no decision
 overridden.
 
-That schedules v1.2.0 at exactly the scope above, and the
-[ROADMAP](../../ROADMAP.md) v1.2.0 section now carries the chosen scope and
-the checkable done-when (D6's default), written in PR 1 as this section
-required. PR 1 (the library export) shipped with that edit and PR 2 (the
-`export` subcommand) followed; PR 3 (release prep and the cut) is next. The
-[ROADMAP](../../ROADMAP.md) tracks slice status, not this document.
+That scheduled v1.2.0 at exactly the scope above, and the
+[ROADMAP](../../ROADMAP.md) carried the chosen scope and the checkable
+done-when (D6's default), written in PR 1 as this section required. All three
+slices then shipped — PR 1 the library export, PR 2 the `export` subcommand,
+PR 3 the release prep and the cut — and **v1.2.0 has been live on crates.io
+since 2026-08-01**, which is why the ROADMAP's v1.2.0 section is now a history
+row rather than a milestone. This document is closed at every decision it
+owns; the [ROADMAP](../../ROADMAP.md) tracks slice status, not this file.
