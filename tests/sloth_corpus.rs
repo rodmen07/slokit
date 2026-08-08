@@ -14,6 +14,13 @@
 //! the corpus — the paths, the hashes, the other 18 dispositions — is asserted
 //! to be unchanged by the same run.
 //!
+//! **Updated again by v1.8.0 PR 1**, the same shape: the two CRD documents
+//! carrying a sloth SLO plugin chain moved from `Refused` to `Accepted` with
+//! `lint_codes: &["SLO_PLUGIN_CHAIN_DROPPED"]`, taking the refusal count from
+//! 4 to 2. Those two moved because the construct is now captured and reported
+//! on the CRD route exactly as it already was on the native one — the same
+//! document, in two dialects, no longer gets two different answers.
+//!
 //! **Why the fixtures live in a subdirectory.** `tests/schema.rs`'s
 //! `native_fixture_files()` (`tests/schema.rs:531`) reads `tests/fixtures`
 //! **non-recursively** and validates everything it finds against the native
@@ -97,8 +104,13 @@ const CORPUS: &[Entry] = &[
     Entry {
         path: "contrib-denominator-corrected.yaml",
         sha256: "7bda3fceef2ca67684c9c0e757bd2cc73e38bde69a0ebad4a27c88b372b9038b",
-        disposition: Refused("spec.sloPlugins is a sloth SLO plugin chain"),
-        lint_codes: &[],
+        // FLIPPED by v1.8.0 PR 1. It was
+        // `Refused("spec.sloPlugins is a sloth SLO plugin chain")`: the CRD
+        // importer hard-errored on a construct the native importer parsed,
+        // dropped and reported. The chain is now captured into the same field
+        // the native parser fills, so the same lint reports it here too.
+        disposition: Accepted,
+        lint_codes: &["SLO_PLUGIN_CHAIN_DROPPED"],
     },
     Entry {
         path: "contrib-slo-plugins.yml",
@@ -197,8 +209,15 @@ const CORPUS: &[Entry] = &[
     Entry {
         path: "slo-plugin-k8s-getting-started.yml",
         sha256: "82586b28604660580b2855aa5a81f432e764fe1a01611db8e34a4a91e3a4d5dd",
-        disposition: Refused("spec.sloPlugins is a sloth SLO plugin chain"),
-        lint_codes: &[],
+        // Flipped by the same PR, and it is the CRD twin of
+        // `slo-plugin-getting-started.yml` above: upstream's own pair of the
+        // same example in the two dialects, which until v1.8.0 slokit answered
+        // two different ways. It carries BOTH spellings — a two-entry
+        // `spec.sloPlugins` and a five-entry `slos[].plugins` — hence two
+        // findings, asserted by name in
+        // `the_dropped_plugin_chain_is_reported_on_every_document_that_carries_one`.
+        disposition: Accepted,
+        lint_codes: &["SLO_PLUGIN_CHAIN_DROPPED"],
     },
     Entry {
         path: "victoria-metrics.yml",
@@ -599,19 +618,25 @@ fn the_victoria_metrics_label_scalars_reach_the_generated_rules() {
 // Done-when clause 3: the dropped plugin chain is reported
 // ---------------------------------------------------------------------------
 
-/// Every native upstream document that carries a sloth SLO plugin chain must
-/// produce a `SLO_PLUGIN_CHAIN_DROPPED` finding, and the message must name the
-/// SPELLING that carried it, because `slo_plugins` (spec level) and `plugins`
-/// (SLO level) are two different keys a reader has to go and delete.
+/// Every upstream document that carries a sloth SLO plugin chain must produce a
+/// `SLO_PLUGIN_CHAIN_DROPPED` finding, and the message must name the SPELLING
+/// that carried it, because `slo_plugins` (spec level) and `plugins` (SLO
+/// level) are two different keys a reader has to go and delete.
 ///
-/// There are THREE such documents, not the two the v1.7.0 scoping census
+/// There are THREE such NATIVE documents, not the two the v1.7.0 scoping census
 /// recorded: `victoria-metrics.yml` carries one as well, and the census could
 /// not see it because that document was refused at parse time for an unrelated
 /// reason. `the_lossy_acceptances_are_the_ones_lint_reports` is what found it,
 /// by asserting the negative direction on every accepted document rather than
 /// only the positive one on the two that were expected.
+///
+/// **v1.8.0 PR 1 added the two CRD documents to that set**, which is the whole
+/// point of the slice: the same construct now gets the same answer whichever
+/// dialect carried it. Before, `slo-plugin-k8s-getting-started.yml` was refused
+/// while its own native twin `slo-plugin-getting-started.yml` was accepted and
+/// linted — one construct, two answers, decided by spelling.
 #[test]
-fn the_dropped_plugin_chain_is_reported_on_every_native_document_that_carries_one() {
+fn the_dropped_plugin_chain_is_reported_on_every_document_that_carries_one() {
     let text = combined(&slokit(&[
         "lint",
         "-i",
@@ -660,10 +685,26 @@ fn the_dropped_plugin_chain_is_reported_on_every_native_document_that_carries_on
         "the finding must enumerate the chain it is reporting:\n{text}"
     );
 
-    // The set is derived, not asserted from memory: exactly these three
-    // documents of the twenty carry a chain, so a fourth appearing upstream
+    // The two CRD documents v1.8.0 PR 1 stopped refusing. Their per-document
+    // finding counts are asserted at the binary level in
+    // `tests/sloth_crd_cli.rs::a_crd_plugin_chain_is_reported_by_lint_rather_than_refused`;
+    // what this file owes is that the corpus contract sees them at all.
+    let text = combined(&slokit(&[
+        "lint",
+        "-i",
+        &format!("{CORPUS_DIR}/slo-plugin-k8s-getting-started.yml"),
+    ]));
+    assert_eq!(
+        text.matches("SLO_PLUGIN_CHAIN_DROPPED").count(),
+        2,
+        "the CRD twin carries a chain under each spelling, exactly like its \
+         native twin above:\n{text}"
+    );
+
+    // The set is derived, not asserted from memory: exactly these five
+    // documents of the twenty carry a chain, so a sixth appearing upstream
     // (or one of these losing its chain) fails here rather than passing as
-    // "the two we knew about are still reported".
+    // "the ones we knew about are still reported".
     let carriers: Vec<&str> = CORPUS
         .iter()
         .filter(|e| e.lint_codes.contains(&"SLO_PLUGIN_CHAIN_DROPPED"))
@@ -672,11 +713,36 @@ fn the_dropped_plugin_chain_is_reported_on_every_native_document_that_carries_on
     assert_eq!(
         carriers,
         vec![
+            "contrib-denominator-corrected.yaml",
             "contrib-slo-plugins.yml",
             "slo-plugin-getting-started.yml",
+            "slo-plugin-k8s-getting-started.yml",
             "victoria-metrics.yml",
         ],
         "the set of chain-carrying accepted documents changed"
+    );
+}
+
+/// The corpus refusal count itself, so done-when clause 1's "4 → 2" is a test
+/// rather than a sentence in a PR body — and so the two that remain are named,
+/// not merely counted. Both are the SLI-plugin pair D1.8-2 decided to leave
+/// fail-closed; a third refusal appearing (or one of these two quietly
+/// becoming accepted) fails here.
+#[test]
+fn exactly_two_upstream_documents_are_still_refused() {
+    let refused: Vec<&str> = CORPUS
+        .iter()
+        .filter(|e| !matches!(e.disposition, Accepted))
+        .map(|e| e.path)
+        .collect();
+    assert_eq!(
+        refused,
+        vec![
+            "plugin-getting-started.yml",
+            "plugin-k8s-getting-started.yml",
+        ],
+        "the corpus refusal set changed; v1.8.0 PR 1 took it from 4 to 2 and \
+         ROADMAP.md's done-when clause 1 names these two"
     );
 }
 

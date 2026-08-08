@@ -25,6 +25,7 @@
 //! | `slos[].alerting.{name, labels, annotations}` | the same [`Alerting`] fields |
 //! | `slos[].alerting.pageAlert` / `.ticketAlert` | [`Alerting::page_alert`] / [`Alerting::ticket_alert`] |
 //! | `{page,ticket}Alert.{disable, labels, annotations}` | the same [`AlertMeta`] fields |
+//! | `spec.sloPlugins` / `slos[].plugins` | [`Spec::slo_plugins`] / [`SloSpec::plugins`], captured and never applied (see below) |
 //!
 //! [`Spec::version`] is set to the native default, and the slokit-only
 //! extensions the CRD has no field for ([`SloSpec::period`],
@@ -41,15 +42,31 @@
 //!   labels to every generated rule.
 //! - `status`, silently: it is the controller's own writeback, never input.
 //!
+//! # Captured, applied to nothing, reported by lint
+//!
+//! `spec.sloPlugins` and `slos[].plugins` — sloth's SLO plugin chains — land in
+//! [`Spec::slo_plugins`] and [`SloSpec::plugins`], the same fields the native
+//! parser fills, so `slokit lint` reports `SLO_PLUGIN_CHAIN_DROPPED` naming the
+//! key and its entries. Nothing else reads them and they are never serialized
+//! back out. (`sli.plugin` is a different mechanism and *is* mapped.)
+//!
+//! Until 1.8.0 both keys were a hard error here, on the stated grounds that a
+//! chain "would rewrite the generated rules". That is true of *sloth's*
+//! generator and false of slokit's, which has no plugin-chain stage to rewrite
+//! anything: `tests/sloth_crd_cli.rs`'s byte-identity assertion runs the
+//! shipped binary over a CRD document carrying a seven-entry chain and over the
+//! same document with both keys deleted, in both output formats across the
+//! whole `--period` / `--no-period-scaling` space, and every pair is
+//! byte-identical. So the construct was refused on this route and dropped with
+//! a warning on the native one, for a reason that did not hold — the asymmetry
+//! v1.8.0 exists to remove.
+//!
 //! # Errors (fail closed, naming the field)
 //!
 //! The D3 rule the OpenSLO importer and export already follow: a construct
 //! that would silently generate the WRONG rules is an error naming the
 //! offending field, never a quiet drop.
 //!
-//! - `spec.sloPlugins` and `slos[].plugins`, sloth's SLO plugin chains.
-//!   slokit has no equivalent (`sli.plugin` is a different mechanism and *is*
-//!   mapped), and a chain reorders or rewrites the generated rules.
 //! - `alerting.page_alert` / `alerting.ticket_alert`, the **native** snake_case
 //!   spellings, inside a CRD document. Unknown keys are otherwise ignored (see
 //!   below), and ignoring these two would drop the page/ticket severity labels
@@ -84,7 +101,9 @@ use serde_norway::{Deserializer as YamlDeserializer, Value};
 use crate::error::{Result, SlokitError};
 
 use super::import::{Import, ImportNote};
-use super::{AlertMeta, Alerting, EventsSli, PluginSli, RawSli, SliSpec, SloSpec, Spec};
+use super::{
+    AlertMeta, Alerting, EventsSli, PluginSli, RawSli, SliSpec, SloPluginChain, SloSpec, Spec,
+};
 
 /// The `apiVersion` prefix every sloth Kubernetes CRD document declares.
 const API_GROUP: &str = "sloth.slok.dev/";
@@ -193,15 +212,6 @@ fn convert(doc_no: usize, doc: &Document, notes: &mut Vec<ImportNote>) -> Result
         format!("PrometheusServiceLevel '{object}'")
     };
 
-    if doc.spec.slo_plugins.is_some() {
-        return Err(err(
-            &loc,
-            "spec.sloPlugins is a sloth SLO plugin chain and has no slokit equivalent; \
-             it would rewrite the generated rules, so it is refused rather than dropped \
-             (sli.plugin is a different mechanism and does import)",
-        ));
-    }
-
     let service = doc.spec.service.trim();
     if service.is_empty() {
         return Err(err(&loc, "spec.service must not be empty"));
@@ -248,6 +258,9 @@ fn convert(doc_no: usize, doc: &Document, notes: &mut Vec<ImportNote>) -> Result
 
     let mut spec = Spec::new(service, slos);
     spec.labels = doc.spec.labels.clone();
+    // Captured, never applied: the `SLO_PLUGIN_CHAIN_DROPPED` lint is the only
+    // reader, exactly as on the native route.
+    spec.slo_plugins = doc.spec.slo_plugins.clone();
     Ok(spec)
 }
 
@@ -262,18 +275,11 @@ fn convert_slo(doc_loc: &str, slo: &CrdSlo) -> Result<SloSpec> {
     if name.is_empty() {
         return Err(err(&loc, "spec.slos[].name must not be empty"));
     }
-    if slo.plugins.is_some() {
-        return Err(err(
-            &loc,
-            "slos[].plugins is a sloth SLO plugin chain and has no slokit equivalent; \
-             it would rewrite the generated rules, so it is refused rather than dropped \
-             (sli.plugin is a different mechanism and does import)",
-        ));
-    }
-
     let mut out = SloSpec::new(name, slo.objective, convert_sli(&loc, &slo.sli)?);
     out.description = slo.description.clone();
     out.labels = slo.labels.clone();
+    // See `convert`: captured for the lint, applied to nothing.
+    out.plugins = slo.plugins.clone();
     out.alerting = convert_alerting(&loc, &slo.alerting)?;
     Ok(out)
 }
@@ -409,9 +415,10 @@ struct CrdSpec {
     service: String,
     #[serde(default)]
     labels: BTreeMap<String, String>,
-    /// Refused, never dropped: see [`convert`].
+    /// Captured into [`Spec::slo_plugins`] for the lint, applied to nothing:
+    /// see [`convert`].
     #[serde(default)]
-    slo_plugins: Option<Value>,
+    slo_plugins: Option<SloPluginChain>,
     #[serde(default)]
     slos: Vec<CrdSlo>,
 }
@@ -426,9 +433,10 @@ struct CrdSlo {
     description: String,
     #[serde(default)]
     labels: BTreeMap<String, String>,
-    /// Refused, never dropped: see [`convert_slo`].
+    /// Captured into [`SloSpec::plugins`] for the lint, applied to nothing:
+    /// see [`convert_slo`].
     #[serde(default)]
-    plugins: Option<Value>,
+    plugins: Option<SloPluginChain>,
     sli: CrdSli,
     #[serde(default)]
     alerting: CrdAlerting,

@@ -94,6 +94,25 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
+## Unreleased on main
+
+Merged since v1.7.0 and not yet released. Kept in step with
+[CHANGELOG.md](CHANGELOG.md)'s `[Unreleased]` section by
+`tests/roadmap_truth.rs::roadmap_declares_unreleased_work_exactly_when_the_changelog_has_some`.
+
+- **v1.8.0 PR 1 — the CRD stops refusing what the native route lints.**
+  `src/spec/sloth_crd.rs` captures `spec.sloPlugins` and `slos[].plugins` into
+  `Spec::slo_plugins` / `SloSpec::plugins`, so `SLO_PLUGIN_CHAIN_DROPPED`
+  reports them and the two CRD corpus rows move `Refused` → `Accepted`; corpus
+  refusals 4 → 2, asserted by
+  `tests/sloth_corpus.rs::exactly_two_upstream_documents_are_still_refused`.
+  Done-when clauses 1 and 2 hold: clause 2's byte-identity claim was re-derived
+  **on this dialect** rather than inherited from the v1.7.0 native probe, and
+  it held (8729 bytes prometheus / 9337 operator, `cmp` clean).
+  **PR 2 (`tests/dialect_parity.rs` plus the OpenSLO `v1`
+  `metadata.displayName` note) and PR 3 (release prep and the cut) are what
+  remain before v1.8.0 ships.**
+
 ## Next milestones
 
 ### v1.8.0 — import dialect parity
@@ -346,7 +365,7 @@ happened:
 | 1.3.0 | 2026-08-05 | Lint rules grounded in real-world specs: `Spec::from_yaml_stream` (multi-document input, the enabler) plus the `SLI_FALLBACK_ASYMMETRY` rule (grounded on sloth's `home-wifi.yml`); the same grounding pass wild-validated the shipped rule set for the first time (`THRESHOLD_UNREACHABLE` on `victoria-metrics.yml`, `ALL_ALERTS_DISABLED` on `no-alerts.yml`) |
 | 1.4.0 | 2026-08-07 | Per-severity dashboard burn panels: one burn-rate timeseries panel per enabled alert condition (long and short lookbacks, threshold line at the condition's factor, disabled severities skipped), expression drift against the generator's recordings guarded by `tests/dashboard_drift.rs`; plus fail-closed `generate --format operator` naming and explicit least-privilege workflow token permissions |
 | 1.5.0 | 2026-08-07 | OpenSLO `v1alpha` import: per-document `apiVersion` dispatch plus the v1alpha mapping in a new sibling `src/spec/openslo/v1alpha.rs` (per-objective `ratioMetrics`, `timeWindows[].{count, unit}`, document-level `thresholdMetric`), reusing the version-independent v1 machinery; both sloth OpenSLO examples committed as fixtures, byte-identity against a hand-written native twin asserted at the binary level, and the v1alpha → `export --format openslo` → re-import round trip proven |
-| 1.6.0 | 2026-08-08 | sloth **Kubernetes CRD** input (`apiVersion: sloth.slok.dev/v1`, `kind: PrometheusServiceLevel`): auto-detected and importable through the new sibling `src/spec/sloth_crd.rs`, pinnable with `--input-format sloth-crd`, fail-closed on sloth's SLO plugin chains and on the native `page_alert`/`ticket_alert` spellings inside a CRD document; byte-identity against sloth's own native twins asserted at the binary level across the whole `generate` option space. Plus the dashboard/generator option fix (`dashboard --period` / `--no-period-scaling`, one shared window-resolving seam) that had every window-scoped panel rendering "No data" beside non-default rules since 1.0.0 |
+| 1.6.0 | 2026-08-08 | sloth **Kubernetes CRD** input (`apiVersion: sloth.slok.dev/v1`, `kind: PrometheusServiceLevel`): auto-detected and importable through the new sibling `src/spec/sloth_crd.rs`, pinnable with `--input-format sloth-crd`, fail-closed on sloth's SLO plugin chains (**superseded in 1.8.0**: captured and reported by `SLO_PLUGIN_CHAIN_DROPPED` instead, once the refusal's stated reason was measured and found false) and on the native `page_alert`/`ticket_alert` spellings inside a CRD document (still a refusal); byte-identity against sloth's own native twins asserted at the binary level across the whole `generate` option space. Plus the dashboard/generator option fix (`dashboard --period` / `--no-period-scaling`, one shared window-resolving seam) that had every window-scoped panel rendering "No data" beside non-default rules since 1.0.0 |
 | 1.7.0 | 2026-08-08 | sloth **corpus parity**: all 20 documents of `slok/sloth@8a3be4f`'s `examples/` tree committed under `tests/fixtures/sloth_corpus/` with their upstream sha256 and exact disposition pinned by `tests/sloth_corpus.rs`, so a compatibility change is a named test failure rather than a discovery in the next release; plus the three defects that corpus exposed — unquoted YAML scalars in `labels` and `annotations` now coerce at every level (which is what makes upstream's `victoria-metrics.yml` readable, with the JSON Schema's `labelMap` widened in the same commit), `kind: AlertWindows` catalogue input via `--alert-windows <path>` on `generate` and `dashboard` plus the additive `GenerateOptions::alert_windows` and the new `spec::alert_windows` module, and the `SLO_PLUGIN_CHAIN_DROPPED` lint that makes sloth's silently discarded SLO plugin chains visible on the native route without changing what any document generates |
 
 The v1.7.0 milestone as it was scoped, for the record, since the section
@@ -415,7 +434,10 @@ sloth's own `pkg/kubernetes/api/sloth/v1/types.go` rather than from the
 examples. Fidelity contract: envelope fields with no home in a slokit `Spec`
 (`metadata.name`, `.namespace`, `.labels`) ignored with an import note; sloth's
 SLO plugin chains (`spec.sloPlugins`, `slos[].plugins`) fail closed naming the
-field. **One clause of the scope was corrected while it was implemented, not
+field — **superseded in 1.8.0**, which captures both keys and reports
+`SLO_PLUGIN_CHAIN_DROPPED` instead; the refusal's stated reason ("it would
+rewrite the generated rules") was measured on the CRD route and is false of
+slokit's generator, which has no plugin-chain stage. **One clause of the scope was corrected while it was implemented, not
 after** (PR #40): the plan claimed no committed guard scans `tests/fixtures/`,
 and `tests/schema.rs:531` `native_fixture_files()` does — what actually saves
 the slice is that its `read_dir` is non-recursive and filters on

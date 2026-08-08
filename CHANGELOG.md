@@ -6,6 +6,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
+## [Unreleased]
+
+Toward **v1.8.0, import dialect parity**: the first of the two constructs whose
+answer depended on which dialect the document arrived in is settled.
+
+### Changed
+
+- **A sloth SLO plugin chain in a Kubernetes CRD document is now captured and
+  reported by `SLO_PLUGIN_CHAIN_DROPPED`, instead of being a hard error.**
+  `spec.sloPlugins` and `slos[].plugins` land in `Spec::slo_plugins` and
+  `SloSpec::plugins` — the same fields the native parser fills since 1.7.0 — so
+  `slokit lint` names the key and its entries and `slokit validate` exits 0.
+  Two upstream documents change disposition
+  (`slo-plugin-k8s-getting-started.yml`, which is the CRD twin of a native
+  document slokit already accepted, and `contrib-denominator-corrected.yaml`),
+  taking the pinned corpus from 16 accepted / 4 refused to 18 / 2.
+
+  The refusal it replaces claimed the chain "would rewrite the generated rules,
+  so it is refused rather than dropped". That is true of *sloth's* generator and
+  false of slokit's, which has no plugin-chain stage: generating from a CRD
+  document carrying a seven-entry chain and from the same document with both
+  keys deleted produces identical bytes, in both output formats, across the
+  whole `--period` / `--no-period-scaling` space
+  (`tests/sloth_crd_cli.rs::a_crd_plugin_chain_changes_no_generated_byte`).
+
+  Additive per [docs/SEMVER.md](docs/SEMVER.md): input that used to error now
+  parses, no existing signature changes, and no document that generated rules
+  before generates different ones. The two remaining corpus refusals
+  (`plugin-getting-started.yml`, `plugin-k8s-getting-started.yml`) are
+  deliberate and stay.
+
 ## [1.7.0] - 2026-08-08
 
 **sloth corpus parity.** slokit has claimed sloth `prometheus/v1` compatibility
