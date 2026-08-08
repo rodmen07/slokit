@@ -14,6 +14,8 @@
 //! 1. the `## Current state: vX.Y.Z` heading equals `Cargo.toml`'s version,
 //! 2. every released `CHANGELOG` version appears in the history table,
 //! 3. no released version is listed as an upcoming `### vX.Y.Z` milestone,
+//!    every such heading is one this file can actually read a version out of,
+//!    and the sections it reads them from still exist,
 //! 4. no released version sits in a `BLOCKED` row,
 //! 5. the "Unreleased on main" section exists exactly when the CHANGELOG has
 //!    unreleased entries, and
@@ -38,6 +40,18 @@
 //! The extractors are themselves exercised on synthetic input at the bottom of
 //! the file, so a parser that silently stops matching cannot turn these into
 //! assertions that always pass.
+//!
+//! That claim was too strong until 2026-08-08, and check 3 is where it broke.
+//! The milestone extractor *was* exercised — on `### v0.8.0: Spec hardening`,
+//! a colon and nothing else — while the real parser split on a colon and
+//! nothing else too, so the synthetic input agreed with the bug instead of
+//! catching it. A heading written `### v1.7.0 — sloth corpus parity` yielded
+//! zero versions, zero versions is also what an empty section yields, and the
+//! check passed on a roadmap listing a shipped release as upcoming. An
+//! extractor test is only a guard against vacuity when its inputs span the
+//! shapes the real document is allowed to take, so check 3 now asserts that
+//! every milestone heading present is READABLE, separately from asserting
+//! what the readable ones say.
 
 const ROADMAP: &str = include_str!("../ROADMAP.md");
 const CHANGELOG: &str = include_str!("../CHANGELOG.md");
@@ -156,13 +170,51 @@ fn history_table_ranges(roadmap: &str) -> Vec<(Version, Version)> {
         .collect()
 }
 
-/// Versions presented as still-upcoming milestones (`### vX.Y.Z: ...`).
-fn milestone_versions(roadmap: &str) -> Vec<Version> {
-    roadmap
-        .lines()
-        .filter_map(|line| line.trim_end().strip_prefix("### v"))
-        .filter_map(|rest| parse_version(rest.split(':').next()?))
+/// The `## `-level sections that present work as still to come. A released
+/// version has no business in either of them. Naming them beats scanning the
+/// whole document, which would turn a `### v1.6.0` subheading under
+/// `## History and supersession` into a false positive the day that table
+/// grows one; both names are asserted to exist below, so a rename fails
+/// loudly instead of quietly emptying the guard.
+const FORWARD_LOOKING_SECTIONS: [&str; 2] =
+    ["## Next milestones", "## Later / candidates (unscheduled)"];
+
+/// The `### v…` headings inside the forward-looking sections, verbatim.
+///
+/// A line counts as a milestone heading when `v` is followed by a digit, which
+/// is what separates `### v1.8.0 — title` from prose like `### various notes`.
+/// Headings come back UNPARSED on purpose: the caller has to be able to tell
+/// "nothing is scheduled" from "a milestone is listed and this file could not
+/// read it", and those two used to be the same answer.
+fn milestone_headings(roadmap: &str) -> Vec<&str> {
+    FORWARD_LOOKING_SECTIONS
+        .iter()
+        .flat_map(|heading| section(roadmap, heading))
+        .map(str::trim_end)
+        .filter(|line| {
+            line.strip_prefix("### v")
+                .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()))
+        })
         .collect()
+}
+
+/// The version named by a `### v…` milestone heading, whatever separator
+/// follows it: a colon, a hyphen, an em dash, a parenthesis, or nothing.
+///
+/// The previous parser did `rest.split(':').next()`, so it could read a
+/// version only when the heading used a colon. `### v1.7.0 — sloth corpus
+/// parity` parsed to *no version at all*, and because zero versions is what
+/// an empty section also yields, the released-version guard below passed on a
+/// roadmap that was actively wrong. Measured on this tree at `5102ffb`: that
+/// exact heading gave `7 passed`, and the identical line rewritten with a
+/// colon gave `1 failed`.
+fn milestone_version(heading: &str) -> Option<Version> {
+    let rest = heading.strip_prefix("### v")?;
+    let token: String = rest
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    parse_version(&token)
 }
 
 /// Versions named by rows whose status cell is `BLOCKED`.
@@ -230,16 +282,47 @@ fn roadmap_history_covers_every_released_version() {
 
 #[test]
 fn roadmap_does_not_list_a_released_version_as_an_upcoming_milestone() {
-    let released = released_versions(CHANGELOG);
-    let shipped: Vec<String> = milestone_versions(ROADMAP)
+    // The sections have to be there. `section()` answers "no lines" for a
+    // heading that does not exist, which is the same answer it gives for a
+    // section holding nothing, so a rename would empty this guard without
+    // failing anything at all.
+    for heading in FORWARD_LOOKING_SECTIONS {
+        assert!(
+            ROADMAP.lines().any(|line| line.trim_end() == heading),
+            "ROADMAP.md has no `{heading}` heading. This guard finds upcoming work by \
+             section name, so renaming one silently empties it: restore the heading, or \
+             update FORWARD_LOOKING_SECTIONS in this file."
+        );
+    }
+
+    // Every milestone heading present has to be READABLE. Without this, a
+    // heading the parser cannot decode is indistinguishable from no milestones
+    // at all, and the assertion below passes vacuously — which is exactly what
+    // happened between the v1.7.0 prep and 2026-08-08.
+    let unreadable: Vec<&str> = milestone_headings(ROADMAP)
         .into_iter()
+        .filter(|heading| milestone_version(heading).is_none())
+        .collect();
+    assert!(
+        unreadable.is_empty(),
+        "ROADMAP.md milestone heading(s) this guard cannot read a version out of: {}. \
+         A heading it cannot read is a heading it cannot check, so the check would go \
+         quiet rather than fail. Write the version as `### vX.Y.Z`, followed by any \
+         separator you like.",
+        unreadable.join(" | ")
+    );
+
+    let released = released_versions(CHANGELOG);
+    let shipped: Vec<String> = milestone_headings(ROADMAP)
+        .into_iter()
+        .filter_map(milestone_version)
         .filter(|v| released.contains(v))
         .map(show)
         .collect();
     assert!(
         shipped.is_empty(),
-        "ROADMAP.md lists {} under `## Next milestones`, but CHANGELOG.md says it already \
-         shipped; move the section to `## History and supersession`",
+        "ROADMAP.md lists {} under a forward-looking section, but CHANGELOG.md says it \
+         already shipped; move the section to `## History and supersession`",
         shipped.join(", ")
     );
 }
@@ -324,9 +407,42 @@ fn extractors_find_what_they_are_looking_for() {
         vec![((0, 6, 1), (0, 6, 8)), ((1, 0, 0), (1, 0, 0))],
         "history_table_ranges must expand patch-series rows into an inclusive range"
     );
+    // Separator tolerance is the whole point: each of these headings names a
+    // version, and before 2026-08-08 only the colon form parsed at all.
+    let milestones = "## Next milestones\n\
+                      ### v0.8.0: colon\n\
+                      prose between headings\n\
+                      ### v0.9.0 - hyphen\n\
+                      ### v1.0.0 — em dash\n\
+                      ### v1.1.0\n\
+                      ### various notes, not a version at all\n\
+                      ## Later / candidates (unscheduled)\n\
+                      ### v1.2.0 (parenthetical)\n\
+                      ## History and supersession\n\
+                      ### v0.1.0: shipped long ago, not upcoming\n";
     assert_eq!(
-        milestone_versions("### v0.8.0: Spec hardening\ntext\n### v1.1.0: publish\n"),
-        vec![(0, 8, 0), (1, 1, 0)]
+        milestone_headings(milestones)
+            .into_iter()
+            .filter_map(milestone_version)
+            .collect::<Vec<_>>(),
+        vec![(0, 8, 0), (0, 9, 0), (1, 0, 0), (1, 1, 0), (1, 2, 0)],
+        "milestone headings must parse whatever separator follows the version, must skip \
+         `### v`-prefixed prose, and must not reach into the history section"
+    );
+    // An unreadable heading must be DETECTED and reported, never skipped: the
+    // difference between the guard failing and the guard evaporating is
+    // entirely here.
+    assert_eq!(milestone_version("### v1.7 — only two components"), None);
+    assert_eq!(milestone_version("### v1.7.0.1: four components"), None);
+    assert_eq!(
+        milestone_headings("## Next milestones\n### v1.7 — only two components\n"),
+        vec!["### v1.7 — only two components"],
+        "a heading whose version cannot be parsed must still be collected, or the guard \
+         has nothing to complain about"
+    );
+    assert!(
+        milestone_headings("## Not a section this guard reads\n### v1.7.0: title\n").is_empty(),
+        "milestone_headings must read only the forward-looking sections"
     );
     assert_eq!(
         blocked_row_versions(
