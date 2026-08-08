@@ -90,7 +90,7 @@ generated rules` against a pinned Prometheus release, and `coverage`.
 
 ## Next milestones
 
-### v1.7.0 — sloth corpus parity (scoped 2026-08-08)
+### v1.7.0: sloth corpus parity (scoped 2026-08-08)
 
 **Theme.** slokit has claimed sloth `prometheus/v1` compatibility since 0.1.0
 and has widened it one dialect at a time — OpenSLO v1 import (0.10.0), OpenSLO
