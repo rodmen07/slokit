@@ -71,10 +71,30 @@ pub struct Spec {
     /// The service these SLOs describe.
     pub service: String,
     /// Labels propagated onto every generated rule for this service.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    ///
+    /// Scalar YAML values are coerced to their string form, so
+    /// `generated: true` and `generated: "true"` are equivalent (see the
+    /// scalar-map coercion below).
+    #[serde(
+        default,
+        deserialize_with = "deserialize_label_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     pub labels: BTreeMap<String, String>,
     /// The SLOs for this service.
     pub slos: Vec<SloSpec>,
+    /// sloth's service-level SLO plugin chain (`slo_plugins:`), captured so
+    /// [`lint`] can report it and **never applied**.
+    ///
+    /// sloth runs these plugins over the generated rules; slokit has no
+    /// equivalent, so a document carrying one generates rules as if it were
+    /// absent. Parsing used to discard the key silently — the CRD dialect
+    /// refuses `spec.sloPlugins` outright, so the same construct was refused
+    /// on one route and dropped on the other. It is kept here purely to make
+    /// the drop visible: the `SLO_PLUGIN_CHAIN_DROPPED` lint reads it, nothing
+    /// else does, and it is never serialized back out.
+    #[serde(default, skip_serializing)]
+    pub slo_plugins: Option<SloPluginChain>,
 }
 
 /// One SLO within a [`Spec`].
@@ -92,8 +112,19 @@ pub struct SloSpec {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
     /// Labels added to this SLO's rules.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    ///
+    /// Scalar YAML values are coerced to their string form (see
+    /// the scalar-map coercion below).
+    #[serde(
+        default,
+        deserialize_with = "deserialize_label_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     pub labels: BTreeMap<String, String>,
+    /// sloth's per-SLO plugin chain (`plugins:`), captured so [`lint`] can
+    /// report it and **never applied**. See [`Spec::slo_plugins`].
+    #[serde(default, skip_serializing)]
+    pub plugins: Option<SloPluginChain>,
     /// How the error ratio is measured.
     pub sli: SliSpec,
     /// Alerting metadata for the page and ticket alerts.
@@ -240,73 +271,167 @@ impl PluginSli {
     }
 }
 
-/// Deserialize `sli.plugin.options` as a string map, coercing scalar YAML
-/// values (numbers, bools) to their string form to stay a superset of sloth's
-/// `map[string]string`. Non-scalar values (maps, lists) are a parse error.
+/// A sloth SLO plugin chain, captured verbatim by name and **never applied**.
+///
+/// sloth spells this `slo_plugins:` at spec level and `plugins:` on an SLO,
+/// and runs the listed plugins over the rules it generates. slokit has no
+/// equivalent mechanism, so the chain changes nothing about the output. Only
+/// the entry ids are modelled, because the sole consumer is the
+/// `SLO_PLUGIN_CHAIN_DROPPED` lint, which names them; the rest of each entry
+/// (`priority`, `config`) is ignored like any other unknown key.
+///
+/// `#[non_exhaustive]`: this type exists to describe an upstream construct
+/// slokit does not implement, so it grows whenever that construct does.
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct SloPluginChain {
+    /// The plugin entries, in document order.
+    #[serde(default)]
+    pub chain: Vec<SloPluginChainEntry>,
+}
+
+impl SloPluginChain {
+    /// The entry ids in document order, for a lint or diagnostic message.
+    ///
+    /// An entry with no `id` contributes `<unnamed>` rather than being
+    /// skipped, so the count in a message always matches the chain length.
+    pub fn ids(&self) -> Vec<&str> {
+        self.chain
+            .iter()
+            .map(|e| {
+                if e.id.is_empty() {
+                    "<unnamed>"
+                } else {
+                    e.id.as_str()
+                }
+            })
+            .collect()
+    }
+}
+
+/// One entry of a [`SloPluginChain`].
+///
+/// `#[non_exhaustive]`: see [`SloPluginChain`].
+#[derive(Debug, Clone, PartialEq, Default, Deserialize, Serialize)]
+#[non_exhaustive]
+pub struct SloPluginChainEntry {
+    /// The sloth plugin id, e.g. `sloth.dev/core/debug/v1`.
+    #[serde(default)]
+    pub id: String,
+}
+
+/// What a scalar-map field calls its values, so a rejected non-scalar names
+/// the right thing. Serde's `deserialize_with` takes no arguments, so the
+/// wording travels as a type parameter rather than as a value.
+trait ScalarMapKind {
+    /// The `expecting` clause of the error for a non-scalar value.
+    const EXPECTING: &'static str;
+}
+
+/// `sli.plugin.options`.
+struct PluginOptionValue;
+impl ScalarMapKind for PluginOptionValue {
+    const EXPECTING: &'static str = "a scalar plugin option value (string, number, or bool)";
+}
+
+/// `labels` and `annotations`, at every level that has them.
+struct LabelValue;
+impl ScalarMapKind for LabelValue {
+    const EXPECTING: &'static str = "a scalar label or annotation value (string, number, or bool)";
+}
+
+/// One coerced scalar. The `K` parameter carries only the error wording.
+struct ScalarString<K: ScalarMapKind>(String, std::marker::PhantomData<K>);
+
+impl<'de, K: ScalarMapKind> Deserialize<'de> for ScalarString<K> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor<K: ScalarMapKind>(std::marker::PhantomData<K>);
+
+        impl<K: ScalarMapKind> Visitor<K> {
+            fn ok<E>(v: impl ToString) -> std::result::Result<ScalarString<K>, E> {
+                Ok(ScalarString(v.to_string(), std::marker::PhantomData))
+            }
+        }
+
+        impl<K: ScalarMapKind> serde::de::Visitor<'_> for Visitor<K> {
+            type Value = ScalarString<K>;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str(K::EXPECTING)
+            }
+
+            fn visit_str<E: serde::de::Error>(
+                self,
+                v: &str,
+            ) -> std::result::Result<Self::Value, E> {
+                Self::ok(v)
+            }
+
+            fn visit_bool<E: serde::de::Error>(
+                self,
+                v: bool,
+            ) -> std::result::Result<Self::Value, E> {
+                Self::ok(v)
+            }
+
+            fn visit_i64<E: serde::de::Error>(self, v: i64) -> std::result::Result<Self::Value, E> {
+                Self::ok(v)
+            }
+
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> std::result::Result<Self::Value, E> {
+                Self::ok(v)
+            }
+
+            fn visit_f64<E: serde::de::Error>(self, v: f64) -> std::result::Result<Self::Value, E> {
+                Self::ok(v)
+            }
+        }
+
+        deserializer.deserialize_any(Visitor::<K>(std::marker::PhantomData))
+    }
+}
+
+/// Deserialize a sloth `map[string]string` field as a string map, coercing
+/// scalar YAML values (numbers, bools) to their string form. Non-scalar values
+/// (maps, lists) are a parse error naming `K::EXPECTING`.
+fn deserialize_scalar_map_as<'de, D, K>(
+    deserializer: D,
+) -> std::result::Result<BTreeMap<String, String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    K: ScalarMapKind,
+{
+    let map = BTreeMap::<String, ScalarString<K>>::deserialize(deserializer)?;
+    Ok(map.into_iter().map(|(k, v)| (k, v.0)).collect())
+}
+
+/// `sli.plugin.options`: scalars coerced, non-scalars rejected.
 fn deserialize_scalar_map<'de, D>(
     deserializer: D,
 ) -> std::result::Result<BTreeMap<String, String>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    struct ScalarString(String);
+    deserialize_scalar_map_as::<D, PluginOptionValue>(deserializer)
+}
 
-    impl<'de> Deserialize<'de> for ScalarString {
-        fn deserialize<D2>(deserializer: D2) -> std::result::Result<Self, D2::Error>
-        where
-            D2: serde::Deserializer<'de>,
-        {
-            struct Visitor;
-
-            impl serde::de::Visitor<'_> for Visitor {
-                type Value = ScalarString;
-
-                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                    f.write_str("a scalar plugin option value (string, number, or bool)")
-                }
-
-                fn visit_str<E: serde::de::Error>(
-                    self,
-                    v: &str,
-                ) -> std::result::Result<Self::Value, E> {
-                    Ok(ScalarString(v.to_string()))
-                }
-
-                fn visit_bool<E: serde::de::Error>(
-                    self,
-                    v: bool,
-                ) -> std::result::Result<Self::Value, E> {
-                    Ok(ScalarString(v.to_string()))
-                }
-
-                fn visit_i64<E: serde::de::Error>(
-                    self,
-                    v: i64,
-                ) -> std::result::Result<Self::Value, E> {
-                    Ok(ScalarString(v.to_string()))
-                }
-
-                fn visit_u64<E: serde::de::Error>(
-                    self,
-                    v: u64,
-                ) -> std::result::Result<Self::Value, E> {
-                    Ok(ScalarString(v.to_string()))
-                }
-
-                fn visit_f64<E: serde::de::Error>(
-                    self,
-                    v: f64,
-                ) -> std::result::Result<Self::Value, E> {
-                    Ok(ScalarString(v.to_string()))
-                }
-            }
-
-            deserializer.deserialize_any(Visitor)
-        }
-    }
-
-    let map = BTreeMap::<String, ScalarString>::deserialize(deserializer)?;
-    Ok(map.into_iter().map(|(k, v)| (k, v.0)).collect())
+/// `labels` / `annotations`: scalars coerced, non-scalars rejected.
+///
+/// sloth's Go decode coerces these silently, so a document written for sloth
+/// may leave a label value unquoted (`generated: true`, `objective: 90`).
+/// Typing them as `String` alone rejected such documents outright — upstream's
+/// own `examples/victoria-metrics.yml` was unreadable for exactly this reason,
+/// over nine values across three scalar types.
+fn deserialize_label_map<'de, D>(
+    deserializer: D,
+) -> std::result::Result<BTreeMap<String, String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_scalar_map_as::<D, LabelValue>(deserializer)
 }
 
 /// Alerting metadata shared and per-severity.
@@ -320,10 +445,24 @@ pub struct Alerting {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,
     /// Labels applied to both severities.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    ///
+    /// Scalar YAML values are coerced to their string form (see
+    /// the scalar-map coercion below).
+    #[serde(
+        default,
+        deserialize_with = "deserialize_label_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     pub labels: BTreeMap<String, String>,
     /// Annotations applied to both severities.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    ///
+    /// Scalar YAML values are coerced to their string form (see
+    /// the scalar-map coercion below).
+    #[serde(
+        default,
+        deserialize_with = "deserialize_label_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     pub annotations: BTreeMap<String, String>,
     /// Page-alert overrides.
     #[serde(default)]
@@ -405,10 +544,24 @@ pub struct AlertMeta {
     #[serde(default)]
     pub disable: bool,
     /// Labels for this severity.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    ///
+    /// Scalar YAML values are coerced to their string form (see
+    /// the scalar-map coercion below).
+    #[serde(
+        default,
+        deserialize_with = "deserialize_label_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     pub labels: BTreeMap<String, String>,
     /// Annotations for this severity.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    ///
+    /// Scalar YAML values are coerced to their string form (see
+    /// the scalar-map coercion below).
+    #[serde(
+        default,
+        deserialize_with = "deserialize_label_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     pub annotations: BTreeMap<String, String>,
 }
 
@@ -422,6 +575,7 @@ impl Spec {
             service: service.into(),
             labels: BTreeMap::new(),
             slos,
+            slo_plugins: None,
         }
     }
 
@@ -536,6 +690,7 @@ impl SloSpec {
             objective,
             description: String::new(),
             labels: BTreeMap::new(),
+            plugins: None,
             sli,
             alerting: Alerting::default(),
             period: None,

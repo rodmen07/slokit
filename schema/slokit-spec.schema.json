@@ -30,9 +30,9 @@
   "$defs": {
     "labelMap": {
       "type": "object",
-      "description": "Names to string values (labels or annotations). Names must not be empty; `slokit lint` additionally warns on names outside the legacy Prometheus charset (LABEL_NAME_CHARS) and on user labels with the reserved `sloth_` prefix (RESERVED_LABEL).",
+      "description": "Names to string values (labels or annotations). Unquoted scalars are accepted and coerced to their canonical string (`true`, `0.2`, `90`), matching sloth's own decode; names must not be empty. `slokit lint` additionally warns on names outside the legacy Prometheus charset (LABEL_NAME_CHARS) and on user labels with the reserved `sloth_` prefix (RESERVED_LABEL).",
       "propertyNames": { "minLength": 1 },
-      "additionalProperties": { "type": "string" }
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
     },
     "duration": {
       "type": "string",

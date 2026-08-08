@@ -88,6 +88,23 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
+## Unreleased on main
+
+Merged since v1.6.0 and not yet released. Kept in step with
+[CHANGELOG.md](CHANGELOG.md)'s `[Unreleased]` section by
+`tests/roadmap_truth.rs::roadmap_declares_unreleased_work_exactly_when_the_changelog_has_some`.
+
+- **v1.7.0 PR 1 — the sloth corpus contract, the label-scalar fix, and the
+  `SLO_PLUGIN_CHAIN_DROPPED` lint.** All 20 upstream documents committed under
+  `tests/fixtures/sloth_corpus/` with their sha256 and disposition pinned by
+  `tests/sloth_corpus.rs`; `labels` and `annotations` accept unquoted scalars
+  at every level (defect 1, which makes `victoria-metrics.yml` readable); the
+  silently dropped sloth SLO plugin chain is reported by a lint rule on the
+  native route (defect 3). Done-when clauses 1, 2 and 3 hold. Clause 3's own
+  count was corrected in this PR — see the note under the census table.
+  **PR 2 (`kind: AlertWindows` catalogue input, defect 2) and PR 3 (release
+  prep and the cut) are what remain before v1.7.0 ships.**
+
 ## Next milestones
 
 ### v1.7.0: sloth corpus parity (scoped 2026-08-08)
@@ -119,6 +136,21 @@ cached `Finished`, per the stale-binary hazard):
 silently discarded**, which the row above cannot show and which is the third
 defect: `slo-plugin-getting-started.yml` and `contrib-slo-plugins.yml` both
 carry sloth SLO plugin chains in the native spelling.
+
+> **Corrected 2026-08-08 by PR 1: there are THREE such documents, not two.**
+> `victoria-metrics.yml` carries a four-entry `slo_plugins` chain as well
+> (`sloth.dev/contrib/validate_victoria_metrics/v1` plus the three core rule
+> plugins). The census could not see it, and the omission was not an oversight
+> in the reading: that document was **refused** at parse time over defect 1, so
+> its body was never modelled and the second defect inside it was unobservable.
+> Fixing defect 1 is what exposed it, in the same PR, and it was found by the
+> guard's NEGATIVE direction — `the_lossy_acceptances_are_the_ones_lint_reports`
+> asserts that a document with no recorded chain emits no finding — rather than
+> by re-reading the document. The general shape is worth keeping: a defect
+> census can only enumerate defects in the documents it got far enough to
+> parse, so the accepted set is the only set it fully sees, and fixing an
+> intake defect always risks enlarging the census rather than just closing a
+> row. Done-when clause 3 below is corrected to match.
 
 **Defect 1 — a document sloth generates from, slokit cannot read.**
 `victoria-metrics.yml` fails with `spec error: document 1: invalid type: boolean
@@ -186,8 +218,11 @@ is an existence search):
    values on the rules `slokit generate` emits from it, asserted at the binary
    level. (Parsing alone is not the claim: a coercion that parsed and then
    dropped the labels would satisfy a weaker clause.)
-3. `slokit lint` reports a finding naming the discarded plugin chain on both
-   native upstream documents that carry one, reports none on the eight
+3. `slokit lint` reports a finding naming the discarded plugin chain on every
+   native upstream document that carries one — **three** of them, corrected
+   from two above: `slo-plugin-getting-started.yml` (2 findings, one per
+   spelling), `contrib-slo-plugins.yml` (2, one per SLO) and
+   `victoria-metrics.yml` (1) — reports none on the eight
    `examples/infraportal/slos/` specs, and
    `tests/lint_fallback_asymmetry.rs::the_committed_example_set_stays_lint_clean`
    stays green unmodified.

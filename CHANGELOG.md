@@ -6,6 +6,46 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
+## [Unreleased]
+
+Toward **v1.7.0, sloth corpus parity**: the whole of `slok/sloth`'s `examples/`
+tree is now committed as a pinned contract, and two of the three defects that
+census found are fixed.
+
+### Added
+
+- **The sloth upstream corpus is a committed contract.** All 20 documents of
+  `slok/sloth@8a3be4f`'s `examples/` tree live under
+  `tests/fixtures/sloth_corpus/`, each with its upstream sha256 and the exact
+  disposition slokit gives it (accepted, or refused for this stated reason).
+  `tests/sloth_corpus.rs` re-hashes every file and re-runs the binary over
+  every one, so a compatibility change is a named test failure rather than a
+  discovery in the next release. The hashes are what make the contract
+  un-green-able by editing a fixture.
+- **`SLO_PLUGIN_CHAIN_DROPPED` lint.** sloth's SLO plugin chains
+  (`slo_plugins:` at spec level, `plugins:` on an SLO) rewrite the rules sloth
+  generates; slokit has no equivalent and silently ignored them, while the
+  Kubernetes CRD dialect refused the same construct by name — the one
+  construct slokit treated differently depending on which spelling carried it.
+  `slokit lint` now reports it on the native route, naming the key and the
+  entries, so the drop is visible without changing what any document generates
+  (refusing it is not available under the 1.x promise in
+  [docs/SEMVER.md](docs/SEMVER.md)). Three upstream documents carry one.
+
+### Fixed
+
+- **Unquoted YAML scalars in `labels` and `annotations` are accepted**, coerced
+  to their canonical string (`true`, `0.2`, `90`) exactly as sloth's own decode
+  does, at every level that has those maps. Previously any unquoted scalar was
+  a hard parse error reading `invalid type: boolean 'true', expected a string`,
+  which named neither the field nor the fix. Upstream's own
+  `examples/victoria-metrics.yml` — a document sloth generates rules from — was
+  unreadable to slokit for exactly this reason, over nine values across three
+  scalar types. The JSON Schema's `labelMap` is widened to match, so the two
+  descriptions of the format still agree. Non-scalar values (a nested map or
+  list) remain a parse error, now worded for labels rather than for plugin
+  options.
+
 ## [1.6.0] - 2026-08-08
 
 sloth **Kubernetes CRD** input: `apiVersion: sloth.slok.dev/v1`,

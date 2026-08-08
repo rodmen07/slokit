@@ -17,7 +17,7 @@ use crate::burn_rate::{MwmbrConfig, Severity};
 use crate::window::Window;
 
 use super::plugin::SliPluginRegistry;
-use super::{Spec, DEFAULT_PERIOD};
+use super::{SloPluginChain, Spec, DEFAULT_PERIOD};
 
 /// How serious a [`Lint`] finding is.
 ///
@@ -105,6 +105,40 @@ fn label_name_lints(
     }
 }
 
+/// Report a sloth SLO plugin chain that slokit parsed and then ignored.
+///
+/// `field` is the spelling that carried it (`slo_plugins` at spec level,
+/// `plugins` on an SLO). An empty chain is still reported: sloth accepts
+/// `chain: []` and the point of the finding is that the key had no effect,
+/// which is equally true of an empty one — and staying silent there would make
+/// the finding depend on chain length, which no reader would expect.
+fn plugin_chain_lints(
+    out: &mut Vec<Lint>,
+    location: &str,
+    field: &str,
+    chain: Option<&SloPluginChain>,
+) {
+    let Some(chain) = chain else {
+        return;
+    };
+    let ids = chain.ids();
+    let listed = if ids.is_empty() {
+        "none".to_string()
+    } else {
+        ids.join(", ")
+    };
+    let plural = if ids.len() == 1 { "entry" } else { "entries" };
+    out.push(Lint {
+        level: LintLevel::Warning,
+        code: "SLO_PLUGIN_CHAIN_DROPPED",
+        location: location.to_string(),
+        message: format!(
+            "`{field}` is a sloth SLO plugin chain ({} {plural}: {listed}); slokit has no equivalent, so the generated rules are byte-identical to the same document with `{field}` removed",
+            ids.len()
+        ),
+    });
+}
+
 /// Whether a query's text contains a `vector(` no-data fallback.
 ///
 /// Textual and case-insensitive by design (the flagged default recorded in
@@ -149,8 +183,18 @@ pub fn lint_with(spec: &Spec, plugins: &SliPluginRegistry) -> Vec<Lint> {
 
     label_name_lints(&mut out, "spec", "labels", &spec.labels, true);
 
+    // A sloth SLO plugin chain: parsed, never applied, and until 1.7.0 not
+    // reported either. The CRD dialect refuses `spec.sloPlugins` by name
+    // because dropping it is silent data loss, so leaving the native spelling
+    // silent made slokit refuse a construct on one route and discard it on the
+    // other. Refusing it natively is not available under the 1.x compatibility
+    // promise (docs/SEMVER.md), so it is reported here instead.
+    plugin_chain_lints(&mut out, "spec", "slo_plugins", spec.slo_plugins.as_ref());
+
     for slo in &spec.slos {
         let loc = format!("slo '{}'", slo.name);
+
+        plugin_chain_lints(&mut out, &loc, "plugins", slo.plugins.as_ref());
 
         // The effective MWMBR configuration for this SLO: custom windows when
         // set, else the default table scaled to the SLO period (mirroring what
@@ -1118,5 +1162,176 @@ slos:
 "#;
         let spec = Spec::from_yaml(yaml).unwrap();
         assert!(!codes(&spec).contains(&"SLI_FALLBACK_ASYMMETRY"));
+    }
+
+    /// The base document for the plugin-chain rule: identical on both sides of
+    /// every assertion below except for the chain keys themselves, so the
+    /// finding is attributable to the chain and to nothing else.
+    fn chainless() -> &'static str {
+        r#"
+service: myservice
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting: { labels: { severity: page } }
+"#
+    }
+
+    #[test]
+    fn a_spec_with_no_plugin_chain_is_silent() {
+        // The off half of the behaviour difference. Without it, a rule that
+        // fired unconditionally would pass every assertion below.
+        let spec = Spec::from_yaml(chainless()).unwrap();
+        assert_eq!(spec.slo_plugins, None);
+        assert_eq!(spec.slos[0].plugins, None);
+        assert!(!codes(&spec).contains(&"SLO_PLUGIN_CHAIN_DROPPED"));
+    }
+
+    #[test]
+    fn a_spec_level_plugin_chain_is_reported_by_its_own_spelling() {
+        let yaml = format!(
+            "{}\nslo_plugins:\n  chain:\n    - id: sloth.dev/core/debug/v1\n      priority: 10\n      config: {{ msg: hi }}\n",
+            chainless()
+        );
+        let spec = Spec::from_yaml(&yaml).unwrap();
+        // Parsed and carried, never applied: the chain is visible on the spec
+        // but generation reads nothing from it.
+        assert_eq!(
+            spec.slo_plugins.as_ref().map(SloPluginChain::ids),
+            Some(vec!["sloth.dev/core/debug/v1"])
+        );
+        let lints = lint(&spec);
+        let found: Vec<&Lint> = lints
+            .iter()
+            .filter(|l| l.code == "SLO_PLUGIN_CHAIN_DROPPED")
+            .collect();
+        assert_eq!(found.len(), 1, "one finding per chain: {lints:?}");
+        assert_eq!(found[0].location, "spec");
+        assert!(
+            found[0].message.contains("`slo_plugins`"),
+            "the message must name the key to delete: {}",
+            found[0].message
+        );
+        assert!(
+            found[0]
+                .message
+                .contains("1 entry: sloth.dev/core/debug/v1"),
+            "the message must name the entries: {}",
+            found[0].message
+        );
+    }
+
+    #[test]
+    fn an_slo_level_plugin_chain_is_reported_against_that_slo() {
+        let yaml = r#"
+service: myservice
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    plugins:
+      chain:
+        - id: sloth.dev/contrib/info_labels/v1
+        - id: sloth.dev/core/debug/v1
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting: { labels: { severity: page } }
+"#;
+        let spec = Spec::from_yaml(yaml).unwrap();
+        let found: Vec<Lint> = lint(&spec)
+            .into_iter()
+            .filter(|l| l.code == "SLO_PLUGIN_CHAIN_DROPPED")
+            .collect();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].location, "slo 'a'");
+        assert!(
+            found[0]
+                .message
+                .contains("2 entries: sloth.dev/contrib/info_labels/v1, sloth.dev/core/debug/v1"),
+            "{}",
+            found[0].message
+        );
+    }
+
+    #[test]
+    fn an_empty_chain_is_still_reported() {
+        // `chain: []` is accepted by sloth and does nothing here either. The
+        // finding is about the KEY having no effect, so it must not depend on
+        // how many entries the key happens to list.
+        let yaml = format!("{}\nslo_plugins: {{ chain: [] }}\n", chainless());
+        let spec = Spec::from_yaml(&yaml).unwrap();
+        let found: Vec<Lint> = lint(&spec)
+            .into_iter()
+            .filter(|l| l.code == "SLO_PLUGIN_CHAIN_DROPPED")
+            .collect();
+        assert_eq!(found.len(), 1);
+        assert!(
+            found[0].message.contains("0 entries: none"),
+            "{}",
+            found[0].message
+        );
+    }
+
+    #[test]
+    fn unquoted_label_scalars_are_coerced_on_every_map_that_takes_them() {
+        // All six `map[string]string` fields at once: sloth's Go decode
+        // coerces each of them, and a document written for sloth may leave any
+        // of them unquoted. Before v1.7.0 each was a hard parse error naming
+        // neither the field nor its path.
+        let yaml = r#"
+service: api
+labels: { generated: true }
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    labels: { target_le: 0.2 }
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+    alerting:
+      labels: { objective: 90 }
+      annotations: { retries: 3 }
+      page_alert:
+        labels: { severity_num: 1 }
+        annotations: { budget: 0.001 }
+"#;
+        let spec = Spec::from_yaml(yaml).expect("unquoted scalars parse");
+        assert_eq!(spec.labels["generated"], "true");
+        assert_eq!(spec.slos[0].labels["target_le"], "0.2");
+        assert_eq!(spec.slos[0].alerting.labels["objective"], "90");
+        assert_eq!(spec.slos[0].alerting.annotations["retries"], "3");
+        assert_eq!(spec.slos[0].alerting.page_alert.labels["severity_num"], "1");
+        assert_eq!(
+            spec.slos[0].alerting.page_alert.annotations["budget"],
+            "0.001"
+        );
+    }
+
+    #[test]
+    fn a_non_scalar_label_value_is_a_parse_error_naming_a_label() {
+        // The coercion widens scalars only. A nested map or list under a label
+        // name is a genuine mistake, and accepting it by stringifying the YAML
+        // would put a serialized structure into a Prometheus label.
+        //
+        // The message text is asserted, not just the failure: the label maps
+        // and `sli.plugin.options` share one coercion whose only difference is
+        // which noun the error uses, so wiring a field to the wrong one is a
+        // silent, plausible mistake. It happened once while writing this PR.
+        // `tests::non_scalar_plugin_option_values_are_parse_errors` in
+        // `src/spec/mod.rs` is the other half of the pair.
+        let yaml = r#"
+service: api
+labels: { owner: { team: sre } }
+slos:
+  - name: a
+    objective: 99.9
+    description: d
+    sli: { raw: { error_ratio_query: "r[{{.window}}]" } }
+"#;
+        let err = Spec::from_yaml(yaml).unwrap_err().to_string();
+        assert!(
+            err.contains("scalar label or annotation value"),
+            "a label map must reject with the label wording, not the plugin-option one: {err}"
+        );
     }
 }
