@@ -62,6 +62,7 @@ fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
             .with_context(|| format!("reading {}", file.display()))?;
         let dialect = match input.input_format {
             Some(InputFormat::Openslo) => Dialect::Openslo,
+            Some(InputFormat::SlothCrd) => Dialect::SlothCrd,
             Some(InputFormat::Slokit) => Dialect::Slokit,
             None if openslo::is_openslo(&contents) => Dialect::Openslo,
             None if sloth_crd::is_sloth_crd(&contents) => Dialect::SlothCrd,
@@ -160,6 +161,10 @@ enum InputFormat {
     /// OpenSLO `kind: SLO` documents, `openslo/v1` or `openslo/v1alpha`
     /// (single or multi-document YAML; the version is read per document).
     Openslo,
+    /// sloth Kubernetes CRD: `apiVersion: sloth.slok.dev/v1`,
+    /// `kind: PrometheusServiceLevel` (single or multi-document YAML).
+    #[value(name = "sloth-crd")]
+    SlothCrd,
 }
 
 /// Input options shared by every command that reads specs.
@@ -168,12 +173,12 @@ struct InputArgs {
     /// Input spec file or directory of specs (YAML).
     #[arg(short, long)]
     input: PathBuf,
-    /// Input spec format. Defaults to slokit, except that detection is
-    /// unambiguous when a file's first YAML document sets a top-level
-    /// `apiVersion`: `openslo/...` is imported as OpenSLO and
-    /// `sloth.slok.dev/...` as a sloth Kubernetes CRD
-    /// (`kind: PrometheusServiceLevel`). Pass the flag to override
-    /// auto-detection either way.
+    /// Input spec format (`slokit`, `openslo` or `sloth-crd`). Defaults to
+    /// slokit, except that detection is unambiguous when a file's first YAML
+    /// document sets a top-level `apiVersion`: `openslo/...` is imported as
+    /// OpenSLO and `sloth.slok.dev/...` as a sloth Kubernetes CRD
+    /// (`kind: PrometheusServiceLevel`). Pass the flag to pin one dialect for
+    /// every file read, overriding auto-detection in either direction.
     #[arg(long, value_enum)]
     input_format: Option<InputFormat>,
 }

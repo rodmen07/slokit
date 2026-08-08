@@ -64,6 +64,10 @@ slokit dashboard -i slos.yaml -o dashboard.json
 # Export a spec as OpenSLO v1 (see "OpenSLO interop" below)
 slokit export -i slos.yaml --format openslo > slos.openslo.yaml
 
+# Read sloth's Kubernetes CRD instead of a native spec, on any -i command
+# (auto-detected too; see "sloth Kubernetes CRD input" below)
+slokit generate -i k8s-slos.yaml --input-format sloth-crd
+
 # Print the spec JSON Schema (see "Editor integration" below)
 slokit schema
 ```
@@ -237,9 +241,10 @@ can move in either direction rather than only into slokit.
 
 **Importing.** Every `-i` accepts OpenSLO. A file whose first YAML document
 sets a top-level `apiVersion: openslo/...` is detected automatically;
-`--input-format openslo|slokit` overrides the detection either way. The version
-is read **per document**, so one multi-document stream may mix the two, and an
-`apiVersion` that is neither is still a hard error naming the value.
+`--input-format openslo|slokit|sloth-crd` overrides the detection either way
+(the third value is [sloth's Kubernetes CRD](#sloth-kubernetes-crd-input)). The
+version is read **per document**, so one multi-document stream may mix the two,
+and an `apiVersion` that is neither is still a hard error naming the value.
 
 ```sh
 slokit generate -i openslo-slos.yaml            # auto-detected
@@ -296,6 +301,57 @@ it unchanged; any other OpenSLO consumer has to substitute its own lookback.
 
 The library half is `slokit::spec::openslo::to_yaml` (and `to_yaml_reported`,
 which keeps the notes), the sibling of `from_yaml`.
+
+## sloth Kubernetes CRD input
+
+slokit reads sloth's Kubernetes custom resource — `apiVersion:
+sloth.slok.dev/v1`, `kind: PrometheusServiceLevel` — the shape sloth is used
+in inside a cluster, and the shape `slokit generate --format operator` already
+*emits*. Five of the twenty-one documents in sloth's own `examples/` are in
+this dialect.
+
+```sh
+slokit validate -i k8s-getting-started.yaml         # auto-detected
+slokit generate -i k8s-getting-started.yaml --input-format sloth-crd
+```
+
+**Detection and pinning.** A file whose first YAML document sets a top-level
+`apiVersion: sloth.slok.dev/...` is imported as a CRD without being asked;
+`--input-format sloth-crd` pins it for every file read, and
+`--input-format slokit|openslo` pins it off again. Pinning matters when
+detection cannot help — a document with the envelope stripped, a file being
+checked deliberately as another dialect — and the failure then names the
+dialect it was read as (<code>sloth-crd document 1: missing field `spec`</code>)
+rather than a bare field error.
+
+**It is the native model, renamed and wrapped**, not a second model the way
+OpenSLO is: `spec.slos[]` under an `apiVersion`/`kind`/`metadata` envelope with
+camelCase JSON names (`errorQuery`, `totalQuery`, `errorRatioQuery`,
+`pageAlert`, `ticketAlert`). So a CRD document and sloth's own native twin of
+it generate **byte-identical** rules — asserted over both twin pairs, in both
+output formats, across the whole `--period` / `--no-period-scaling` space, at
+the library level in `tests/sloth_crd.rs` and through the real binary in
+`tests/sloth_crd_cli.rs`. The full field table is in the
+[`slokit::spec::sloth_crd` module docs](https://docs.rs/slokit/latest/slokit/spec/sloth_crd/).
+
+**Ignored with a note** (stderr, so a redirected stdout stays a clean rule
+stream): `metadata.name`, `metadata.namespace` and `metadata.labels`. The last
+one matters most — those are Kubernetes *object* labels, not rule labels
+(`spec.labels` is the rule labels), so honoring them would silently label every
+generated rule. `status` is dropped silently: it is the controller's writeback,
+never input.
+
+**Fails closed, naming the field**, for anything that would generate the wrong
+rules: sloth's SLO plugin chains (`spec.sloPlugins`, `slos[].plugins`), which
+slokit has no equivalent for — its `sli.plugin` is a different mechanism and
+*is* mapped — and the native snake_case `page_alert` / `ticket_alert` spellings
+inside a CRD document, which would otherwise be ignored as unknown keys and
+drop the page/ticket severity labels without a word.
+
+The library half is `slokit::spec::sloth_crd` (`is_sloth_crd`, `from_yaml`,
+`from_path`), returning the same `Import` / `ImportNote` pair as the OpenSLO
+importer. There is no export direction: `generate --format operator` already
+writes a Kubernetes resource, a `PrometheusRule`.
 
 ## Editor integration (JSON Schema)
 

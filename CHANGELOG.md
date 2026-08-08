@@ -45,8 +45,18 @@ From 1.0.0, slokit follows the semver guarantees documented in
   *native* `alerting.page_alert` / `alerting.ticket_alert` spellings inside a
   CRD document, which would otherwise drop the page/ticket routing labels in
   silence (sloth's own `examples/plugin-k8s-getting-started.yml` has exactly
-  that bug). `--input-format sloth-crd` for pinning the dialect explicitly is
-  the next slice; auto-detection is what ships here.
+  that bug).
+- **`--input-format sloth-crd`** (v1.6.0 slice 2), the third value of the
+  existing flag: pins the dialect for every file read instead of relying on
+  detection, and pins it *off* in the other direction, so a document can be
+  checked deliberately as another dialect. Pinned onto a document that is not a
+  CRD, the failure names the dialect it was read as (`sloth-crd document 1:
+  missing field \`spec\``) rather than only the field. The dialect's end-to-end
+  behaviour is now asserted through the installed binary in
+  `tests/sloth_crd_cli.rs`: `validate` exits 0 on all three committed fixtures
+  on both routes, and `generate` renders bytes identical to sloth's own native
+  twins over both twin pairs, in both output formats, across the whole
+  `--period` / `--no-period-scaling` option space.
 - `dashboard::dashboard_value_with`, `dashboard::dashboard_json_with`, and
   `dashboard::dashboards_json_with`, taking the `GenerateOptions` the rules
   were generated with. The existing `dashboard_value` / `dashboard_json` /
