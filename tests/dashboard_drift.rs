@@ -72,13 +72,25 @@ fn committed_specs() -> Vec<(String, Spec)> {
 
 /// The committed specs plus two synthetic ones whose periods are NOT 30d.
 ///
-/// The synthetic pair is not decoration. Every committed spec declares
-/// `period: 30d`, which is `DEFAULT_PERIOD`, so `--period 30d` is a no-op on
-/// them and `scaled(30d, 30d)` returns the table unchanged — a matrix run over
-/// the committed set alone exercises the `--no-period-scaling` axis VACUOUSLY.
-/// Measured, not assumed: a control that made the resolution ignore
-/// `period_aware` outright left the matrix test green until these two were
-/// added, and only the named regression tests caught it.
+/// What actually keeps the scaling axis from being vacuous is measured, and it
+/// is worth stating because the obvious answer is wrong. Every `examples/`
+/// spec declares `period: 30d`, which IS `DEFAULT_PERIOD`, so `scaled(30d,
+/// 30d)` is the identity there and no option moves them; the entry that bites
+/// is `--period 7d --no-period-scaling` against `tests/fixtures/sample.yaml`,
+/// which declares no period at all. A one-sided control (the dashboard forcing
+/// `period_aware = true` while the generator honours it) reddens the matrix
+/// naming exactly that spec and that invocation, with or without the synthetic
+/// pair — so the pair is NOT load-bearing for it.
+///
+/// They stay for the case the committed corpus cannot state: an SLO whose own
+/// `period:` field is non-default, as opposed to one that inherits `--period`.
+/// That is a distinct resolution path (`resolve_period`'s `Some` arm rather
+/// than its default arm) and nothing committed exercises it.
+///
+/// A mutation in the SHARED seam cannot be caught here by construction, and
+/// that is by design: this file guards AGREEMENT between two sources, and a
+/// seam both sides read moves both sides together. The named regression tests
+/// below assert the absolute expected series for that reason.
 fn drift_specs() -> Vec<(String, Spec)> {
     let mut specs = committed_specs();
     specs.push((
