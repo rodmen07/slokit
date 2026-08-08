@@ -18,14 +18,18 @@
 //! any of the five — the byte-identity assertions below are only worth
 //! something because both sides are upstream's own documents.
 //!
-//! sloth's other two CRD examples are deliberately absent.
+//! sloth's other two CRD examples are deliberately absent from THIS file's
+//! fixture set, both because they have no native twin to be byte-identical to.
 //! `slo-plugin-k8s-getting-started.yml` uses `spec.sloPlugins` and
-//! `slos[].plugins`, which fail closed (see the error tests, which reproduce
-//! its exact shape), and `plugin-k8s-getting-started.yml` is internally
+//! `slos[].plugins`; **as of v1.8.0 those are captured and reported by
+//! `SLO_PLUGIN_CHAIN_DROPPED` rather than refused** (the chain tests below
+//! reproduce its exact shapes, and the upstream document itself is exercised
+//! from `tests/fixtures/sloth_corpus/` by `tests/sloth_corpus.rs` and
+//! `tests/sloth_crd_cli.rs`). `plugin-k8s-getting-started.yml` is internally
 //! inconsistent — a `kind: PrometheusServiceLevel` document that writes the
 //! *native* `page_alert:`/`ticket_alert:` where the CRD's own Go tags say
 //! `pageAlert`/`ticketAlert`. That one is the reason `spec::sloth_crd` refuses
-//! those two spellings instead of ignoring them.
+//! those two spellings instead of ignoring them, and it stays a refusal.
 
 #![cfg(feature = "spec")]
 
@@ -205,7 +209,7 @@ fn the_k8s_multifile_stream_yields_one_spec_per_document() {
 }
 
 #[test]
-fn the_sli_plugin_shape_imports_because_only_slo_plugin_chains_are_refused() {
+fn the_sli_plugin_shape_imports_and_is_not_confused_with_an_slo_plugin_chain() {
     let yaml = BASE.replace(
         "        events:\n          errorQuery: sum(rate(err_total[{{.window}}]))\n          totalQuery: sum(rate(all_total[{{.window}}]))\n",
         "        plugin:\n          id: \"slokit/availability/http-requests-total\"\n          options:\n            job: myservice\n",
@@ -221,6 +225,129 @@ fn the_sli_plugin_shape_imports_because_only_slo_plugin_chains_are_refused() {
         plugin.options,
         BTreeMap::from([("job".to_string(), "myservice".to_string())])
     );
+    // The two mechanisms share a word and nothing else: an `sli.plugin` must
+    // not land in the SLO plugin-chain field, or the lint would report a drop
+    // that did not happen.
+    assert_eq!(import.specs[0].slos[0].plugins, None);
+    assert_eq!(import.specs[0].slo_plugins, None);
+}
+
+// ---------------------------------------------------------------------------
+// SLO plugin chains: captured for the lint, applied to nothing (v1.8.0 PR 1)
+// ---------------------------------------------------------------------------
+
+/// Both spellings taken verbatim from sloth's own
+/// `examples/slo-plugin-k8s-getting-started.yml`, so the shapes under test are
+/// upstream's rather than invented.
+fn with_spec_level_chain() -> String {
+    BASE.replace(
+        "  slos:\n",
+        "  sloPlugins:\n    chain:\n      - id: \"sloth.dev/core/debug/v1\"\n        priority: 9999999\n        config: {msg: \"Plugin 99\"}\n  slos:\n",
+    )
+}
+
+fn with_slo_level_chain() -> String {
+    BASE.replace(
+        "      objective: 99.9\n",
+        "      objective: 99.9\n      plugins:\n        chain:\n          - id: \"sloth.dev/core/debug/v1\"\n            priority: 1050\n          - id: \"sloth.dev/core/debug/v1\"\n",
+    )
+}
+
+/// The behavior difference this slice ships, at the library level.
+///
+/// Until 1.8.0 this exact document was a hard `Err` reading
+///
+/// ```text
+/// sloth-crd PrometheusServiceLevel 'base': spec.sloPlugins is a sloth SLO
+/// plugin chain and has no slokit equivalent; it would rewrite the generated
+/// rules, so it is refused rather than dropped
+/// ```
+///
+/// while the native route parsed the same construct, dropped it, and warned.
+/// The claim in that message is false of slokit's generator — proven on this
+/// dialect, not inherited from the native probe, by
+/// `tests/sloth_crd_cli.rs::a_crd_plugin_chain_changes_no_generated_byte`.
+#[test]
+fn a_spec_level_chain_is_captured_instead_of_refused() {
+    let import = sloth_crd::from_yaml(&with_spec_level_chain()).unwrap();
+    let chain = import.specs[0]
+        .slo_plugins
+        .as_ref()
+        .expect("spec.sloPlugins is captured into Spec::slo_plugins");
+    assert_eq!(chain.ids(), vec!["sloth.dev/core/debug/v1"]);
+}
+
+/// Split from the spec-level case on purpose: `sloPlugins` and `plugins` are
+/// two different keys, filled by two different functions, and one test holding
+/// both clauses would stop at whichever failed first.
+#[test]
+fn an_slo_level_chain_is_captured_instead_of_refused() {
+    let import = sloth_crd::from_yaml(&with_slo_level_chain()).unwrap();
+    let chain = import.specs[0].slos[0]
+        .plugins
+        .as_ref()
+        .expect("slos[].plugins is captured into SloSpec::plugins");
+    assert_eq!(
+        chain.ids(),
+        vec!["sloth.dev/core/debug/v1", "sloth.dev/core/debug/v1"],
+        "every entry is kept in document order, including the one with no priority"
+    );
+}
+
+/// Capturing a chain must not be capturing it onto every document: a spec-level
+/// chain leaves the SLO field empty and an SLO-level chain leaves the spec
+/// field empty. Without this, a capture that wrote both fields unconditionally
+/// would satisfy the two tests above and make the lint fire twice on documents
+/// carrying one key.
+#[test]
+fn each_chain_lands_only_in_the_field_its_key_names() {
+    let spec_level = sloth_crd::from_yaml(&with_spec_level_chain()).unwrap();
+    assert_eq!(spec_level.specs[0].slos[0].plugins, None);
+
+    let slo_level = sloth_crd::from_yaml(&with_slo_level_chain()).unwrap();
+    assert_eq!(slo_level.specs[0].slo_plugins, None);
+
+    // And the unmodified base carries neither.
+    let base = sloth_crd::from_yaml(BASE).unwrap();
+    assert_eq!(base.specs[0].slo_plugins, None);
+    assert_eq!(base.specs[0].slos[0].plugins, None);
+}
+
+/// A captured chain is inert: the rules an imported CRD generates are the same
+/// whether or not the document carried one. Asserted here through
+/// `generate_rules_with` across the whole option matrix, and again over the
+/// real upstream document at the binary level in `tests/sloth_crd_cli.rs`.
+///
+/// This is what makes capture-and-lint legal rather than merely convenient. It
+/// is compared against `BASE`, which is the chained documents with exactly the
+/// chain keys removed and nothing else, so the pair really does differ in only
+/// the construct under test.
+#[test]
+fn a_captured_chain_changes_nothing_about_the_generated_rules() {
+    let chainless = sloth_crd::from_yaml(BASE).unwrap().specs[0].clone();
+    for chained_yaml in [with_spec_level_chain(), with_slo_level_chain()] {
+        assert_ne!(
+            chained_yaml, BASE,
+            "the chained document must differ from the chainless one, or this \
+             comparison is a document against itself"
+        );
+        let chained = sloth_crd::from_yaml(&chained_yaml).unwrap().specs[0].clone();
+        for (invocation, opts) in option_matrix() {
+            let with = generate_rules_with(&chained, &opts).unwrap();
+            let without = generate_rules_with(&chainless, &opts).unwrap();
+            assert_eq!(
+                with.to_prometheus_yaml().unwrap(),
+                without.to_prometheus_yaml().unwrap(),
+                "a plugin chain changed the prometheus rules under `{invocation}`"
+            );
+            let labels = BTreeMap::from([("app".to_string(), "slokit".to_string())]);
+            assert_eq!(
+                with.to_operator_yaml("slo", &labels).unwrap(),
+                without.to_operator_yaml("slo", &labels).unwrap(),
+                "a plugin chain changed the operator rules under `{invocation} --format operator`"
+            );
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -283,24 +410,6 @@ fn the_error_test_base_document_imports_cleanly() {
     let import = sloth_crd::from_yaml(BASE).unwrap();
     assert_eq!(import.specs.len(), 1);
     assert_eq!(import.specs[0].slos.len(), 1);
-}
-
-#[test]
-fn slo_plugin_chains_error_naming_the_field() {
-    // Both shapes, taken from sloth's slo-plugin-k8s-getting-started.yml.
-    let doc_level = BASE.replace(
-        "  slos:\n",
-        "  sloPlugins:\n    chain:\n      - id: \"sloth.dev/core/debug/v1\"\n        config: {msg: \"Plugin 99\"}\n  slos:\n",
-    );
-    let msg = import_err(&doc_level);
-    assert!(msg.contains("spec.sloPlugins"), "{msg}");
-
-    let slo_level = BASE.replace(
-        "      objective: 99.9\n",
-        "      objective: 99.9\n      plugins:\n        chain:\n          - id: \"sloth.dev/core/debug/v1\"\n",
-    );
-    let msg = import_err(&slo_level);
-    assert!(msg.contains("slos[].plugins"), "{msg}");
 }
 
 #[test]

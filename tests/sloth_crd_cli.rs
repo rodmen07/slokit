@@ -29,6 +29,8 @@
 #![cfg(feature = "cli")]
 
 use std::collections::BTreeSet;
+use std::fs;
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
 const K8S_GETTING_STARTED: &str = "tests/fixtures/sloth_crd/k8s-getting-started.yaml";
@@ -378,5 +380,193 @@ fn the_ignored_kubernetes_metadata_is_reported_on_stderr_not_stdout() {
     assert!(
         !rules.contains("role: alert-rules"),
         "a Kubernetes object label reached the generated rules:\n{rules}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// v1.8.0 PR 1: an SLO plugin chain is captured and linted, not refused
+//
+// v1.8.0 done-when clause 2 in ROADMAP.md, and the premise the whole slice
+// rests on. The v1.7.0 work proved byte-identity for a chain on the NATIVE
+// route; the CRD route is a different importer, so the claim is re-derived
+// here on this dialect rather than inherited.
+// ---------------------------------------------------------------------------
+
+/// sloth's own CRD document carrying SLO plugin chains: a two-entry
+/// `spec.sloPlugins` plus a five-entry `slos[].plugins`. Committed under
+/// `sloth_corpus/` with its upstream sha256 pinned by `tests/sloth_corpus.rs`,
+/// which is why this file reads it there instead of copying it.
+const CORPUS_CHAINED_CRD: &str = "tests/fixtures/sloth_corpus/slo-plugin-k8s-getting-started.yml";
+
+/// The second upstream CRD document with a chain: one `spec.sloPlugins` entry
+/// and no SLO-level key, so the two documents between them cover both spellings
+/// and both "only one of the two is present" cases.
+const CORPUS_CHAINED_CRD_2: &str = "tests/fixtures/sloth_corpus/contrib-denominator-corrected.yaml";
+
+fn temp_dir(tag: &str) -> PathBuf {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("slokit-sloth-crd-cli-{tag}-{nanos}"));
+    fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+fn indent_of(line: &str) -> usize {
+    line.len() - line.trim_start_matches(' ').len()
+}
+
+/// `yaml` with every `sloPlugins:` / `plugins:` block deleted — the key line
+/// and every line indented deeper than it — and nothing else touched.
+///
+/// Written here rather than committed as a second fixture on purpose: a
+/// hand-edited "chain removed" copy is exactly the kind of file that acquires a
+/// second difference over time, and then the byte comparison below is measuring
+/// two edits instead of one. Deriving it means the only difference is
+/// mechanical, and [`chain_removal_removes_the_chain_and_nothing_else`] proves
+/// the derivation did something.
+fn without_chains(yaml: &str) -> String {
+    let lines: Vec<&str> = yaml.split('\n').collect();
+    let mut out: Vec<&str> = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        if matches!(line.trim(), "sloPlugins:" | "plugins:") {
+            let base = indent_of(line);
+            i += 1;
+            while i < lines.len() && (lines[i].trim().is_empty() || indent_of(lines[i]) > base) {
+                i += 1;
+            }
+            continue;
+        }
+        out.push(line);
+        i += 1;
+    }
+    out.join("\n")
+}
+
+/// The negative control for the comparison below, and the reason it is not a
+/// document compared against itself: the stripped copy must really differ, must
+/// carry no chain key, and must still be a document slokit reads.
+#[test]
+fn chain_removal_removes_the_chain_and_nothing_else() {
+    for source in [CORPUS_CHAINED_CRD, CORPUS_CHAINED_CRD_2] {
+        let original = fs::read_to_string(source).expect("corpus fixture is readable");
+        let stripped = without_chains(&original);
+
+        assert!(
+            original.contains("sloPlugins:"),
+            "{source} is supposed to carry a spec-level chain"
+        );
+        assert_ne!(
+            stripped, original,
+            "{source}: chain removal changed nothing, so the byte comparison would \
+             be a document against itself"
+        );
+        assert!(
+            !stripped.contains("sloPlugins"),
+            "{source}: a spec-level chain survived removal"
+        );
+        assert!(
+            !stripped.lines().any(|l| l.trim() == "plugins:"),
+            "{source}: an SLO-level chain survived removal"
+        );
+        // Removal must not have eaten the document: `slos:` and the SLI are
+        // what everything downstream needs.
+        assert!(
+            stripped.contains("slos:") && stripped.contains("errorQuery:"),
+            "{source}: chain removal took more than the chain:\n{stripped}"
+        );
+    }
+}
+
+/// **Done-when clause 2.** A CRD document carrying a plugin chain generates
+/// byte-identical rules to the same document with the chain removed, through
+/// the shipped binary, in both output formats, across the whole option space
+/// (L-045: a single point of the option space would prove agreement under
+/// defaults and nothing else).
+///
+/// This is the claim the v1.6.0 refusal text denied. It said a chain "would
+/// rewrite the generated rules"; that is true of *sloth's* generator and false
+/// of slokit's, which has no plugin-chain stage at all.
+#[test]
+fn a_crd_plugin_chain_changes_no_generated_byte() {
+    let dir = temp_dir("nochain");
+    for source in [CORPUS_CHAINED_CRD, CORPUS_CHAINED_CRD_2] {
+        let original = fs::read_to_string(source).expect("corpus fixture is readable");
+        let stripped_path = dir.join(
+            PathBuf::from(source)
+                .file_name()
+                .expect("fixture has a file name"),
+        );
+        fs::write(&stripped_path, without_chains(&original)).expect("temp fixture is writable");
+        let stripped = stripped_path.to_string_lossy().into_owned();
+
+        for format in FORMATS {
+            for opts in option_matrix() {
+                let mut with = vec!["-i", source, "--format", format];
+                with.extend_from_slice(&opts);
+                let mut without = vec!["-i", stripped.as_str(), "--format", format];
+                without.extend_from_slice(&opts);
+
+                let with_bytes = generate_bytes(&with);
+                let without_bytes = generate_bytes(&without);
+                assert_eq!(
+                    with_bytes,
+                    without_bytes,
+                    "{source} --format {format} {}: the plugin chain changed the rules \
+                     ({} vs {} bytes)",
+                    opts.join(" "),
+                    with_bytes.len(),
+                    without_bytes.len()
+                );
+            }
+        }
+    }
+}
+
+/// The other half of the behavior difference: the document is not merely
+/// accepted, the drop is reported. Before v1.8.0 both of these exited non-zero
+/// from the importer with `spec.sloPlugins is a sloth SLO plugin chain and has
+/// no slokit equivalent`.
+#[test]
+fn a_crd_plugin_chain_is_reported_by_lint_rather_than_refused() {
+    for (source, expected_findings) in [(CORPUS_CHAINED_CRD, 2), (CORPUS_CHAINED_CRD_2, 1)] {
+        let out = slokit(&["lint", "-i", source]);
+        let text = format!("{}{}", stdout(&out), stderr(&out));
+        assert_eq!(
+            text.matches("SLO_PLUGIN_CHAIN_DROPPED").count(),
+            expected_findings,
+            "{source}: one finding per chain key the document carries:\n{text}"
+        );
+        assert!(
+            !text.contains("refused rather than dropped"),
+            "{source}: the superseded refusal text is still reachable:\n{text}"
+        );
+    }
+}
+
+/// KNOWN GAP, characterising what the code does today rather than what it
+/// should do (filed as a LOW bug in the autodev slokit backlog, 2026-08-08).
+///
+/// The finding names the key with its NATIVE spelling, `slo_plugins`, even when
+/// the document that carried it is a CRD spelling it `sloPlugins`. The lint
+/// reads a `Spec`, and a `Spec` does not remember which dialect produced it, so
+/// the message tells a CRD author to go and delete a key their file does not
+/// contain. Pinned here so the day a dialect-aware message ships, this test
+/// fails and says so instead of the gap closing unnoticed.
+#[test]
+fn known_gap_the_crd_lint_finding_names_the_native_spelling() {
+    let out = slokit(&["lint", "-i", CORPUS_CHAINED_CRD]);
+    let text = format!("{}{}", stdout(&out), stderr(&out));
+    assert!(
+        text.contains("`slo_plugins`"),
+        "expected the native spelling in the finding:\n{text}"
+    );
+    assert!(
+        !text.contains("`sloPlugins`"),
+        "the finding now names the CRD spelling — the known gap is CLOSED, so \
+         delete this test and the backlog item it pins:\n{text}"
     );
 }

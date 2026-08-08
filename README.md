@@ -345,12 +345,18 @@ one matters most — those are Kubernetes *object* labels, not rule labels
 generated rule. `status` is dropped silently: it is the controller's writeback,
 never input.
 
+**Reported by lint, never applied**: sloth's SLO plugin chains
+(`spec.sloPlugins`, `slos[].plugins`), which slokit has no equivalent for — its
+`sli.plugin` is a different mechanism and *is* mapped. `slokit lint` reports
+`SLO_PLUGIN_CHAIN_DROPPED` naming the key and its entries, exactly as it does
+for the same construct in a native spec. Generated rules are byte-identical to
+the same document with the chain deleted, so nothing is silently wrong — only
+silently absent, and the lint is what breaks the silence.
+
 **Fails closed, naming the field**, for anything that would generate the wrong
-rules: sloth's SLO plugin chains (`spec.sloPlugins`, `slos[].plugins`), which
-slokit has no equivalent for — its `sli.plugin` is a different mechanism and
-*is* mapped — and the native snake_case `page_alert` / `ticket_alert` spellings
-inside a CRD document, which would otherwise be ignored as unknown keys and
-drop the page/ticket severity labels without a word.
+rules: the native snake_case `page_alert` / `ticket_alert` spellings inside a
+CRD document, which would otherwise be ignored as unknown keys and drop the
+page/ticket severity labels without a word.
 
 The library half is `slokit::spec::sloth_crd` (`is_sloth_crd`, `from_yaml`,
 `from_path`), returning the same `Import` / `ImportNote` pair as the OpenSLO
