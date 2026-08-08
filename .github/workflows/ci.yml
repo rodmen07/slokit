@@ -159,6 +159,11 @@ jobs:
     name: coverage
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
+    # The token is lifted to the job level because the `secrets` context is
+    # NOT available in a step-level `if:` (only `env` is), and the upload step
+    # below has to be able to ask whether a token exists before it runs.
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
@@ -169,10 +174,35 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate coverage
         run: cargo llvm-cov --all-features --lcov --output-path lcov.info
+
+      # Codecov no longer accepts tokenless uploads and this repo has no
+      # CODECOV_TOKEN secret, so this step used to run, log `-> Token length: 0`
+      # then `Upload queued for processing failed: {"message":"Token required -
+      # not valid tokenless upload"}`, and STILL report success because of
+      # `fail_ci_if_error: false` (main run 31270524770, job 93135535624, head
+      # 354ad11). A green job advertising a coverage integration that has never
+      # published a byte is the inert-surface class these gates exist to catch.
+      # So: run only when a token is actually configured, and be loud when it
+      # is. tests/coverage_upload.rs pins all three halves of that contract.
       - name: Upload to Codecov
+        if: env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@v7
         with:
           files: lcov.info
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+
+      # An absent token has to be VISIBLE. Skipping quietly would leave the run
+      # summary indistinguishable from one where coverage really was published,
+      # which is the same defect in a different costume.
+      - name: Report that the Codecov upload was skipped
+        if: env.CODECOV_TOKEN == ''
+        run: |
+          echo "::notice title=Codecov upload skipped::CODECOV_TOKEN is not configured in this repository, so lcov.info was generated but never published."
+          {
+            echo "### Coverage generated, not published"
+            echo
+            echo "\`CODECOV_TOKEN\` is not configured in this repository, so"
+            echo "\`lcov.info\` was produced but the Codecov upload was skipped."
+            echo "Set the secret to start publishing; the upload fails loudly"
+            echo "from then on (\`fail_ci_if_error: true\`)."
+          } >> "$GITHUB_STEP_SUMMARY"
