@@ -93,6 +93,14 @@ generated rules` against a pinned Prometheus release, and `coverage`.
   seam, and `tests/dashboard_drift.rs` runs its two-source check across the
   whole option space rather than only under defaults. Found by a QA pass on
   the dashboard/generator contract, not by a user report.
+- **Added: sloth Kubernetes CRD input** (v1.6.0 PR 1). A file whose first
+  document declares `apiVersion: sloth.slok.dev/v1`, `kind:
+  PrometheusServiceLevel` is now auto-detected and imported by
+  `spec::sloth_crd` instead of dying in the native parser with `missing field
+  'service'`. Kubernetes object metadata is ignored with an import note, and
+  sloth's SLO plugin chains plus the native `page_alert`/`ticket_alert`
+  spellings fail closed by name. `--input-format sloth-crd` and the
+  binary-level tests are PR 2.
 
 ## Next milestones
 
@@ -164,15 +172,25 @@ another repo that this scoping run was not scoped to read.
    `src/spec/mod.rs` (1041), both already over the 1000-line hard threshold;
    the `src/spec/openslo/v1alpha.rs` and `src/dashboard/burn.rs` precedent.
    All three CRD fixtures committed under `tests/fixtures/sloth_crd/` together
-   with the two native twins, plus the fail-closed direction. No committed
-   guard globs `tests/fixtures/`, so adding files there reddens nothing
-   (checked 2026-08-07: every `read_dir` in `tests/` scans
-   `examples/infraportal/slos` or a temp output directory, and the fixture
-   paths are explicit constants).
+   with the two native twins, plus the fail-closed direction.
+   **Corrected 2026-08-08 while implementing this slice** (the scoping pass got
+   the reason right and the fact wrong): a committed guard *does* scan
+   `tests/fixtures/` — `tests/schema.rs:531` `native_fixture_files()` reads
+   that directory and feeds `positive_specs()`, which
+   `every_native_spec_validates_against_the_schema` and
+   `schema_positives_also_pass_the_rust_validator` both iterate. What saves the
+   slice is that the `read_dir` is **not recursive** and filters on
+   `p.is_file()`, so a `sloth_crd/` subdirectory is invisible to it, exactly as
+   `tests/fixtures/openslo/` already is. The obligation is therefore still
+   unschedulable-free, but only while the fixtures stay in a subdirectory:
+   dropping a CRD document at the top level of `tests/fixtures/` reddens
+   `schema.rs` on the commit that adds the file (control run 2026-08-08, quoted
+   in the PR body).
 2. **PR 2 — end-to-end proof and docs.** `--input-format` gains its third
    value (`sloth-crd`, an overridable default name), binary-level
-   `validate`/`generate` tests over the committed fixtures, the twin
-   byte-identity assertions, and the docs surface: README's input-format
+   `validate`/`generate` tests over the committed fixtures (PR 1 asserts the
+   twin byte-identity at the library level across the generate option space;
+   PR 2 does it through the CLI), and the docs surface: README's input-format
    section and the `src/spec/sloth_crd.rs` module docs carrying the field
    table.
 3. **PR 3 — release prep and the cut.** `CHANGELOG.md` gains a dated

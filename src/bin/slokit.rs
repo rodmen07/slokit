@@ -12,7 +12,7 @@ use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
 use slokit::dashboard::dashboards_json_with;
 use slokit::generate::{generate_all, generate_rules_with, GenerateOptions};
 use slokit::simulate::simulate;
-use slokit::spec::{openslo, validate_all, Lint, LintLevel, Spec, SCHEMA_JSON};
+use slokit::spec::{openslo, sloth_crd, validate_all, Lint, LintLevel, Spec, SCHEMA_JSON};
 use slokit::{BurnRate, MwmbrConfig, Objective, Slo, Window};
 
 /// Every spec file under `input`: the file itself, or each `*.yaml`/`*.yml`
@@ -39,35 +39,58 @@ fn spec_files(input: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+/// Which dialect one input file is read as. Auto-detection resolves to one of
+/// these per file; `--input-format` pins it.
+#[derive(Clone, Copy, PartialEq)]
+enum Dialect {
+    Slokit,
+    Openslo,
+    SlothCrd,
+}
+
 /// Load one spec (file) or many (directory of `*.yaml`/`*.yml`), honoring the
-/// input format flag. Without an explicit format, each file is auto-detected:
-/// a first document with a top-level `apiVersion: openslo/...` is imported as
-/// OpenSLO, anything else parses as native slokit specs. Either way a file may
-/// be a multi-document YAML stream (sloth's `multifile.yml` layout, or the
-/// stream `slokit export` writes), and every document is loaded. OpenSLO
-/// import notes are printed to stderr.
+/// input format flag. Without an explicit format, each file is auto-detected
+/// from its first document's top-level `apiVersion`: `openslo/...` is imported
+/// as OpenSLO, `sloth.slok.dev/...` as a sloth Kubernetes CRD, anything else
+/// parses as native slokit specs. Either way a file may be a multi-document
+/// YAML stream (sloth's `multifile.yml` layout, or the stream `slokit export`
+/// writes), and every document is loaded. Import notes are printed to stderr.
 fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
     let mut specs = Vec::new();
     for file in spec_files(&input.input)? {
         let contents = std::fs::read_to_string(&file)
             .with_context(|| format!("reading {}", file.display()))?;
-        let use_openslo = match input.input_format {
-            Some(InputFormat::Openslo) => true,
-            Some(InputFormat::Slokit) => false,
-            None => openslo::is_openslo(&contents),
+        let dialect = match input.input_format {
+            Some(InputFormat::Openslo) => Dialect::Openslo,
+            Some(InputFormat::Slokit) => Dialect::Slokit,
+            None if openslo::is_openslo(&contents) => Dialect::Openslo,
+            None if sloth_crd::is_sloth_crd(&contents) => Dialect::SlothCrd,
+            None => Dialect::Slokit,
         };
-        if use_openslo {
-            let import = openslo::from_yaml(&contents)
-                .with_context(|| format!("importing OpenSLO specs from {}", file.display()))?;
-            for note in &import.notes {
-                eprintln!("note: {}: {note}", file.display());
+        let import = match dialect {
+            Dialect::Openslo => Some(
+                openslo::from_yaml(&contents)
+                    .with_context(|| format!("importing OpenSLO specs from {}", file.display()))?,
+            ),
+            Dialect::SlothCrd => Some(sloth_crd::from_yaml(&contents).with_context(|| {
+                format!(
+                    "importing sloth Kubernetes CRD specs from {}",
+                    file.display()
+                )
+            })?),
+            Dialect::Slokit => None,
+        };
+        match import {
+            Some(import) => {
+                for note in &import.notes {
+                    eprintln!("note: {}: {note}", file.display());
+                }
+                specs.extend(import.specs);
             }
-            specs.extend(import.specs);
-        } else {
-            specs.extend(
+            None => specs.extend(
                 Spec::from_yaml_stream(&contents)
                     .with_context(|| format!("loading specs from {}", file.display()))?,
-            );
+            ),
         }
     }
     Ok(specs)
@@ -147,8 +170,10 @@ struct InputArgs {
     input: PathBuf,
     /// Input spec format. Defaults to slokit, except that detection is
     /// unambiguous when a file's first YAML document sets a top-level
-    /// `apiVersion: openslo/...`: that file is then imported as OpenSLO.
-    /// Pass the flag to override auto-detection either way.
+    /// `apiVersion`: `openslo/...` is imported as OpenSLO and
+    /// `sloth.slok.dev/...` as a sloth Kubernetes CRD
+    /// (`kind: PrometheusServiceLevel`). Pass the flag to override
+    /// auto-detection either way.
     #[arg(long, value_enum)]
     input_format: Option<InputFormat>,
 }

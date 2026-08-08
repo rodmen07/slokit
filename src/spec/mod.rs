@@ -10,13 +10,18 @@
 //! sloth-compatible [`PluginSli`] shape resolved against an SLI [`plugin`]
 //! registry.
 //!
-//! Beyond the native format, the [`openslo`] module imports OpenSLO v1
-//! `kind: SLO` documents into this model.
+//! Beyond the native format, two importers read foreign dialects into this
+//! model: [`openslo`] for OpenSLO `kind: SLO` documents (v1 and v1alpha), and
+//! [`sloth_crd`] for sloth's Kubernetes custom resource
+//! (`apiVersion: sloth.slok.dev/v1`, `kind: PrometheusServiceLevel`). Both
+//! return an [`openslo::Import`].
 
+mod import;
 mod lint;
 pub mod openslo;
 mod parse;
 pub mod plugin;
+pub mod sloth_crd;
 mod validate;
 
 pub use lint::{lint, lint_with, Lint, LintLevel};

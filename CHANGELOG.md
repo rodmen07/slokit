@@ -25,6 +25,28 @@ From 1.0.0, slokit follows the semver guarantees documented in
 
 ### Added
 
+- **sloth Kubernetes CRD input** (v1.6.0 slice 1): `apiVersion:
+  sloth.slok.dev/v1`, `kind: PrometheusServiceLevel` documents — the shape
+  sloth is used in inside Kubernetes, and five of the twenty-one documents in
+  sloth's own `examples/`. slokit already *emitted* a Kubernetes custom
+  resource (`generate --format operator`) without being able to read one;
+  before this, such a document fell through to the native parser and exited 1
+  with `spec error: document 1: missing field 'service'`, naming neither the
+  dialect nor the problem. A file whose first document declares that
+  `apiVersion` is now auto-detected and imported, single document or stream,
+  one spec per `PrometheusServiceLevel`. New public module
+  `slokit::spec::sloth_crd` (`is_sloth_crd`, `from_yaml`, `from_path`),
+  returning the same `Import` / `ImportNote` pair as the OpenSLO importer —
+  additive per [docs/SEMVER.md](docs/SEMVER.md), and no new dependency, so the
+  lean core is untouched. Kubernetes object metadata (`metadata.name`,
+  `.namespace`, `.labels`) is ignored with an import note rather than silently
+  honored, because object labels are not rule labels. Fail-closed by name:
+  sloth's SLO plugin chains (`spec.sloPlugins`, `slos[].plugins`), and the
+  *native* `alerting.page_alert` / `alerting.ticket_alert` spellings inside a
+  CRD document, which would otherwise drop the page/ticket routing labels in
+  silence (sloth's own `examples/plugin-k8s-getting-started.yml` has exactly
+  that bug). `--input-format sloth-crd` for pinning the dialect explicitly is
+  the next slice; auto-detection is what ships here.
 - `dashboard::dashboard_value_with`, `dashboard::dashboard_json_with`, and
   `dashboard::dashboards_json_with`, taking the `GenerateOptions` the rules
   were generated with. The existing `dashboard_value` / `dashboard_json` /

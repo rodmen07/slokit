@@ -132,43 +132,11 @@ enum ApiVersion {
     V1Alpha,
 }
 
-/// The result of importing an OpenSLO YAML input: the converted specs plus
-/// lint-style notes about constructs that were dropped or transformed.
-///
-/// The struct is `#[non_exhaustive]`: it is an output type readers consume,
-/// and future report fields must not be breaking changes.
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct Import {
-    /// The converted specs, one per distinct `spec.service`, in first-seen
-    /// document order. Run [`validate_all`](super::validate_all) before
-    /// generating rules from them.
-    pub specs: Vec<Spec>,
-    /// Lint-style notes: OpenSLO constructs that do not map one-to-one and
-    /// were ignored or rewritten. An empty vec means a lossless import.
-    pub notes: Vec<ImportNote>,
-}
-
-/// One advisory note produced during import (not an error: the document was
-/// representable, but something was dropped or rewritten on the way in).
-///
-/// The struct is `#[non_exhaustive]`: it is an output type readers consume,
-/// and future fields (for example a machine-readable code) must not be
-/// breaking changes.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct ImportNote {
-    /// Where the note applies, e.g. `slo 'requests-availability'`.
-    pub location: String,
-    /// What was ignored or rewritten, and why.
-    pub message: String,
-}
-
-impl std::fmt::Display for ImportNote {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.location, self.message)
-    }
-}
+/// The import result types. They live in [`super::import`] because the sloth
+/// CRD importer returns the same pair, and they are re-exported here so
+/// `slokit::spec::openslo::{Import, ImportNote}` stays the path it has always
+/// been.
+pub use super::import::{Import, ImportNote};
 
 /// Cheap format detection for auto-detecting CLI input: true when the first
 /// non-empty YAML document has a top-level `apiVersion` starting with
