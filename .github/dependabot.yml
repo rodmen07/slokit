@@ -1,0 +1,42 @@
+# Dependabot version updates.
+#
+# Pairs the `Security audit` required context (cargo audit --deny warnings,
+# ci.yml) with automated dependency bumps, so currency PREVENTS advisories
+# rather than the audit gate only catching them after they are published.
+# This closes the open follow-up recorded by the 2026-07-21 crates security
+# sweep ("consider a .github/dependabot.yml ... so the audit gate is paired
+# with automated bumps").
+#
+# Minor and patch updates arrive as ONE grouped PR per ecosystem to keep the
+# queue small. A major (semver-breaking) update falls outside the groups and
+# arrives as its own PR, which the merge policy treats as a compatibility
+# check, never a blind merge.
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      cargo-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # dtolnay/rust-toolchain refs name TOOLCHAINS, not action versions:
+      # `@stable` is a moving branch and `@1.82` is this crate's MSRV pin
+      # (ci.yml's `MSRV 1.82` required context). A "bump" here would raise
+      # the toolchain the MSRV gate runs on -- weakening the gate -- so
+      # this action is excluded from version updates. Raising the MSRV is
+      # a reviewed decision (docs/SEMVER.md), never an automated bump.
+      - dependency-name: "dtolnay/rust-toolchain"
