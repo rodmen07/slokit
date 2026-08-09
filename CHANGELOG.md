@@ -6,6 +6,42 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
+## [Unreleased]
+
+### Added
+
+- **`check` can compute each SLO's burn rate over the window the generated
+  rules use** (v1.9.0 PR 1, the window seam). `slokit check`'s "current burn
+  rate" was always computed over `--window` (default `1h`, the 30d-calibrated
+  base), while the generated `slo:current_burn_rate:ratio` reads the shortest
+  MWMBR lookback scaled to each SLO's own period — `5m` for a 30d SLO, `1m`
+  for a 7d one — so the CLI's BURN column and the Grafana panel of the same
+  name disagreed 12x at the default period and 60x on a 7d SLO, with nothing
+  saying so.
+
+  - New CLI flags on `check`: `--rules-window` resolves the burn window per
+    SLO exactly as `slokit generate` does (through the generator's own
+    resolution seam, never a re-derivation), and `--no-period-scaling` /
+    `--alert-windows` carry the same meaning they have on `generate` and
+    `dashboard`. An explicit `--window` stays authoritative: combining it
+    with `--rules-window` is an error rather than one flag silently winning,
+    and `--no-period-scaling` / `--alert-windows` without `--rules-window`
+    are errors too (a parsed-and-ignored flag is a shipped no-op).
+  - Under `--rules-window` the table gains a per-SLO WINDOW column; the JSON
+    output already stated `current_window` per SLO and now varies it per SLO.
+    The default invocation's wire queries and output are byte-identical to
+    1.8.0.
+  - New library surface (additive; `check_spec` / `check_slo` keep their
+    signatures and delegate): `check::CheckOptions` (`#[non_exhaustive]`,
+    `Default` reproduces the previous behavior), `check::BurnWindow`
+    (`Fixed(Window)` / `Rules`), and `check_spec_with` / `check_slo_with`.
+  - The `check`/`generate` window agreement is held by
+    `tests/check_generate_agreement.rs` across the reachable option space
+    (default, `--period 7d`, `--no-period-scaling`, `--alert-windows` with a
+    committed catalogue, for 30d and 7d SLOs); the
+    `known_gap_check_burn_window_ignores_the_generators_period_scaled_base_window`
+    characterisation test is deleted, as its own failure message mandates.
+
 ## [1.8.0] - 2026-08-08
 
 **Import dialect parity.** Both constructs whose answer depended on which

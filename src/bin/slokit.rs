@@ -8,7 +8,9 @@ use std::time::Duration;
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use slokit::check::{check_spec, PrometheusClient, SloStatus, StatusLevel};
+use slokit::check::{
+    check_spec_with, BurnWindow, CheckOptions, PrometheusClient, SloStatus, StatusLevel,
+};
 use slokit::dashboard::dashboards_json_with;
 use slokit::generate::{generate_all, generate_rules_with, GenerateOptions};
 use slokit::simulate::simulate;
@@ -162,14 +164,14 @@ fn load_specs(input: &InputArgs) -> Result<Vec<Spec>> {
 fn load_alert_windows(
     path: Option<&Path>,
     specs: &[Spec],
-    opts: &GenerateOptions,
+    default_period: Window,
 ) -> Result<AlertWindowsSet> {
     let Some(path) = path else {
         return Ok(AlertWindowsSet::new());
     };
     let set = AlertWindowsSet::load(path)
         .with_context(|| format!("loading alert-window catalogues from {}", path.display()))?;
-    let uncovered = set.uncovered_periods(specs, opts.default_period)?;
+    let uncovered = set.uncovered_periods(specs, default_period)?;
     if !uncovered.is_empty() {
         let missing: Vec<String> = uncovered.iter().map(|w| w.prometheus()).collect();
         let have: Vec<String> = set.periods().iter().map(|w| w.prometheus()).collect();
@@ -388,9 +390,25 @@ struct CheckArgs {
     /// Exit non-zero when a status reaches this level.
     #[arg(long, value_enum, default_value_t = FailOn::Breach)]
     fail_on: FailOn,
-    /// Short window for the "current" burn rate.
-    #[arg(long, default_value = "1h")]
+    /// Short window for the "current" burn rate, used for every SLO. Cannot
+    /// be combined with --rules-window.
+    #[arg(long, default_value = "1h", conflicts_with = "rules_window")]
     window: String,
+    /// Compute each SLO's "current" burn rate over the window the generated
+    /// rules use: the shortest burn-rate lookback, resolved per SLO exactly
+    /// as `slokit generate` resolves it. The table gains a per-SLO WINDOW
+    /// column and the JSON's current_window varies per SLO.
+    #[arg(long)]
+    rules_window: bool,
+    /// Use the 30d-calibrated burn-rate windows verbatim instead of scaling
+    /// them to each SLO's period. Must match `slokit generate`; only
+    /// meaningful with --rules-window.
+    #[arg(long, requires = "rules_window")]
+    no_period_scaling: bool,
+    /// sloth `kind: AlertWindows` catalogue file, or a directory of them.
+    /// Must match `slokit generate`; only meaningful with --rules-window.
+    #[arg(long, value_name = "PATH", requires = "rules_window")]
+    alert_windows: Option<PathBuf>,
     /// Default SLO period for SLOs that do not set their own.
     #[arg(long, default_value = "30d")]
     period: String,
@@ -479,7 +497,8 @@ fn run_dashboard(args: DashboardArgs) -> Result<()> {
     opts.default_period = Window::parse(&args.period)?;
     opts.mwmbr = MwmbrConfig::sre_default();
     opts.period_aware = !args.no_period_scaling;
-    opts.alert_windows = load_alert_windows(args.alert_windows.as_deref(), &specs, &opts)?;
+    opts.alert_windows =
+        load_alert_windows(args.alert_windows.as_deref(), &specs, opts.default_period)?;
     write_output(
         dashboards_json_with(&specs, &opts)?,
         args.output,
@@ -599,7 +618,8 @@ fn run_generate(args: GenerateArgs) -> Result<()> {
     opts.default_period = Window::parse(&args.period)?;
     opts.mwmbr = MwmbrConfig::sre_default();
     opts.period_aware = !args.no_period_scaling;
-    opts.alert_windows = load_alert_windows(args.alert_windows.as_deref(), &specs, &opts)?;
+    opts.alert_windows =
+        load_alert_windows(args.alert_windows.as_deref(), &specs, opts.default_period)?;
 
     let rendered = match args.format {
         // All specs merge into one rules document.
@@ -972,8 +992,23 @@ fn run_check(args: CheckArgs) -> Result<()> {
     // Distinguish exit codes: runtime errors exit 2, a fail-on hit exits 1.
     let result = (|| -> Result<bool> {
         let specs = load_specs(&args.input)?;
-        let default_period = Window::parse(&args.period)?;
-        let current_window = Window::parse(&args.window)?;
+        let mut opts = CheckOptions::default();
+        opts.default_period = Window::parse(&args.period)?;
+        // `Some` is the fixed-window mode (one window, stated once in the
+        // table header); `None` means --rules-window resolved one per SLO.
+        // clap enforces that --window and --rules-window cannot combine, so
+        // neither mode ever silently discards the other's flag.
+        let fixed_window = if args.rules_window {
+            opts.burn_window = BurnWindow::Rules;
+            opts.period_aware = !args.no_period_scaling;
+            opts.alert_windows =
+                load_alert_windows(args.alert_windows.as_deref(), &specs, opts.default_period)?;
+            None
+        } else {
+            let window = Window::parse(&args.window)?;
+            opts.burn_window = BurnWindow::Fixed(window);
+            Some(window)
+        };
 
         let mut client =
             PrometheusClient::with_timeout(&args.url, Duration::from_secs(args.timeout))?;
@@ -983,12 +1018,12 @@ fn run_check(args: CheckArgs) -> Result<()> {
 
         let mut statuses = Vec::new();
         for spec in &specs {
-            statuses.extend(check_spec(&client, spec, default_period, current_window)?);
+            statuses.extend(check_spec_with(&client, spec, &opts)?);
         }
 
         match args.output {
             OutputFormat::Json => println!("{}", serde_json::to_string_pretty(&statuses)?),
-            OutputFormat::Table => print_status_table(&statuses, &args.url, current_window),
+            OutputFormat::Table => print_status_table(&statuses, &args.url, fixed_window),
         }
 
         Ok(fail_threshold_hit(&statuses, args.fail_on))
@@ -1012,22 +1047,49 @@ fn fail_threshold_hit(statuses: &[SloStatus], fail_on: FailOn) -> bool {
     })
 }
 
-fn print_status_table(statuses: &[SloStatus], url: &str, current_window: Window) {
-    println!("checked against {url} (current window {current_window})\n");
-    println!(
-        "{:<7} {:<14} {:<28} {:>9} {:>10} {:>9}",
-        "STATUS", "SERVICE", "SLO", "CONSUMED", "REMAINING", "BURN"
-    );
-    for s in statuses {
-        println!(
-            "{:<7} {:<14} {:<28} {:>9} {:>10} {:>9}",
-            s.level.label(),
-            s.service,
-            s.name,
-            opt_pct(s.budget_consumed_ratio),
-            opt_pct(s.budget_remaining_ratio),
-            opt_burn(s.current_burn_rate),
-        );
+/// Render the status table. `fixed_window` is the one window every row was
+/// computed over, stated once in the header — the pre-1.9 shape, kept
+/// byte-identical. `None` means `--rules-window` resolved a window per SLO,
+/// so the header claims no single window and each row states its own.
+fn print_status_table(statuses: &[SloStatus], url: &str, fixed_window: Option<Window>) {
+    match fixed_window {
+        Some(current_window) => {
+            println!("checked against {url} (current window {current_window})\n");
+            println!(
+                "{:<7} {:<14} {:<28} {:>9} {:>10} {:>9}",
+                "STATUS", "SERVICE", "SLO", "CONSUMED", "REMAINING", "BURN"
+            );
+            for s in statuses {
+                println!(
+                    "{:<7} {:<14} {:<28} {:>9} {:>10} {:>9}",
+                    s.level.label(),
+                    s.service,
+                    s.name,
+                    opt_pct(s.budget_consumed_ratio),
+                    opt_pct(s.budget_remaining_ratio),
+                    opt_burn(s.current_burn_rate),
+                );
+            }
+        }
+        None => {
+            println!("checked against {url} (burn windows follow the generated rules)\n");
+            println!(
+                "{:<7} {:<14} {:<28} {:>9} {:>10} {:>9} {:>7}",
+                "STATUS", "SERVICE", "SLO", "CONSUMED", "REMAINING", "BURN", "WINDOW"
+            );
+            for s in statuses {
+                println!(
+                    "{:<7} {:<14} {:<28} {:>9} {:>10} {:>9} {:>7}",
+                    s.level.label(),
+                    s.service,
+                    s.name,
+                    opt_pct(s.budget_consumed_ratio),
+                    opt_pct(s.budget_remaining_ratio),
+                    opt_burn(s.current_burn_rate),
+                    s.current_window.prometheus(),
+                );
+            }
+        }
     }
 }
 

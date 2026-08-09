@@ -9,9 +9,11 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use crate::burn_rate::BurnRate;
+use crate::burn_rate::{BurnRate, MwmbrConfig};
 use crate::error::{Result, SlokitError};
-use crate::spec::{SloSpec, Spec};
+use crate::generate::GenerateOptions;
+use crate::spec::alert_windows::AlertWindowsSet;
+use crate::spec::{SloSpec, Spec, DEFAULT_PERIOD};
 use crate::window::Window;
 
 /// A minimal blocking client for the Prometheus instant-query API.
@@ -231,6 +233,107 @@ pub struct SloStatus {
     pub level: StatusLevel,
 }
 
+/// The default fixed window for the "current" burn rate: `1h`, the CLI's
+/// long-standing `--window` default. Kept across 1.x because `check`'s burn
+/// rate feeds `--fail-on`, so re-windowing the default would silently flip
+/// existing CI gates (decision D1.9-1 in `ROADMAP.md`).
+pub const DEFAULT_CURRENT_WINDOW: Window = Window::hours(1);
+
+/// How [`check_slo_with`] chooses the window behind each SLO's "current"
+/// burn rate.
+///
+/// The enum is `#[non_exhaustive]`: further resolution modes may be added
+/// without a breaking change, so matches need a wildcard arm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum BurnWindow {
+    /// One fixed window for every SLO — the CLI's `--window`, and the only
+    /// behavior that existed before 1.9. The default is
+    /// [`DEFAULT_CURRENT_WINDOW`] (`1h`).
+    Fixed(Window),
+    /// Per SLO, the window the generated rules compute
+    /// `slo:current_burn_rate:ratio` over: the shortest lookback of the
+    /// burn-rate config resolved exactly as [`generate`](crate::generate)
+    /// resolves it — per-SLO `alerting.windows` first, then a matching
+    /// `kind: AlertWindows` catalogue, then the config table scaled to the
+    /// SLO's period, then the table verbatim.
+    Rules,
+}
+
+/// Options controlling a check run.
+///
+/// The struct is `#[non_exhaustive]`, mirroring
+/// [`GenerateOptions`](crate::generate::GenerateOptions): options are
+/// expected to keep growing (the SLI-plugin registry is next). Start from
+/// [`CheckOptions::default`] — which reproduces the behavior of
+/// [`check_spec`] / [`check_slo`] exactly — and set the fields you need:
+///
+/// ```
+/// use slokit::check::{BurnWindow, CheckOptions};
+///
+/// let mut opts = CheckOptions::default();
+/// opts.burn_window = BurnWindow::Rules;
+/// assert_eq!(opts.burn_window, BurnWindow::Rules);
+/// ```
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct CheckOptions {
+    /// Period used for SLOs that do not set their own `period`.
+    pub default_period: Window,
+    /// How the window behind each SLO's "current" burn rate is chosen.
+    pub burn_window: BurnWindow,
+    /// The burn-rate config [`BurnWindow::Rules`] resolves against,
+    /// calibrated for the standard 30-day period. Per-SLO `alerting.windows`
+    /// in the spec override it entirely. Ignored under
+    /// [`BurnWindow::Fixed`].
+    pub mwmbr: MwmbrConfig,
+    /// Scale `mwmbr`'s lookback windows to each SLO's resolved period (on by
+    /// default), exactly as `generate` does. Ignored under
+    /// [`BurnWindow::Fixed`].
+    pub period_aware: bool,
+    /// sloth `kind: AlertWindows` catalogues, keyed by SLO period (empty by
+    /// default), with the same precedence they have in `generate`. Ignored
+    /// under [`BurnWindow::Fixed`].
+    pub alert_windows: AlertWindowsSet,
+}
+
+impl Default for CheckOptions {
+    fn default() -> Self {
+        Self {
+            default_period: DEFAULT_PERIOD,
+            burn_window: BurnWindow::Fixed(DEFAULT_CURRENT_WINDOW),
+            mwmbr: MwmbrConfig::sre_default(),
+            period_aware: true,
+            alert_windows: AlertWindowsSet::new(),
+        }
+    }
+}
+
+/// The window `opts` chooses for one SLO's "current" burn rate. `period` is
+/// the SLO's already-resolved period.
+///
+/// The [`BurnWindow::Rules`] arm goes through the generator's own resolution
+/// seam (`generate::resolve_mwmbr`, then the same shortest-lookback rule the
+/// `slo:current_burn_rate:ratio` recording uses), never a check-local
+/// re-derivation — a second resolver is exactly the drift class PR #38
+/// removed from `dashboard`.
+fn current_window_for(slo_spec: &SloSpec, period: Window, opts: &CheckOptions) -> Result<Window> {
+    match opts.burn_window {
+        BurnWindow::Fixed(window) => Ok(window),
+        BurnWindow::Rules => {
+            let gen_opts = GenerateOptions {
+                default_period: opts.default_period,
+                mwmbr: opts.mwmbr.clone(),
+                period_aware: opts.period_aware,
+                alert_windows: opts.alert_windows.clone(),
+                ..GenerateOptions::default()
+            };
+            let mwmbr = crate::generate::resolve_mwmbr(slo_spec.custom_mwmbr()?, period, &gen_opts);
+            Ok(crate::generate::base_window(&mwmbr))
+        }
+    }
+}
+
 /// Check a single SLO against a live Prometheus.
 pub fn check_slo(
     client: &PrometheusClient,
@@ -239,7 +342,23 @@ pub fn check_slo(
     default_period: Window,
     current_window: Window,
 ) -> Result<SloStatus> {
-    let slo = slo_spec.to_slo(default_period)?;
+    let opts = CheckOptions {
+        default_period,
+        burn_window: BurnWindow::Fixed(current_window),
+        ..CheckOptions::default()
+    };
+    check_slo_with(client, service, slo_spec, &opts)
+}
+
+/// Check a single SLO against a live Prometheus, with explicit options.
+pub fn check_slo_with(
+    client: &PrometheusClient,
+    service: &str,
+    slo_spec: &SloSpec,
+    opts: &CheckOptions,
+) -> Result<SloStatus> {
+    let slo = slo_spec.to_slo(opts.default_period)?;
+    let current_window = current_window_for(slo_spec, slo.period, opts)?;
     let sli = slo_spec.to_sli()?;
     let budget_ratio = slo.error_budget_ratio();
 
@@ -282,10 +401,27 @@ pub fn check_spec(
     default_period: Window,
     current_window: Window,
 ) -> Result<Vec<SloStatus>> {
+    let opts = CheckOptions {
+        default_period,
+        burn_window: BurnWindow::Fixed(current_window),
+        ..CheckOptions::default()
+    };
+    check_spec_with(client, spec, &opts)
+}
+
+/// Check every SLO in a spec against a live Prometheus, with explicit
+/// options.
+///
+/// The spec is validated first; the first query failure aborts the run.
+pub fn check_spec_with(
+    client: &PrometheusClient,
+    spec: &Spec,
+    opts: &CheckOptions,
+) -> Result<Vec<SloStatus>> {
     spec.validate()?;
     spec.slos
         .iter()
-        .map(|slo| check_slo(client, &spec.service, slo, default_period, current_window))
+        .map(|slo| check_slo_with(client, &spec.service, slo, opts))
         .collect()
 }
 
@@ -448,5 +584,57 @@ mod tests {
     fn http_error_formatter_handles_empty_body() {
         let msg = format_http_error(reqwest::StatusCode::INTERNAL_SERVER_ERROR, "   \n");
         assert_eq!(msg, "HTTP 500 Internal Server Error");
+    }
+
+    #[test]
+    fn default_options_are_fixed_1h_over_30d() {
+        let opts = CheckOptions::default();
+        assert_eq!(opts.default_period, Window::days(30));
+        assert_eq!(opts.burn_window, BurnWindow::Fixed(Window::hours(1)));
+        assert!(opts.period_aware);
+        assert!(opts.alert_windows.periods().is_empty());
+    }
+
+    #[test]
+    fn rules_window_resolution_follows_the_generator() {
+        let spec = Spec::from_yaml(
+            r#"
+service: svc
+slos:
+  - name: weekly
+    objective: 99.9
+    period: 7d
+    sli:
+      raw:
+        error_ratio_query: my_ratio[{{.window}}]
+"#,
+        )
+        .expect("spec parses");
+        let slo_spec = &spec.slos[0];
+        let period = slo_spec.to_slo(DEFAULT_PERIOD).expect("resolves").period;
+
+        // Scaled to the 7d period, the 30d base window 5m becomes 1m.
+        let mut opts = CheckOptions {
+            burn_window: BurnWindow::Rules,
+            ..CheckOptions::default()
+        };
+        assert_eq!(
+            current_window_for(slo_spec, period, &opts).expect("resolves"),
+            Window::minutes(1)
+        );
+
+        // With scaling off the 30d table applies verbatim.
+        opts.period_aware = false;
+        assert_eq!(
+            current_window_for(slo_spec, period, &opts).expect("resolves"),
+            Window::minutes(5)
+        );
+
+        // A fixed window ignores the burn-rate table entirely.
+        opts.burn_window = BurnWindow::Fixed(Window::hours(6));
+        assert_eq!(
+            current_window_for(slo_spec, period, &opts).expect("resolves"),
+            Window::hours(6)
+        );
     }
 }
