@@ -6,11 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
-## [Unreleased]
+## [1.8.0] - 2026-08-08
 
-Toward **v1.8.0, import dialect parity**: both constructs whose answer depended
-on which dialect the document arrived in are settled, and the agreement is now
-held by a committed contract instead of by intent.
+**Import dialect parity.** Both constructs whose answer depended on which
+dialect the document arrived in are settled, and the agreement is now held by
+a committed contract instead of by intent.
 
 ### Added
 
