@@ -44,7 +44,7 @@ insta = { version = "1", features = ["yaml"] }
 # lean core is unchanged. Default features are off: the schema has no remote
 # `$ref`s to resolve, and the http resolver would drag reqwest/rustls/aws-lc
 # (a cmake-built C library) into every test build.
-jsonschema = { version = "0.48", default-features = false }
+jsonschema = { version = "0.49", default-features = false }
 serde_json = "1"
 serde_norway = "0.9"
 
