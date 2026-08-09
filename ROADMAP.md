@@ -97,6 +97,23 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
+## Unreleased on main
+
+Merged since v1.8.0 and not yet released. Kept in step with
+[CHANGELOG.md](CHANGELOG.md)'s `[Unreleased]` section by
+`tests/roadmap_truth.rs::roadmap_declares_unreleased_work_exactly_when_the_changelog_has_some`.
+
+- **v1.9.0 PR 1 — the window seam.** `check` gains `--rules-window` (per-SLO
+  burn windows resolved through the generator's own seam), plus
+  `--no-period-scaling` and `--alert-windows`; the library gains
+  `check::CheckOptions` / `check::BurnWindow` and `check_spec_with` /
+  `check_slo_with` (additive, defaults reproduce the old behavior). The
+  window agreement is held across the option matrix by
+  `tests/check_generate_agreement.rs`, and the
+  `known_gap_check_burn_window_ignores_the_generators_period_scaled_base_window`
+  test is deleted as its failure message mandates. Milestone done-when
+  clauses 1, 2 and 3 hold; clauses 4 and 5's registry half are PR 2.
+
 ## Next milestones
 
 ### v1.9.0: check parity with the generated rules
@@ -157,8 +174,9 @@ nothing.
 
 **Slices, dependency-ordered (no calendar sizing):**
 
-1. **PR 1 — the window seam.** The options struct and `check_spec_with` /
-   `check_slo_with`; the CLI rules-window mode plus `--no-period-scaling` and
+1. **PR 1 — the window seam. SHIPPED (see "Unreleased on main" above).** The
+   options struct and `check_spec_with` / `check_slo_with`; the CLI
+   rules-window mode (`--rules-window`) plus `--no-period-scaling` and
    `--alert-windows` on `check`; per-SLO window statement in both output
    formats; `known_gap_check_burn_window_ignores_the_generators_period_scaled_base_window`
    deleted and replaced by the agreement tests below.

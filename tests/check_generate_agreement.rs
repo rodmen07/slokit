@@ -19,19 +19,24 @@
 //! the generator emits for the same spec under the same options. Empty
 //! intersection is the contract.
 //!
-//! **Two real gaps did fall out, and both are the options-blindness class one
-//! layer down from the series names.** Each has a `known_gap_` test below that
-//! states the current behaviour so a fix has to update it deliberately:
+//! **Two real gaps fell out of the original audit, both the options-blindness
+//! class one layer down from the series names.**
 //!
-//! 1. `check`'s "current burn rate" window is whatever `--window` says
+//! 1. `check`'s "current burn rate" window was whatever `--window` said
 //!    (default `1h`, calibrated for a 30-day period), while the generator's
 //!    `slo:current_burn_rate:ratio` uses the MWMBR base window SCALED to the
-//!    SLO's period. For a 7d SLO those are `1h` and `1m` — the same named
-//!    quantity computed over windows 60x apart, one following the period and
-//!    one not.
+//!    SLO's period — `1h` versus `1m` on a 7d SLO, 60x apart. **CLOSED by
+//!    v1.9.0 PR 1 (the window seam):** [`slokit::check::BurnWindow::Rules`]
+//!    resolves the window per SLO through the generator's own seam, and the
+//!    agreement is now held across the reachable option space by
+//!    [`rules_window_check_and_generate_agree_on_the_burn_window`]. The
+//!    `known_gap_` test that pinned the old behaviour is deleted, as its own
+//!    failure message mandated.
 //! 2. `check` resolves plugin SLIs against the built-in registry only. There
-//!    is no `check_spec_with`, so an embedder whose spec `validate_with` and
-//!    `generate_rules_with` both accept cannot check it at all.
+//!    is no `check_spec_with(..registry..)` route yet: `CheckOptions` carries
+//!    no registry, so an embedder whose spec `validate_with` and
+//!    `generate_rules_with` both accept cannot check it at all. Still open;
+//!    pinned by the `known_gap_` test below until v1.9.0 PR 2 closes it.
 //!
 //! What is NOT re-tested here: the period. `check` and `generate` do agree on
 //! the resolved SLO period across the option matrix, and
@@ -48,8 +53,11 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 
-use slokit::check::{check_spec, PrometheusClient, SloStatus};
+use slokit::check::{
+    check_spec, check_spec_with, BurnWindow, CheckOptions, PrometheusClient, SloStatus,
+};
 use slokit::generate::{generate_rules_with, GenerateOptions};
+use slokit::spec::alert_windows::AlertWindowsSet;
 use slokit::spec::plugin::{OptionKind, OptionSpec, SliPlugin, SliPluginRegistry};
 use slokit::spec::Spec;
 use slokit::{Result, Sli, Window};
@@ -213,6 +221,21 @@ fn run_check(
     (statuses, queries)
 }
 
+/// Run a real `check_spec_with` against the spy and return what it reported
+/// plus every query it sent.
+fn run_check_with(spec: &Spec, opts: &CheckOptions) -> (Vec<SloStatus>, Vec<String>) {
+    let spy = QuerySpy::spawn();
+    let client = PrometheusClient::new(spy.url()).expect("client builds");
+    let statuses =
+        check_spec_with(&client, spec, opts).expect("check must succeed against the spy");
+    let queries = spy.drain();
+    assert!(
+        !queries.is_empty(),
+        "the spy captured nothing, so this run proves nothing"
+    );
+    (statuses, queries)
+}
+
 // ---------------------------------------------------------------------------
 // Corpus and matrices.
 // ---------------------------------------------------------------------------
@@ -318,21 +341,39 @@ fn series_in(expr: &str) -> BTreeSet<String> {
     out
 }
 
-/// The recording rule the generator emits for `record_name`, as its expression.
-fn recorded_expr(spec: &Spec, opts: &GenerateOptions, record_name: &str) -> String {
+/// The window inside each `slo:current_burn_rate:ratio` rule's numerator, one
+/// per SLO in document order, read off the same rendered YAML `slokit
+/// generate` writes. This is the generator's half of the window agreement:
+/// the string after `ratio_rate` in `slo:sli_error:ratio_rate<window>`.
+fn burn_windows_from_rules(spec: &Spec, opts: &GenerateOptions) -> Vec<String> {
     let yaml = generate_rules_with(spec, opts)
         .expect("generation must succeed")
         .to_prometheus_yaml()
         .expect("rendering must succeed");
     let doc: serde_norway::Value = serde_norway::from_str(&yaml).expect("generator output is YAML");
+    let mut out = Vec::new();
     for group in doc["groups"].as_sequence().into_iter().flatten() {
         for rule in group["rules"].as_sequence().into_iter().flatten() {
-            if rule.get("record").and_then(|r| r.as_str()) == Some(record_name) {
-                return rule["expr"].as_str().expect("expr is a string").to_string();
+            if rule.get("record").and_then(|r| r.as_str()) != Some("slo:current_burn_rate:ratio") {
+                continue;
             }
+            let expr = rule["expr"].as_str().expect("expr is a string");
+            let window = series_in(expr)
+                .into_iter()
+                .find_map(|s| {
+                    s.strip_prefix("slo:sli_error:ratio_rate")
+                        .map(str::to_string)
+                })
+                .expect("the burn-rate rule reads a window-scoped SLI recording");
+            out.push(window);
         }
     }
-    panic!("the generator recorded no rule named {record_name}");
+    assert_eq!(
+        out.len(),
+        spec.slos.len(),
+        "expected one slo:current_burn_rate:ratio rule per SLO"
+    );
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -469,68 +510,405 @@ fn check_and_generate_resolve_the_same_period() {
 // it deliberately rather than letting a green suite hide the change.
 // ---------------------------------------------------------------------------
 
-/// **KNOWN GAP (filed as a MED bug on the crates backlog, 2026-08-08).**
-/// `check`'s "current burn rate" is computed over `--window`, whose default
-/// `1h` is the un-scaled 30-day-calibrated base window, while the generator's
-/// `slo:current_burn_rate:ratio` uses the MWMBR base window scaled to the SLO's
-/// own period. For a 7d SLO the generator says `1m` and `check` says `1h`, so
-/// the CLI's BURN column and the Grafana panel of the same name are computed
-/// over windows 60x apart and neither says so.
+/// The option cells a `--rules-window` user can reach, shared by the window
+/// agreement test below. Each cell mutates a `CheckOptions` and a
+/// `GenerateOptions` from the SAME inputs, which is the invocation-pairing the
+/// CLI performs; the assertion that the cells are not degenerate (each one
+/// changes the answer somewhere) lives in the test.
+fn rules_window_matrix() -> Vec<(&'static str, Window, bool, Option<PathBuf>)> {
+    let catalogue_dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sloth_corpus/windows");
+    vec![
+        // (label, default_period, period_aware, alert_windows dir)
+        ("default", Window::days(30), true, None),
+        ("--period 7d", Window::days(7), true, None),
+        ("--no-period-scaling", Window::days(30), false, None),
+        (
+            "--alert-windows tests/fixtures/sloth_corpus/windows",
+            Window::days(30),
+            true,
+            Some(catalogue_dir),
+        ),
+    ]
+}
+
+/// **Done-when clause 1 of v1.9.0 (the window seam), read from BOTH real
+/// artifacts.** Under [`BurnWindow::Rules`], the window `check` puts on the
+/// wire (captured by the spy) and states in each `SloStatus::current_window`
+/// is the SAME window string the emitted `slo:current_burn_rate:ratio`
+/// numerator names, for a 30d and a 7d spec, across the option matrix a user
+/// can reach: default, `--period 7d`, `--no-period-scaling`, and
+/// `--alert-windows` with a committed catalogue.
 ///
-/// Both numbers are read from the shipped product: `1h` off `slokit check
-/// --help`, `1m` out of the generator's own emitted expression. When `check`
-/// learns to follow the period this test fails, which is the point.
+/// The guard runs across the option space rather than at the default point,
+/// because both sides share `resolve_mwmbr` only if `check` actually routes
+/// through it — a check-local re-derivation would agree under defaults and
+/// drift under exactly these options (the drift class PR #38 removed from
+/// `dashboard`).
 #[test]
-#[cfg(feature = "cli")]
-fn known_gap_check_burn_window_ignores_the_generators_period_scaled_base_window() {
-    let spec = Spec::from_yaml(SEVEN_DAY_SPEC).expect("synthetic spec parses");
-    let opts = GenerateOptions::default();
+fn rules_window_check_and_generate_agree_on_the_burn_window() {
+    let specs = vec![
+        (
+            "<synthetic: no period, so the default decides>".to_string(),
+            Spec::from_yaml(NO_PERIOD_SPEC).expect("synthetic spec parses"),
+        ),
+        (
+            "<synthetic: period 7d>".to_string(),
+            Spec::from_yaml(SEVEN_DAY_SPEC).expect("synthetic spec parses"),
+        ),
+        (
+            "tests/fixtures/alert_windows/mixed-periods.yaml (7d + 30d SLOs)".to_string(),
+            Spec::from_yaml_stream(
+                &std::fs::read_to_string(
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                        .join("tests/fixtures/alert_windows/mixed-periods.yaml"),
+                )
+                .expect("fixture reads"),
+            )
+            .expect("fixture parses")
+            .remove(0),
+        ),
+    ];
+
+    let mut agreements = 0usize;
+    for (label, spec) in &specs {
+        for (cell, default_period, period_aware, catalogue) in rules_window_matrix() {
+            let alert_windows = match &catalogue {
+                Some(dir) => AlertWindowsSet::load(dir).expect("committed catalogue loads"),
+                None => AlertWindowsSet::new(),
+            };
+
+            let mut gen_opts = GenerateOptions::default();
+            gen_opts.default_period = default_period;
+            gen_opts.period_aware = period_aware;
+            gen_opts.alert_windows = alert_windows.clone();
+            let generated = burn_windows_from_rules(spec, &gen_opts);
+
+            let mut check_opts = CheckOptions::default();
+            check_opts.default_period = default_period;
+            check_opts.period_aware = period_aware;
+            check_opts.alert_windows = alert_windows;
+            check_opts.burn_window = BurnWindow::Rules;
+            let (statuses, queries) = run_check_with(spec, &check_opts);
+
+            assert_eq!(statuses.len(), generated.len());
+            for (i, (status, generated_window)) in statuses.iter().zip(&generated).enumerate() {
+                // The stated side: what `check` reports per SLO.
+                assert_eq!(
+                    &status.current_window.prometheus(),
+                    generated_window,
+                    "`check --rules-window {cell}` on {label} states a different burn window \
+                     than the emitted slo:current_burn_rate:ratio for SLO #{i}"
+                );
+                // The wire side: what `check` actually asked Prometheus.
+                let sli: Sli = spec.slos[i].to_sli().expect("spec resolves");
+                let expected_window =
+                    Window::parse(generated_window).expect("generated window parses");
+                assert_eq!(
+                    queries[2 * i + 1],
+                    sli.error_ratio_expr(expected_window),
+                    "`check --rules-window {cell}` on {label} queried a different window than \
+                     the emitted slo:current_burn_rate:ratio for SLO #{i}"
+                );
+                agreements += 1;
+            }
+        }
+    }
     assert!(
-        opts.period_aware,
-        "the gap is stated against the default, which scales windows to the period"
+        agreements >= 16,
+        "only {agreements} window agreements examined; the corpus or matrix collapsed"
     );
+}
 
-    // The generator's side: which series feeds slo:current_burn_rate:ratio.
-    let expr = recorded_expr(&spec, &opts, "slo:current_burn_rate:ratio");
-    let generator_window = series_in(&expr)
-        .into_iter()
-        .find_map(|s| {
-            s.strip_prefix("slo:sli_error:ratio_rate")
-                .map(str::to_string)
-        })
-        .expect("the burn-rate rule reads a window-scoped SLI recording");
+/// The matrix above is not degenerate: every non-default cell observably
+/// CHANGES the resolved window somewhere, and rules resolution observably
+/// differs from the fixed `1h` default (done-when clause 2's second
+/// direction). Exact strings are asserted so a silent fallback (a catalogue
+/// that failed to load, a scaling flag that stopped reaching the resolver)
+/// cannot turn the agreement test vacuous — the values are re-derived from
+/// `MwmbrConfig::sre_default()` (shortest lookback 5m at 30d, scaled to 1m at
+/// 7d) and the committed 7d catalogue (shortest `shortWindow: 5m`, applied
+/// verbatim).
+#[test]
+fn rules_window_cells_each_change_the_resolved_window() {
+    let seven_day = Spec::from_yaml(SEVEN_DAY_SPEC).expect("synthetic spec parses");
+    let no_period = Spec::from_yaml(NO_PERIOD_SPEC).expect("synthetic spec parses");
+
+    let resolved = |spec: &Spec, cell: &str| -> String {
+        let (_, default_period, period_aware, catalogue) = rules_window_matrix()
+            .into_iter()
+            .find(|(label, ..)| *label == cell)
+            .expect("cell exists");
+        let mut opts = CheckOptions::default();
+        opts.default_period = default_period;
+        opts.period_aware = period_aware;
+        opts.alert_windows = match catalogue {
+            Some(dir) => AlertWindowsSet::load(&dir).expect("committed catalogue loads"),
+            None => AlertWindowsSet::new(),
+        };
+        opts.burn_window = BurnWindow::Rules;
+        let (statuses, _) = run_check_with(spec, &opts);
+        statuses[0].current_window.prometheus()
+    };
+
+    // 7d SLO, default cell: the 30d base (5m) scaled to 7d is 1m — and it
+    // observably differs from the fixed default 1h (clause 2).
+    assert_eq!(resolved(&seven_day, "default"), "1m");
+    assert_ne!(resolved(&seven_day, "default"), "1h");
+    // --period 7d re-periods the no-period spec: 5m at 30d becomes 1m at 7d.
+    assert_eq!(resolved(&no_period, "default"), "5m");
+    assert_eq!(resolved(&no_period, "--period 7d"), "1m");
+    // --no-period-scaling uses the 30d table verbatim on the 7d SLO.
+    assert_eq!(resolved(&seven_day, "--no-period-scaling"), "5m");
+    // The committed 7d catalogue's shortest lookback (5m, verbatim) differs
+    // from the scaled table's 1m, so the catalogue arm is really exercised.
     assert_eq!(
-        generator_window, "1m",
-        "the 30d base window (5m) scaled to a 7d period is 1m; if the scaling \
-         changed, restate the gap rather than relaxing it"
+        resolved(
+            &seven_day,
+            "--alert-windows tests/fixtures/sloth_corpus/windows"
+        ),
+        "5m"
     );
+}
 
-    // The CLI's side: the default `check` actually ships.
-    let cli_default = cli_flag_default("check", "--window");
-    assert_eq!(
-        cli_default, "1h",
-        "`slokit check --window` no longer defaults to 1h"
-    );
+/// **Done-when clause 2, first direction: an explicit fixed window is used
+/// verbatim on the wire and stated per SLO,** never silently re-resolved the
+/// rules' way.
+#[test]
+fn an_explicit_fixed_window_is_used_verbatim_and_stated() {
+    let spec = Spec::from_yaml(SEVEN_DAY_SPEC).expect("synthetic spec parses");
+    let mut opts = CheckOptions::default();
+    opts.burn_window = BurnWindow::Fixed(Window::minutes(5));
+    let (statuses, queries) = run_check_with(&spec, &opts);
 
-    assert_ne!(
-        generator_window, cli_default,
-        "GAP CLOSED: `slokit check` and the generated slo:current_burn_rate:ratio now use \
-         the same window for a 7d SLO. Delete this test and the backlog bug it cites."
-    );
-
-    // And the wire confirms `check` really uses the CLI window, not the base.
-    let (_, queries) = run_check(&spec, Window::days(30), Window::hours(1));
-    let sli = spec.slos[0].to_sli().expect("synthetic spec resolves");
+    assert_eq!(statuses[0].current_window, Window::minutes(5), "stated");
+    let sli = spec.slos[0].to_sli().expect("spec resolves");
     assert_eq!(
         queries[1],
-        sli.error_ratio_expr(Window::hours(1)),
-        "check's current-window query should be the SLI at the CLI window"
+        sli.error_ratio_expr(Window::minutes(5)),
+        "used verbatim on the wire"
     );
     assert_ne!(
         queries[1],
         sli.error_ratio_expr(Window::minutes(1)),
-        "check's current-window query should NOT be the generator's scaled base window"
+        "not silently re-resolved to the rules window (1m for a 7d SLO)"
     );
+}
+
+/// **Done-when clause 3: `CheckOptions::default()` reproduces the pre-seam
+/// behavior exactly.** The old entry point and the new one produce identical
+/// wire queries and an identical serialized report for every audit spec, and
+/// the default is the documented `Fixed(1h)` over a 30d default period.
+#[test]
+fn default_options_reproduce_the_pre_seam_behavior() {
+    let opts = CheckOptions::default();
+    assert_eq!(opts.default_period, Window::days(30));
+    assert_eq!(opts.burn_window, BurnWindow::Fixed(Window::hours(1)));
+    assert!(opts.period_aware);
+
+    for (label, spec) in audit_specs() {
+        let (old_statuses, old_queries) = run_check(&spec, Window::days(30), Window::hours(1));
+        let (new_statuses, new_queries) = run_check_with(&spec, &CheckOptions::default());
+        assert_eq!(
+            old_queries, new_queries,
+            "default CheckOptions sent different wire queries than check_spec on {label}"
+        );
+        assert_eq!(
+            serde_json::to_string(&old_statuses).expect("serializes"),
+            serde_json::to_string(&new_statuses).expect("serializes"),
+            "default CheckOptions reported differently than check_spec on {label}"
+        );
+    }
+}
+
+/// **D1.9-1, pinned:** the CLI default window stays `1h` across 1.x —
+/// `check`'s burn rate feeds `--fail-on`, so re-windowing the default would
+/// silently flip existing CI gates. Agreement with the generated rules is
+/// opt-in via `--rules-window`.
+#[test]
+#[cfg(feature = "cli")]
+fn the_cli_default_window_stays_1h() {
+    assert_eq!(
+        cli_flag_default("check", "--window"),
+        "1h",
+        "`slokit check --window` no longer defaults to 1h; that is a breaking change \
+         under D1.9-1 and docs/SEMVER.md's CLI clause"
+    );
+}
+
+/// `--rules-window` and an explicit `--window` cannot be combined: one flag
+/// silently winning over the other would be a parsed-and-discarded flag (the
+/// svccat `--filter` shape), so the CLI refuses the combination outright.
+/// A default-valued `--window` does not count as given, so plain
+/// `--rules-window` works.
+#[test]
+#[cfg(feature = "cli")]
+fn cli_rules_window_conflicts_with_an_explicit_window() {
+    let sample = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample.yaml");
+    let out = Command::new(env!("CARGO_BIN_EXE_slokit"))
+        .args(["check", "-i"])
+        .arg(&sample)
+        .args([
+            "--url",
+            "http://127.0.0.1:9",
+            "--rules-window",
+            "--window",
+            "5m",
+        ])
+        .output()
+        .expect("slokit runs");
+    assert!(
+        !out.status.success(),
+        "--rules-window with an explicit --window must be an error, not one flag winning"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("--rules-window") && stderr.contains("--window"),
+        "the conflict error should name both flags, got: {stderr}"
+    );
+}
+
+/// `--no-period-scaling` and `--alert-windows` only mean something under
+/// `--rules-window` (the fixed-window mode never consults the burn-rate
+/// table), so giving either without it is an error rather than a silently
+/// discarded flag.
+#[test]
+#[cfg(feature = "cli")]
+fn cli_scaling_and_catalogue_flags_require_rules_window() {
+    let sample = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/sample.yaml");
+    for extra in [
+        vec!["--no-period-scaling".to_string()],
+        vec![
+            "--alert-windows".to_string(),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/sloth_corpus/windows")
+                .display()
+                .to_string(),
+        ],
+    ] {
+        let out = Command::new(env!("CARGO_BIN_EXE_slokit"))
+            .args(["check", "-i"])
+            .arg(&sample)
+            .args(["--url", "http://127.0.0.1:9"])
+            .args(&extra)
+            .output()
+            .expect("slokit runs");
+        assert!(
+            !out.status.success(),
+            "{} without --rules-window must be an error, not a no-op",
+            extra[0]
+        );
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("--rules-window"),
+            "the error for {} should point at --rules-window, got: {stderr}",
+            extra[0]
+        );
+    }
+}
+
+/// Under `--rules-window` both output formats state each SLO's own window:
+/// the table grows a WINDOW column (and stops claiming one global window in
+/// its header), and the JSON's `current_window` varies per SLO. The
+/// mixed-periods fixture (a 7d and a 30d SLO in one spec) makes the per-SLO
+/// difference visible in a single run: 1m and 5m.
+#[test]
+#[cfg(feature = "cli")]
+fn cli_rules_window_states_each_slos_window_in_both_formats() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/alert_windows/mixed-periods.yaml");
+    let spy = QuerySpy::spawn();
+
+    let table = Command::new(env!("CARGO_BIN_EXE_slokit"))
+        .args(["check", "-i"])
+        .arg(&fixture)
+        .args(["--url", &spy.url(), "--rules-window"])
+        .output()
+        .expect("slokit runs");
+    assert!(
+        table.status.success(),
+        "check --rules-window failed: {}",
+        String::from_utf8_lossy(&table.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&table.stdout);
+    assert!(
+        stdout.contains("WINDOW"),
+        "rules-window table should carry a WINDOW column, got:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("current window"),
+        "rules-window table must not claim one global current window, got:\n{stdout}"
+    );
+    let weekly = stdout
+        .lines()
+        .find(|l| l.contains("weekly-availability"))
+        .expect("weekly row present");
+    let monthly = stdout
+        .lines()
+        .find(|l| l.contains("monthly-availability"))
+        .expect("monthly row present");
+    assert!(
+        weekly.trim_end().ends_with("1m"),
+        "7d SLO row states 1m: {weekly}"
+    );
+    assert!(
+        monthly.trim_end().ends_with("5m"),
+        "30d SLO row states 5m: {monthly}"
+    );
+
+    let json = Command::new(env!("CARGO_BIN_EXE_slokit"))
+        .args(["check", "-i"])
+        .arg(&fixture)
+        .args(["--url", &spy.url(), "--rules-window", "--output", "json"])
+        .output()
+        .expect("slokit runs");
+    assert!(json.status.success());
+    let statuses: serde_json::Value =
+        serde_json::from_slice(&json.stdout).expect("json output parses");
+    let windows: Vec<&str> = statuses
+        .as_array()
+        .expect("array")
+        .iter()
+        .map(|s| {
+            s["current_window"]
+                .as_str()
+                .expect("current_window is a string")
+        })
+        .collect();
+    assert_eq!(windows, ["1m", "5m"], "JSON states each SLO's own window");
+    drop(spy);
+}
+
+/// The default table keeps its pre-seam shape: one global window in the
+/// header, no WINDOW column. Paired with the test above, this is the
+/// on/off behavior difference of `--rules-window` at the CLI surface.
+#[test]
+#[cfg(feature = "cli")]
+fn cli_default_table_keeps_the_global_window_header() {
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/alert_windows/mixed-periods.yaml");
+    let spy = QuerySpy::spawn();
+    let out = Command::new(env!("CARGO_BIN_EXE_slokit"))
+        .args(["check", "-i"])
+        .arg(&fixture)
+        .args(["--url", &spy.url()])
+        .output()
+        .expect("slokit runs");
+    assert!(
+        out.status.success(),
+        "default check failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("(current window 1h)"),
+        "default table states the one global window, got:\n{stdout}"
+    );
+    assert!(
+        !stdout.contains("WINDOW"),
+        "default table must not grow a WINDOW column (byte-identity with 1.8.0), got:\n{stdout}"
+    );
+    drop(spy);
 }
 
 /// **KNOWN GAP (filed as a MED bug on the crates backlog, 2026-08-08).**

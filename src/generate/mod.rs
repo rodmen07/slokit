@@ -13,6 +13,11 @@ mod alert;
 mod metadata;
 mod recording;
 
+/// The window `slo:current_burn_rate:ratio` reads for a resolved burn-rate
+/// config — shared with [`check`](crate::check)'s rules-window mode so both
+/// surfaces compute "current burn rate" over the same window.
+pub(crate) use recording::base_window;
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

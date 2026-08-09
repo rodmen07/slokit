@@ -91,6 +91,17 @@ generates from them) lives in [`examples/infraportal/`](examples/infraportal/).
 (`breach` by default, or `warning`/`never`), `2` a runtime error. `--output
 json` prints the statuses as a JSON array for piping into other tools.
 
+`check`'s "current" burn rate is computed over `--window` (default `1h`) for
+every SLO, while the generated `slo:current_burn_rate:ratio` rule reads the
+shortest burn-rate lookback scaled to each SLO's own period (`5m` for a 30d
+SLO, `1m` for a 7d one). Pass `--rules-window` to make `check` resolve that
+window per SLO exactly as `slokit generate` does — the table then carries a
+per-SLO `WINDOW` column, and the JSON's `current_window` varies per SLO.
+`--no-period-scaling` and `--alert-windows` mean the same thing they mean on
+`generate` and only apply with `--rules-window`; an explicit `--window`
+cannot be combined with `--rules-window`, so the window in use is always the
+one stated.
+
 `dashboard` emits Grafana dashboard JSON with a block per SLO (error budget
 remaining, current burn rate, objective, the SLI error ratio over time, and one
 burn-rate panel per enabled alert condition with a threshold line at that

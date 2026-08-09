@@ -9,7 +9,7 @@ pub(super) fn rules(ctx: &SloContext<'_>) -> RuleGroup {
     let sel = ctx.selector();
     let base = ctx.base_labels();
     let period = ctx.slo.period.prometheus();
-    let base_window = super::recording::base_window(ctx).prometheus();
+    let base_window = super::recording::base_window(&ctx.mwmbr).prometheus();
 
     let mut rules = vec![
         Rule::record(
