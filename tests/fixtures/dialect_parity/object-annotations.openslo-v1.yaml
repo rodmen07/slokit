@@ -1,0 +1,33 @@
+# `base.openslo-v1.yaml` plus exactly one construct: object
+# `metadata.annotations`.
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: requests-availability
+  annotations:
+    owner-team: parity
+spec:
+  description: "The dialect parity base document."
+  service: parity
+  budgetingMethod: Occurrences
+  timeWindow:
+    - duration: 30d
+      isRolling: true
+  indicator:
+    metadata:
+      name: requests-availability-sli
+    spec:
+      ratioMetric:
+        counter: true
+        good:
+          metricSource:
+            type: Prometheus
+            spec:
+              query: sum(rate(http_request_duration_seconds_count{job="parity",code!~"5.."}[{{.window}}]))
+        total:
+          metricSource:
+            type: Prometheus
+            spec:
+              query: sum(rate(http_request_duration_seconds_count{job="parity"}[{{.window}}]))
+  objectives:
+    - target: 0.999

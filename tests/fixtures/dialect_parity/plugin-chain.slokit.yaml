@@ -1,0 +1,23 @@
+# `base.slokit.yaml` plus exactly one construct: a sloth SLO plugin chain, in
+# the native spelling (`slo_plugins:` at spec level, `plugins:` on the SLO).
+version: "prometheus/v1"
+service: parity
+slo_plugins:
+  chain:
+    - id: "sloth.dev/core/debug/v1"
+      priority: 9999999
+      config: {msg: "spec-level"}
+slos:
+  - name: requests-availability
+    objective: 99.9
+    description: "The dialect parity base document."
+    period: 30d
+    plugins:
+      chain:
+        - id: "sloth.dev/core/debug/v1"
+          priority: 1050
+          config: {msg: "slo-level"}
+    sli:
+      events:
+        error_query: (sum(rate(http_request_duration_seconds_count{job="parity"}[{{.window}}]))) - (sum(rate(http_request_duration_seconds_count{job="parity",code!~"5.."}[{{.window}}])))
+        total_query: sum(rate(http_request_duration_seconds_count{job="parity"}[{{.window}}]))

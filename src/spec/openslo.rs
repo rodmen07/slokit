@@ -58,6 +58,9 @@
 //!   (empty) alerting metadata, so `slokit lint` reports `NO_ALERT_LABELS`
 //!   until routing labels are added.
 //! - `metadata.annotations` (they are object metadata, not alert annotations).
+//! - `metadata.displayName` (slokit SLOs carry a name and a description).
+//!   Noted here since 1.8.0; before that only the [`v1alpha`] path said so, and
+//!   a `v1` document lost it in silence.
 //! - `timeSliceTarget` / `timeSliceWindow` (time-slice budgeting fields).
 //! - Objective `op`/`value` on ratio SLIs (they only apply to thresholds).
 //! - Documents of any kind other than `SLO` and `SLI` (`Service`,
@@ -316,9 +319,9 @@ struct Envelope {
 struct Metadata {
     #[serde(default)]
     name: String,
-    /// OpenSLO's human-readable name. slokit has no field for it, so the
-    /// v1alpha importer notes when one is dropped (v1 import behavior is
-    /// unchanged; see the backlog follow-up).
+    /// OpenSLO's human-readable name. slokit has no field for it, so both
+    /// importers note when one is dropped (v1alpha since 1.5.0, v1 since
+    /// 1.8.0, in the same words).
     #[serde(default, rename = "displayName")]
     display_name: String,
     #[serde(default)]
@@ -497,6 +500,18 @@ fn convert_slo(
             notes,
             &loc,
             "spec.alertPolicies do not map; slokit generates multi-window multi-burn-rate alerts from the objective instead",
+        );
+    }
+    // The same note the v1alpha path emits, in the same words. Until 1.8.0
+    // only v1alpha said it, so an `openslo/v1` document lost its
+    // `metadata.displayName` in silence while its v1alpha twin was told — a
+    // divergence with no design behind it, since this path already notes the
+    // sibling `metadata.annotations` two lines down.
+    if !env.metadata.display_name.trim().is_empty() {
+        note(
+            notes,
+            &loc,
+            "metadata.displayName does not map and was ignored (slokit SLOs carry a name and a description)",
         );
     }
     if !env.metadata.annotations.is_empty() {

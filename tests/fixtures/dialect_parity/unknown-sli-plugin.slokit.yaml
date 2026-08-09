@@ -1,0 +1,19 @@
+# `base.slokit.yaml` with exactly one construct changed: the events SLI is
+# replaced by an `sli.plugin` naming an id that is not in slokit's registry.
+#
+# The registry is a closed set by the 0.9.0 design, so refusing an unknown id
+# is the intended fail-closed behaviour (ROADMAP v1.8.0, decision D1.8-2). This
+# document exists to hold the two dialects that can express the construct to
+# the SAME refusal.
+version: "prometheus/v1"
+service: parity
+slos:
+  - name: requests-availability
+    objective: 99.9
+    description: "The dialect parity base document."
+    period: 30d
+    sli:
+      plugin:
+        id: parity/no/such-plugin
+        options:
+          job: parity

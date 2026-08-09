@@ -19,7 +19,9 @@
 //! | the period | `spec.timeWindows[0].{count, unit}` (`count: 30`, `unit: Day`) | `spec.timeWindow[0].duration` (`30d`) |
 //! | the threshold SLI | `spec.indicator.thresholdMetric` (document level) | `spec.indicator.spec.thresholdMetric` |
 //! | the target | `spec.objectives[i].target` only | `target` or `targetPercent` |
-//! | object metadata | `metadata.displayName` | `metadata.labels` / `metadata.annotations` |
+//! | `metadata.displayName` | noted and ignored | noted and ignored (since 1.8.0; before that, silently) |
+//! | `metadata.labels` | noted and ignored: not part of this schema | imported as the SLO labels |
+//! | `metadata.annotations` | not part of this schema | noted and ignored |
 //!
 //! v1alpha has no `ratioMetric.bad`, no `raw`/`rawType`, no `indicatorRef` and
 //! no standalone `kind: SLI` documents, so those v1 paths simply do not exist

@@ -260,8 +260,18 @@ reference examples declare, so those documents import unchanged. It states the
 same ideas with a different shape — the metric lives on each objective as
 `ratioMetrics.{good,total}` rather than in one document-level `spec.indicator`,
 and the period is `timeWindows[0].{count, unit}` rather than
-`timeWindow[0].duration` — and slokit reports the same fidelity notes and
-fail-closed errors for it as for v1.
+`timeWindow[0].duration` — and slokit reports the same fail-closed errors for
+it as for v1.
+
+The two routes' **fidelity notes** are held together by a committed contract
+rather than by intent: `tests/dialect_parity.rs` runs one matched document per
+dialect for every construct more than one importer can receive, and records
+what each does with it. Since 1.8.0 both versions report a dropped
+`metadata.displayName` in the same words (before that, only v1alpha did).
+One difference remains and the contract names it: `metadata.annotations` is
+reported as dropped on `openslo/v1` and dropped in silence on `openslo/v1alpha`
+and on the CRD route. Nothing reaches the generated rules on any route, so it
+changes what you are told, never what you get.
 
 **Exporting.** `slokit export` is the inverse: one `kind: SLO` document per
 slokit SLO, written to stdout as a multi-document stream, or to a directory as
