@@ -99,11 +99,99 @@ generated rules` against a pinned Prometheus release, and `coverage`.
 
 ## Next milestones
 
-Nothing is scheduled. The v1.8.0 import-dialect-parity milestone closed with
-this release prep (the CRD plugin-chain capture shipped as PR #52, the
-cross-dialect parity contract plus the OpenSLO `v1` display-name note as
-PR #53; see the history table below), and the theme after it is not yet
-scoped — that is a product increment, not an implementation task.
+### v1.9.0: check parity with the generated rules
+
+**Theme.** `slokit check` is the one read-side surface that still resolves its
+own answers instead of resolving them the way the generator does. The
+`check`-vs-`generate` QA audit (PR #44, 2026-08-08) proved the series names
+cannot drift — `check` queries raw SLI expressions and never names a recorded
+series — but found two gaps one layer down, and both have been pinned ever
+since by `known_gap_` tests in `tests/check_generate_agreement.rs`: the
+"current burn rate" `check` prints and the `slo:current_burn_rate:ratio` the
+generator records are computed over different windows with nothing saying so,
+and `check` is the one public entry point a custom SLI-plugin registry cannot
+reach, so a spec that `validate_with` and `generate_rules_with` both accept
+cannot be checked at all. Both are MED bugs in the autodev backlog; this
+milestone is those two bugs promoted to one theme instead of fixed loose,
+which the scoping item itself named as the candidate route.
+
+**Grounding, re-probed at the binary on 2026-08-09 rather than inherited from
+the bug text:** a fresh build of `af9c7c8` (59s real compile, not a cached
+`Finished`) generates `slo:current_burn_rate:ratio` reading
+`slo:sli_error:ratio_rate5m` for a default 30d SLO and
+`slo:sli_error:ratio_rate1m` for a 7d one — the shortest MWMBR lookback
+window, scaled to the period by `generate::resolve_mwmbr` — while
+`slokit check` documents `--window [default: 1h]` at every period. So the two
+numbers published under the name "current burn rate" disagree **12x by
+default and 60x on a 7d SLO** — the bug's 7d case was the sharpest, not the
+only one. The registry gap is structural: `check_slo` calls
+`SloSpec::to_sli()` (hardcoded built-ins) and `check_spec` validates with the
+built-ins, and `grep -n 'check_spec_with\|check_slo_with' src/` returns
+nothing.
+
+**Decisions, each an overridable default (say "approved" to take all three):**
+
+- **D1.9-1 — the CLI default window stays `1h`; agreement is opt-in.**
+  docs/SEMVER.md's CLI clause says existing invocations keep working across
+  1.x, and `check`'s burn rate feeds `--fail-on`, so silently re-windowing the
+  default would flip existing CI gates. The default therefore stays, `check`
+  gains an explicit way to ask for the rules' own window (flag shape is the
+  implementing PR's to pick; `--window` stays authoritative when given), and
+  both output formats state the window each number was computed over.
+  Alternative recorded: flip the default to rules-agreement — a 2.0 candidate,
+  not a 1.x move.
+- **D1.9-2 — resolution goes through the generator's own seam, not a
+  check-local re-derivation.** The rules-window mode resolves per SLO via
+  `generate::resolve_mwmbr` under the same option vocabulary `generate` and
+  `dashboard` already share (`--period` `check` already has with the same
+  meaning; `--no-period-scaling` and `--alert-windows` it gains), because a
+  second resolver is exactly the drift PR #38 removed from `dashboard`.
+  Library shape: one additive `#[non_exhaustive]` options struct with a
+  `Default` reproducing today's behavior, plus `check_spec_with` /
+  `check_slo_with` taking it; the existing entry points delegate unchanged.
+  PR 2 adds the registry to the same struct rather than growing a second
+  `_with` family.
+- **D1.9-3 — single-theme minor.** The dashboard `time.from` follow-up (LOW,
+  display default, its own backlog item) is deliberately not folded in, the
+  same discipline D4 set for v1.2.0.
+
+**Slices, dependency-ordered (no calendar sizing):**
+
+1. **PR 1 — the window seam.** The options struct and `check_spec_with` /
+   `check_slo_with`; the CLI rules-window mode plus `--no-period-scaling` and
+   `--alert-windows` on `check`; per-SLO window statement in both output
+   formats; `known_gap_check_burn_window_ignores_the_generators_period_scaled_base_window`
+   deleted and replaced by the agreement tests below.
+2. **PR 2 — the registry reaches `check`.** The registry lands in the same
+   options struct; `check_spec`'s internal validation moves to `validate_with`
+   on the same registry (the half-close hazard the bug names);
+   `known_gap_check_cannot_see_a_custom_plugin_registry` deleted and replaced
+   by the end-to-end embedder test.
+3. **PR 3 — release prep and the cut**, the `roadmap_truth`-enforced shape,
+   then tag, release, and the registry read, under the standing delegation.
+
+**Done-when (every clause a build, test, CI, or registry check):**
+
+1. A test reading BOTH real artifacts — `check`'s wire queries captured by the
+   existing `QuerySpy` loopback, and the window inside the emitted
+   `slo:current_burn_rate:ratio` numerator — proves they name the SAME window
+   string under rules-window resolution, for a 30d and a 7d spec, across an
+   option matrix covering default, `--period 7d`, `--no-period-scaling`, and
+   `--alert-windows` with a committed catalogue.
+2. An explicit `--window` stays authoritative in both directions per L-001:
+   given, it is used verbatim and stated; absent under rules-window mode, the
+   resolved window observably differs from `1h` on a 7d SLO.
+3. Default behavior is unchanged: `check_spec` / `check_slo` keep their
+   signatures, and a default `check` invocation's wire queries and output are
+   byte-identical before and after PR 1.
+4. A spec using a registry-only plugin is checked end to end through the
+   public API against the `QuerySpy`, where today `check_spec` errors before
+   sending a single query — and validation inside runs on the same registry.
+5. Both `known_gap_` tests are DELETED in the commits that close them (their
+   own failure messages mandate exactly this), and the two MED bugs are closed
+   against those commits.
+6. Registry read, never inferred: crates.io reports `newest_version` 1.9.0
+   after the PR 3 cut.
 
 ## Later / candidates (unscheduled)
 
@@ -143,6 +231,13 @@ schedules them:
     importable (shipped as PR #47), which turns a user-supplied catalogue into
     an input this rule can be grounded on. Still held today, because teaching
     slokit a document kind does not conjure a document that exhibits the gap.
+    **Re-tested 2026-08-09 by the v1.9.0 scoping pass at the shipped binary
+    rather than by re-reading this bullet:** `slokit validate -i` over both
+    committed catalogues reports the factors itself now — 7d
+    `13.44 / 3.5 / 1.4 / 0.98`, custom-30d `14.4 / 4.8 / 3 / 1` — minimum at
+    or below 1 in both, so both still close the budget by construction, and
+    upstream `slok/sloth@main` is still at `8a3be4f` (read from the contents
+    API), so no new catalogue exists to test. The hold stands.
   - **objective-precision** (whether an objective's digits exceed what the
     period can measure) needs event volume, and the re-test makes that
     structural rather than circumstantial: no field of `SloSpec`
@@ -161,6 +256,13 @@ schedules them:
     candidate.** `lint` sees only a spec, and no spec has the input. If the check
     is ever built it belongs to `calc`, where the traffic number already arrives.
     Held, and re-filed against the right command.
+    **Re-tested 2026-08-09 by the v1.9.0 scoping pass:** the same
+    case-insensitive sweep now hits two files — `src/bin/slokit.rs` (the
+    `--traffic` flag on `calc` and `simulate`, unchanged) and `src/budget.rs`,
+    whose single hit is the phrase "known event volume" in a doc comment
+    present since the initial commit, an operator-supplied number at call
+    time, not a spec field. `src/spec/mod.rs` still has zero hits, so the
+    structural claim holds and the hold stands.
 - Carrying `examples/infraportal/` from SLO-definitions-as-code to live status,
   which is blocked on the InfraPortal services exposing `/metrics` at all (that
   work lives in the microservices repo, not here). **Deliberately NOT re-tested
