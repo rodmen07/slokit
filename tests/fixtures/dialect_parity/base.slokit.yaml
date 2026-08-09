@@ -1,0 +1,22 @@
+# The parity base document, native slokit dialect.
+#
+# Four documents in this directory carry the name `base.*`: one per import
+# dialect, all describing the SAME SLO. `tests/dialect_parity.rs` asserts they
+# generate byte-identical rules, which is what makes "matched" a measured
+# property rather than a claim in a comment -- every per-construct fixture
+# beside them is this document plus exactly one construct.
+#
+# The error query is written as `(total) - (good)` because the two OpenSLO
+# dialects can only express a GOOD numerator and derive the error side that
+# way; writing it here in the derived form is what lets all four agree.
+version: "prometheus/v1"
+service: parity
+slos:
+  - name: requests-availability
+    objective: 99.9
+    description: "The dialect parity base document."
+    period: 30d
+    sli:
+      events:
+        error_query: (sum(rate(http_request_duration_seconds_count{job="parity"}[{{.window}}]))) - (sum(rate(http_request_duration_seconds_count{job="parity",code!~"5.."}[{{.window}}])))
+        total_query: sum(rate(http_request_duration_seconds_count{job="parity"}[{{.window}}]))

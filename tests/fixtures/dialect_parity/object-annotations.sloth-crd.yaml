@@ -1,0 +1,18 @@
+# `base.sloth-crd.yaml` plus exactly one construct: object
+# `metadata.annotations`.
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: parity
+  annotations:
+    owner-team: parity
+spec:
+  service: parity
+  slos:
+    - name: requests-availability
+      objective: 99.9
+      description: "The dialect parity base document."
+      sli:
+        events:
+          errorQuery: (sum(rate(http_request_duration_seconds_count{job="parity"}[{{.window}}]))) - (sum(rate(http_request_duration_seconds_count{job="parity",code!~"5.."}[{{.window}}])))
+          totalQuery: sum(rate(http_request_duration_seconds_count{job="parity"}[{{.window}}]))

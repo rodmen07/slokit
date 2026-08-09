@@ -8,10 +8,43 @@ From 1.0.0, slokit follows the semver guarantees documented in
 
 ## [Unreleased]
 
-Toward **v1.8.0, import dialect parity**: the first of the two constructs whose
-answer depended on which dialect the document arrived in is settled.
+Toward **v1.8.0, import dialect parity**: both constructs whose answer depended
+on which dialect the document arrived in are settled, and the agreement is now
+held by a committed contract instead of by intent.
+
+### Added
+
+- **A cross-dialect parity contract, `tests/dialect_parity.rs`.** slokit reads
+  four input dialects — native, `openslo/v1`, `openslo/v1alpha` and the sloth
+  Kubernetes CRD — each verified against sloth or a native twin when it was
+  added, and none of them ever checked against the others. The contract runs
+  the shipped binary over one matched document per dialect for every construct
+  more than one importer can receive (16 committed fixtures under
+  `tests/fixtures/dialect_parity/`) and records what each does with it, so
+  changing one route's answer and leaving the others alone is now a named test
+  failure rather than a census someone has to think to run.
+
+  The four `base.*` documents describe the same SLO and are asserted to
+  generate **byte-identical** rules in both output formats, which is what makes
+  every per-construct row attributable to its construct.
 
 ### Changed
+
+- **`openslo/v1` now reports a dropped `metadata.displayName`, in the same
+  words `openslo/v1alpha` has used since 1.5.0.** The shared metadata envelope
+  parsed the field on both routes and only the v1alpha path mentioned it, so a
+  `v1` document lost its display name with nothing said — an inherited
+  inconsistency rather than a decision, since that same route already reports a
+  dropped `metadata.annotations`. Nothing about the generated rules changes:
+  this is an import note on stderr.
+
+- **Known gap, filed rather than fixed:** the contract's first run found the
+  mirror image of the case above. `metadata.annotations` is reported on
+  `openslo/v1` and dropped in **silence** on `openslo/v1alpha` and on the CRD
+  route. Nothing reaches the generated rules on any route, so it changes what
+  you are told, never what you get; it is pinned by
+  `known_gap_object_annotations_are_noted_on_v1_only` so the fix is a test
+  failure rather than a discovery.
 
 - **A sloth SLO plugin chain in a Kubernetes CRD document is now captured and
   reported by `SLO_PLUGIN_CHAIN_DROPPED`, instead of being a hard error.**

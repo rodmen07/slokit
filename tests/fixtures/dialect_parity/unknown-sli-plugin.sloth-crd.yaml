@@ -1,0 +1,18 @@
+# `base.sloth-crd.yaml` with exactly one construct changed: the events SLI is
+# replaced by an `sli.plugin` naming an id that is not in slokit's registry.
+# See `unknown-sli-plugin.slokit.yaml`.
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: parity
+spec:
+  service: parity
+  slos:
+    - name: requests-availability
+      objective: 99.9
+      description: "The dialect parity base document."
+      sli:
+        plugin:
+          id: parity/no/such-plugin
+          options:
+            job: parity

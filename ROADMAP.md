@@ -157,7 +157,9 @@ refusals are not one class:
    nothing but `apiVersion`: the v1alpha run printed `metadata.displayName does
    not map and was ignored`, the v1 run printed no note at all. This is the
    open follow-up filed 2026-08-07 and it belongs to this theme rather than to
-   a loose one-line fix.
+   a loose one-line fix. **Settled by PR 2** (2026-08-08): the `v1` path emits
+   the same note, from the same string constant the contract asserts both
+   routes against.
 
 The other two refusals are **deliberate and stay refusals**:
 `plugin-getting-started.yml` names an SLI plugin id (`getting_started_availability`)
@@ -188,6 +190,19 @@ labels, which is exactly what v1.6.0 chose.
   the durable half — the analogue of what `tests/sloth_corpus.rs` did for
   upstream compatibility — because it turns the next asymmetry into a named
   test failure rather than a census someone has to think to run.
+
+  **Shipped 2026-08-08**, and it earned its keep on the first run: five
+  constructs, sixteen fixtures, and a **third** divergence nobody had looked
+  for. `metadata.annotations` is reported as dropped on `openslo/v1` and
+  dropped in silence on `openslo/v1alpha` and on the CRD route — the mirror
+  image of the display-name case, from the same shared `Metadata` envelope.
+  It is filed as a LOW bug and pinned by
+  `known_gap_object_annotations_are_noted_on_v1_only` rather than fixed here:
+  this slice was scoped to the display name, and a message-quality gap that
+  reaches no generated rule does not justify widening it. Also recorded, not
+  removed: the sloth CRD is the only dialect with no period field, so
+  `--period` moves its rules and slides off the three documents that pin their
+  own.
 - **PR 3 (agent-doable): release prep and the cut**, under the standing release
   delegation and its checklist.
 

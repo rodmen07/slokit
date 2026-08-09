@@ -1,0 +1,25 @@
+# `base.openslo-v1alpha.yaml` plus exactly one construct:
+# `metadata.displayName`.
+apiVersion: openslo/v1alpha
+kind: SLO
+metadata:
+  name: requests-availability
+  displayName: Requests Availability
+spec:
+  service: parity
+  description: "The dialect parity base document."
+  budgetingMethod: Occurrences
+  objectives:
+    - ratioMetrics:
+        good:
+          source: prometheus
+          queryType: promql
+          query: sum(rate(http_request_duration_seconds_count{job="parity",code!~"5.."}[{{.window}}]))
+        total:
+          source: prometheus
+          queryType: promql
+          query: sum(rate(http_request_duration_seconds_count{job="parity"}[{{.window}}]))
+      target: 0.999
+  timeWindows:
+    - count: 30
+      unit: Day

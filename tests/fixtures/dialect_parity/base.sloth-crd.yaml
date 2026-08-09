@@ -1,0 +1,20 @@
+# The parity base document, sloth Kubernetes CRD dialect. See
+# `base.slokit.yaml`.
+#
+# The CRD has no field for a per-SLO period (it is a slokit-only extension), so
+# this document is the one base that does not carry one. That asymmetry is a
+# covered construct in `tests/dialect_parity.rs`, not an oversight.
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: parity
+spec:
+  service: parity
+  slos:
+    - name: requests-availability
+      objective: 99.9
+      description: "The dialect parity base document."
+      sli:
+        events:
+          errorQuery: (sum(rate(http_request_duration_seconds_count{job="parity"}[{{.window}}]))) - (sum(rate(http_request_duration_seconds_count{job="parity",code!~"5.."}[{{.window}}])))
+          totalQuery: sum(rate(http_request_duration_seconds_count{job="parity"}[{{.window}}]))
