@@ -113,6 +113,17 @@ Merged since v1.8.0 and not yet released. Kept in step with
   `known_gap_check_burn_window_ignores_the_generators_period_scaled_base_window`
   test is deleted as its failure message mandates. Milestone done-when
   clauses 1, 2 and 3 hold; clauses 4 and 5's registry half are PR 2.
+- **v1.9.0 PR 2 — the registry seam.** `check::CheckOptions` gains
+  `plugins: Arc<SliPluginRegistry>` per D1.9-2 (the same struct, not a second
+  `_with` family; `Default` keeps the built-ins), and `check_spec_with`
+  validates on that same registry, closing the half-close hazard the MED bug
+  named. The embedder flow is proven end to end on the wire by
+  `embedder_registry_reaches_check_end_to_end` (fixed and rules windows),
+  rejection in both directions by
+  `check_validates_on_the_given_registry_not_the_builtins`, and the
+  `known_gap_check_cannot_see_a_custom_plugin_registry` test is deleted as
+  its failure message mandates. Milestone done-when clauses 4 and 5 now hold;
+  clause 6 (the registry read) is PR 3's cut.
 
 ## Next milestones
 
@@ -180,9 +191,10 @@ nothing.
    `--alert-windows` on `check`; per-SLO window statement in both output
    formats; `known_gap_check_burn_window_ignores_the_generators_period_scaled_base_window`
    deleted and replaced by the agreement tests below.
-2. **PR 2 — the registry reaches `check`.** The registry lands in the same
-   options struct; `check_spec`'s internal validation moves to `validate_with`
-   on the same registry (the half-close hazard the bug names);
+2. **PR 2 — the registry reaches `check`. SHIPPED (see "Unreleased on main"
+   above).** The registry lands in the same options struct; `check_spec`'s
+   internal validation moves to `validate_with` on the same registry (the
+   half-close hazard the bug names);
    `known_gap_check_cannot_see_a_custom_plugin_registry` deleted and replaced
    by the end-to-end embedder test.
 3. **PR 3 — release prep and the cut**, the `roadmap_truth`-enforced shape,

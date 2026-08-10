@@ -239,9 +239,10 @@ spec written against sloth's plugin catalog therefore fails with a clear
 Rust embedders can register their own plugins by implementing the
 `slokit::spec::plugin::SliPlugin` trait on a `SliPluginRegistry` and passing
 the registry through the `_with` entry points (`Spec::validate_with`,
-`SloSpec::to_sli_with`, `Spec::lint_with`) and `GenerateOptions::plugins`; see
-the `slokit::spec::plugin` module docs for a worked example. External plugin
-definition files (YAML/WASM) are deliberately out of scope for 0.9.
+`SloSpec::to_sli_with`, `Spec::lint_with`), `GenerateOptions::plugins`, and
+`check::CheckOptions::plugins`; see the `slokit::spec::plugin` module docs for
+a worked example. External plugin definition files (YAML/WASM) are
+deliberately out of scope for 0.9.
 
 ## OpenSLO interop
 
