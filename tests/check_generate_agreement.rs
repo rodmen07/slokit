@@ -1051,17 +1051,29 @@ fn check_validates_on_the_given_registry_not_the_builtins() {
         "expected the built-in registry to reject the embedder's plugin, got: {err}"
     );
 
-    // Direction 2: an explicit registry WITHOUT the plugin is rejected the
-    // same way — validation runs on the given registry, not skipped and not
-    // silently swapped for the built-ins' acceptance of something else.
+    // Direction 2: validation demonstrably RUNS, on the GIVEN registry. The
+    // spec's plugin is in the caller's registry (so plugin resolution alone
+    // would sail through and start querying), but its objective is not a
+    // percentage — only a validation pass can reject it, and only one run on
+    // the caller's registry rejects it for the OBJECTIVE rather than for an
+    // unknown plugin id, which is what the built-ins would say first.
+    let broken = PLUGIN_SPEC.replace("objective: 99.9", "objective: 150");
+    let broken = Spec::from_yaml(&broken).expect("broken spec still parses");
     let mut opts = CheckOptions::default();
-    opts.plugins = Arc::new(SliPluginRegistry::empty());
-    let err = check_spec_with(&client, &spec, &opts)
-        .expect_err("an empty registry must reject the plugin spec")
+    opts.plugins = Arc::new(static_ratio_registry());
+    let err = check_spec_with(&client, &broken, &opts)
+        .expect_err("validation must reject the out-of-range objective")
         .to_string();
     assert!(
-        err.contains("unknown SLI plugin 'acme/static-ratio'"),
-        "expected the empty registry to reject the embedder's plugin, got: {err}"
+        err.contains("not a percentage"),
+        "expected the objective error (validation ran, on the given registry), got: {err}"
+    );
+    // Validation collects every error, so a run against the WRONG registry
+    // would report the plugin as unknown alongside the objective. Its absence
+    // is what proves the registry validated with was the caller's.
+    assert!(
+        !err.contains("unknown SLI plugin"),
+        "the caller's registry knows the plugin, so only the objective may be reported, got: {err}"
     );
 
     assert!(
