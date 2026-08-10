@@ -1,11 +1,10 @@
 # slokit Roadmap
 
-Canonical planning document for slokit. Last updated 2026-08-08, by the v1.8.0
-(import dialect parity) release prep; the milestone was scoped, built (PRs #52
-and #53) and closed the same day, and the v1.7.0 (sloth corpus parity) prep
-had closed the previous milestone earlier that day. Backward-looking detail
-lives in [CHANGELOG.md](CHANGELOG.md); this file covers where the crate is
-going.
+Canonical planning document for slokit. Last updated 2026-08-10, by the v1.9.0
+(check parity with the generated rules) release prep; the milestone was scoped
+on 2026-08-09 (PR #59) and built as two slices, the window seam (PR #60) and
+the registry seam (PR #61). Backward-looking detail lives in
+[CHANGELOG.md](CHANGELOG.md); this file covers where the crate is going.
 
 This file is machine-checked. `tests/roadmap_truth.rs` reads it against
 `Cargo.toml` and `CHANGELOG.md` on every `cargo test` run and fails when they
@@ -40,7 +39,7 @@ naming the release, and the registry confirmed afterwards. The v1.1.0 cut on
 2026-07-26 ran under exactly that delegation. Secret writes (`gh secret set`)
 remain USER-ONLY.
 
-## Current state: v1.8.0
+## Current state: v1.9.0
 
 slokit is a stable, published SLO and error-budget engine with two pillars:
 
@@ -52,8 +51,8 @@ slokit is a stable, published SLO and error-budget engine with two pillars:
    `dashboard`, and `schema` commands behind feature flags (`cli`, `spec`,
    `check`, `dashboard`).
 
-`Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say 1.8.0. Under the standing
-release delegation the cut (tag `v1.8.0`, GitHub release, the publish it fires)
+`Cargo.toml`, `Cargo.lock` and `CHANGELOG.md` all say 1.9.0. Under the standing
+release delegation the cut (tag `v1.9.0`, GitHub release, the publish it fires)
 follows the prep commit directly, and the history row below records the date it
 ran.
 
@@ -70,24 +69,31 @@ curl -s -A "your-name (you@example.com)" https://crates.io/api/v1/crates/slokit 
 
 The public API is frozen per [docs/SEMVER.md](docs/SEMVER.md): 1.x changes are
 additive only, generated rule output is byte-stable within a minor line, and
-the tag-pinned JSON Schema URLs are immutable. 1.8.0 keeps all three, on the
-same "the spec format only grows" clause v1.5.0 through v1.7.0 ran on: a sloth
-SLO plugin chain inside a Kubernetes CRD document used to be a hard error and
-now imports (captured into the same `Spec::slo_plugins` / `SloSpec::plugins`
-fields the native parser has filled since 1.7.0, and reported by the existing
-`SLO_PLUGIN_CHAIN_DROPPED` lint), the OpenSLO `v1` route now reports a dropped
-`metadata.displayName` in the words `v1alpha` has used since 1.5.0 (an import
-note on stderr, not a rule change), and there are no signature changes at all —
-the library surface is untouched. Generated Prometheus rule output for every
-document that generated rules under 1.7.0 is byte-identical under 1.8.0,
-proven rather than asserted: a CRD document carrying a seven-entry plugin
-chain generates the same bytes as the same document with the chain deleted, in
-both output formats, across the whole `--period` / `--no-period-scaling`
-space. The durable artifact is a committed cross-dialect parity contract,
-`tests/dialect_parity.rs`, which runs the shipped binary over one matched
-document per dialect for every construct more than one importer can receive,
-so the next asymmetry is a named test failure rather than a census someone has
-to think to run. It adds no dependency, so the lean core is untouched.
+the tag-pinned JSON Schema URLs are immutable. 1.9.0 keeps all three, and it
+touched the read side only. Additive library surface: `check::CheckOptions`
+(`#[non_exhaustive]`, its `Default` reproducing 1.8.0 behavior),
+`check::BurnWindow`, `check_spec_with` / `check_slo_with`, and
+`CheckOptions::plugins`; `check_spec` and `check_slo` keep their signatures
+and delegate, so no existing call site changes. The CLI gains `--rules-window`
+plus `--no-period-scaling` and `--alert-windows` on `check`, and changes no
+default: `--window` still defaults to `1h` at every period (D1.9-2's
+alternative, flipping the default to rules-agreement, is recorded as a 2.0
+candidate precisely because `check`'s burn rate feeds `--fail-on` and
+re-windowing it silently would flip existing CI gates), and a default
+invocation's wire queries and output are byte-identical to 1.8.0. Generated
+rule output is untouched by construction rather than by promise: the only
+generator-side edit in the whole milestone is `generate::recording::base_window`
+taking `&MwmbrConfig` instead of `&SloContext<'_>` so that `check` can call the
+generator's own resolution rather than re-derive it — the seam D1.9-2 required
+— and the spec format, `schema/`, and every runtime dependency are unchanged
+(the sole `Cargo.toml` delta since 1.8.0 is a dev-dependency bump, jsonschema
+0.48 → 0.49, out of the Dependabot queue). The durable artifact is
+`tests/check_generate_agreement.rs`, which reads BOTH real artifacts — the wire
+queries `check` actually sends, captured by the `QuerySpy` loopback, and the
+window inside the emitted `slo:current_burn_rate:ratio` — and fails by name
+when the two name different windows, across the default / `--period 7d` /
+`--no-period-scaling` / `--alert-windows` option space for 30d and 7d SLOs. It
+adds no dependency, so the lean core is untouched.
 
 MSRV is 1.82 and it **is** CI-enforced: the `MSRV 1.82` job in
 `.github/workflows/ci.yml` builds the default, all-features, and lean-core
@@ -97,131 +103,12 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
-## Unreleased on main
-
-Merged since v1.8.0 and not yet released. Kept in step with
-[CHANGELOG.md](CHANGELOG.md)'s `[Unreleased]` section by
-`tests/roadmap_truth.rs::roadmap_declares_unreleased_work_exactly_when_the_changelog_has_some`.
-
-- **v1.9.0 PR 1 — the window seam.** `check` gains `--rules-window` (per-SLO
-  burn windows resolved through the generator's own seam), plus
-  `--no-period-scaling` and `--alert-windows`; the library gains
-  `check::CheckOptions` / `check::BurnWindow` and `check_spec_with` /
-  `check_slo_with` (additive, defaults reproduce the old behavior). The
-  window agreement is held across the option matrix by
-  `tests/check_generate_agreement.rs`, and the
-  `known_gap_check_burn_window_ignores_the_generators_period_scaled_base_window`
-  test is deleted as its failure message mandates. Milestone done-when
-  clauses 1, 2 and 3 hold; clauses 4 and 5's registry half are PR 2.
-- **v1.9.0 PR 2 — the registry seam.** `check::CheckOptions` gains
-  `plugins: Arc<SliPluginRegistry>` per D1.9-2 (the same struct, not a second
-  `_with` family; `Default` keeps the built-ins), and `check_spec_with`
-  validates on that same registry, closing the half-close hazard the MED bug
-  named. The embedder flow is proven end to end on the wire by
-  `embedder_registry_reaches_check_end_to_end` (fixed and rules windows),
-  rejection in both directions by
-  `check_validates_on_the_given_registry_not_the_builtins`, and the
-  `known_gap_check_cannot_see_a_custom_plugin_registry` test is deleted as
-  its failure message mandates. Milestone done-when clauses 4 and 5 now hold;
-  clause 6 (the registry read) is PR 3's cut.
-
 ## Next milestones
 
-### v1.9.0: check parity with the generated rules
-
-**Theme.** `slokit check` is the one read-side surface that still resolves its
-own answers instead of resolving them the way the generator does. The
-`check`-vs-`generate` QA audit (PR #44, 2026-08-08) proved the series names
-cannot drift — `check` queries raw SLI expressions and never names a recorded
-series — but found two gaps one layer down, and both have been pinned ever
-since by `known_gap_` tests in `tests/check_generate_agreement.rs`: the
-"current burn rate" `check` prints and the `slo:current_burn_rate:ratio` the
-generator records are computed over different windows with nothing saying so,
-and `check` is the one public entry point a custom SLI-plugin registry cannot
-reach, so a spec that `validate_with` and `generate_rules_with` both accept
-cannot be checked at all. Both are MED bugs in the autodev backlog; this
-milestone is those two bugs promoted to one theme instead of fixed loose,
-which the scoping item itself named as the candidate route.
-
-**Grounding, re-probed at the binary on 2026-08-09 rather than inherited from
-the bug text:** a fresh build of `af9c7c8` (59s real compile, not a cached
-`Finished`) generates `slo:current_burn_rate:ratio` reading
-`slo:sli_error:ratio_rate5m` for a default 30d SLO and
-`slo:sli_error:ratio_rate1m` for a 7d one — the shortest MWMBR lookback
-window, scaled to the period by `generate::resolve_mwmbr` — while
-`slokit check` documents `--window [default: 1h]` at every period. So the two
-numbers published under the name "current burn rate" disagree **12x by
-default and 60x on a 7d SLO** — the bug's 7d case was the sharpest, not the
-only one. The registry gap is structural: `check_slo` calls
-`SloSpec::to_sli()` (hardcoded built-ins) and `check_spec` validates with the
-built-ins, and `grep -n 'check_spec_with\|check_slo_with' src/` returns
-nothing.
-
-**Decisions, each an overridable default (say "approved" to take all three):**
-
-- **D1.9-1 — the CLI default window stays `1h`; agreement is opt-in.**
-  docs/SEMVER.md's CLI clause says existing invocations keep working across
-  1.x, and `check`'s burn rate feeds `--fail-on`, so silently re-windowing the
-  default would flip existing CI gates. The default therefore stays, `check`
-  gains an explicit way to ask for the rules' own window (flag shape is the
-  implementing PR's to pick; `--window` stays authoritative when given), and
-  both output formats state the window each number was computed over.
-  Alternative recorded: flip the default to rules-agreement — a 2.0 candidate,
-  not a 1.x move.
-- **D1.9-2 — resolution goes through the generator's own seam, not a
-  check-local re-derivation.** The rules-window mode resolves per SLO via
-  `generate::resolve_mwmbr` under the same option vocabulary `generate` and
-  `dashboard` already share (`--period` `check` already has with the same
-  meaning; `--no-period-scaling` and `--alert-windows` it gains), because a
-  second resolver is exactly the drift PR #38 removed from `dashboard`.
-  Library shape: one additive `#[non_exhaustive]` options struct with a
-  `Default` reproducing today's behavior, plus `check_spec_with` /
-  `check_slo_with` taking it; the existing entry points delegate unchanged.
-  PR 2 adds the registry to the same struct rather than growing a second
-  `_with` family.
-- **D1.9-3 — single-theme minor.** The dashboard `time.from` follow-up (LOW,
-  display default, its own backlog item) is deliberately not folded in, the
-  same discipline D4 set for v1.2.0.
-
-**Slices, dependency-ordered (no calendar sizing):**
-
-1. **PR 1 — the window seam. SHIPPED (see "Unreleased on main" above).** The
-   options struct and `check_spec_with` / `check_slo_with`; the CLI
-   rules-window mode (`--rules-window`) plus `--no-period-scaling` and
-   `--alert-windows` on `check`; per-SLO window statement in both output
-   formats; `known_gap_check_burn_window_ignores_the_generators_period_scaled_base_window`
-   deleted and replaced by the agreement tests below.
-2. **PR 2 — the registry reaches `check`. SHIPPED (see "Unreleased on main"
-   above).** The registry lands in the same options struct; `check_spec`'s
-   internal validation moves to `validate_with` on the same registry (the
-   half-close hazard the bug names);
-   `known_gap_check_cannot_see_a_custom_plugin_registry` deleted and replaced
-   by the end-to-end embedder test.
-3. **PR 3 — release prep and the cut**, the `roadmap_truth`-enforced shape,
-   then tag, release, and the registry read, under the standing delegation.
-
-**Done-when (every clause a build, test, CI, or registry check):**
-
-1. A test reading BOTH real artifacts — `check`'s wire queries captured by the
-   existing `QuerySpy` loopback, and the window inside the emitted
-   `slo:current_burn_rate:ratio` numerator — proves they name the SAME window
-   string under rules-window resolution, for a 30d and a 7d spec, across an
-   option matrix covering default, `--period 7d`, `--no-period-scaling`, and
-   `--alert-windows` with a committed catalogue.
-2. An explicit `--window` stays authoritative in both directions per L-001:
-   given, it is used verbatim and stated; absent under rules-window mode, the
-   resolved window observably differs from `1h` on a 7d SLO.
-3. Default behavior is unchanged: `check_spec` / `check_slo` keep their
-   signatures, and a default `check` invocation's wire queries and output are
-   byte-identical before and after PR 1.
-4. A spec using a registry-only plugin is checked end to end through the
-   public API against the `QuerySpy`, where today `check_spec` errors before
-   sending a single query — and validation inside runs on the same registry.
-5. Both `known_gap_` tests are DELETED in the commits that close them (their
-   own failure messages mandate exactly this), and the two MED bugs are closed
-   against those commits.
-6. Registry read, never inferred: crates.io reports `newest_version` 1.9.0
-   after the PR 3 cut.
+Nothing is scheduled. The v1.9.0 check-parity milestone closed with this
+release prep (the window seam shipped as PR #60, the registry seam as PR #61;
+see the history table below), and the theme after it is not yet scoped — that
+is a product increment, not an implementation task.
 
 ## Later / candidates (unscheduled)
 
@@ -374,6 +261,42 @@ happened:
 | 1.6.0 | 2026-08-08 | sloth **Kubernetes CRD** input (`apiVersion: sloth.slok.dev/v1`, `kind: PrometheusServiceLevel`): auto-detected and importable through the new sibling `src/spec/sloth_crd.rs`, pinnable with `--input-format sloth-crd`, fail-closed on sloth's SLO plugin chains (**superseded in 1.8.0**: captured and reported by `SLO_PLUGIN_CHAIN_DROPPED` instead, once the refusal's stated reason was measured and found false) and on the native `page_alert`/`ticket_alert` spellings inside a CRD document (still a refusal); byte-identity against sloth's own native twins asserted at the binary level across the whole `generate` option space. Plus the dashboard/generator option fix (`dashboard --period` / `--no-period-scaling`, one shared window-resolving seam) that had every window-scoped panel rendering "No data" beside non-default rules since 1.0.0 |
 | 1.7.0 | 2026-08-08 | sloth **corpus parity**: all 20 documents of `slok/sloth@8a3be4f`'s `examples/` tree committed under `tests/fixtures/sloth_corpus/` with their upstream sha256 and exact disposition pinned by `tests/sloth_corpus.rs`, so a compatibility change is a named test failure rather than a discovery in the next release; plus the three defects that corpus exposed — unquoted YAML scalars in `labels` and `annotations` now coerce at every level (which is what makes upstream's `victoria-metrics.yml` readable, with the JSON Schema's `labelMap` widened in the same commit), `kind: AlertWindows` catalogue input via `--alert-windows <path>` on `generate` and `dashboard` plus the additive `GenerateOptions::alert_windows` and the new `spec::alert_windows` module, and the `SLO_PLUGIN_CHAIN_DROPPED` lint that makes sloth's silently discarded SLO plugin chains visible on the native route without changing what any document generates |
 | 1.8.0 | 2026-08-08 | import **dialect parity**: the sloth Kubernetes CRD route captures `spec.sloPlugins` and `slos[].plugins` into the fields the native parser has filled since 1.7.0, so a plugin chain is reported by `SLO_PLUGIN_CHAIN_DROPPED` instead of refused (corpus 16 accepted / 4 refused → 18 / 2, the byte-identity premise proven on the CRD route across the whole option space), and the OpenSLO `v1` route reports a dropped `metadata.displayName` in the same words `v1alpha` has used since 1.5.0; the durable half is `tests/dialect_parity.rs`, a committed contract running the shipped binary over one matched document per dialect for every construct more than one importer can receive (16 fixtures), whose first run found a third divergence (`metadata.annotations`, noted on `v1` only — filed as a LOW bug and pinned by `known_gap_object_annotations_are_noted_on_v1_only` rather than fixed) |
+| 1.9.0 | 2026-08-10 | **check parity with the generated rules**: `slokit check` stops resolving its own answers and starts resolving them the way `generate` does. `check --rules-window` computes each SLO's current burn rate over the generator's own per-SLO window — through `generate::recording::base_window`, shared rather than re-derived — closing a gap where the two numbers published under the name "current burn rate" (the CLI's BURN column and the recorded `slo:current_burn_rate:ratio` the Grafana panel reads) disagreed 12x at the default period and 60x on a 7d SLO with nothing saying so; `--no-period-scaling` and `--alert-windows` carry the same meaning they have on `generate`, an explicit `--window` stays authoritative and still defaults to `1h`, and both output formats state the window each number was computed over. And an embedder's `SliPluginRegistry` finally reaches `check` (`check::CheckOptions::plugins`), with `check_spec_with`'s internal validation moved onto that same registry, so a spec `validate_with` and `generate_rules_with` both accept can no longer be un-checkable. Additive throughout: `check_spec` / `check_slo` keep their signatures, the options struct is `#[non_exhaustive]` with a `Default` reproducing 1.8.0, and a default invocation is byte-identical on the wire. The durable half is `tests/check_generate_agreement.rs`, which reads BOTH real artifacts — the wire queries `check` sends, and the window inside the emitted recording rule — and fails by name when they differ, across the default / `--period 7d` / `--no-period-scaling` / `--alert-windows` space for 30d and 7d SLOs; both `known_gap_` characterisation tests are deleted in the commits that closed them, as their own failure messages mandated |
+
+The v1.9.0 milestone as it was scoped, for the record, since the section
+itself is gone from `## Next milestones` now that it shipped. Theme: `check`
+was the one read-side surface still resolving its own answers instead of
+resolving them the way the generator does. The check-vs-generate QA audit
+(PR #44, 2026-08-08) had proved the series names cannot drift — `check`
+queries raw SLI expressions and never names a recorded series — but found two
+gaps one layer down and pinned both with `known_gap_` tests rather than
+leaving them as prose: the burn window disagreement above, and `check` being
+the one public entry point a custom SLI-plugin registry could not reach. This
+milestone was those two MED bugs promoted to a single theme. Its grounding was
+re-probed at the binary on 2026-08-09 rather than inherited from the bug text
+(a fresh 59s compile of `af9c7c8`, not a cached `Finished`), which is what
+established that the disagreement is 12x at the default period and not only
+the 60x the 7d case in the bug report showed. Three decisions, each an
+overridable default and none overridden: D1.9-1 the CLI default window stays
+`1h` and agreement is opt-in, because `check`'s burn rate feeds `--fail-on`
+and re-windowing the default would silently flip existing CI gates (flipping
+it is recorded as a 2.0 candidate); D1.9-2 resolution goes through the
+generator's own seam rather than a check-local re-derivation, and the registry
+lands in the same options struct rather than growing a second `_with` family,
+because a second resolver is exactly the drift PR #38 removed from
+`dashboard`; D1.9-3 single-theme minor, so the dashboard `time.from` follow-up
+stayed its own backlog item. Slices, dependency-ordered: PR 1 the window seam
+(`#60`), PR 2 the registry seam (`#61`), PR 3 this release prep and the cut.
+Five of its six done-when clauses are mechanical and green in CI — the
+both-artifacts window agreement across the option matrix for 30d and 7d specs,
+`--window` authoritative in both directions (given, used verbatim; absent under
+rules-window mode, observably not `1h` on a 7d SLO), default behavior
+byte-identical, the registry-only plugin checked end to end against the
+`QuerySpy` with validation running on the caller's registry, and both
+`known_gap_` tests deleted in the commits that closed them with the two MED
+bugs closed against those commits. The sixth — crates.io reporting
+`newest_version` 1.9.0 — is the registry check in the current-state section
+above, which nothing in this repo can assert on its own.
 
 The v1.8.0 milestone as it was scoped, for the record, since the section
 itself is gone from `## Next milestones` now that it shipped. Theme: slokit

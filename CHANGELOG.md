@@ -6,7 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
-## [Unreleased]
+## [1.9.0] - 2026-08-10
+
+**check parity with the generated rules.** `slokit check` was the last
+read-side surface that resolved its own answers instead of resolving them the
+way `generate` does. Both gaps the 2026-08-08 check-vs-generate audit found —
+and pinned ever since with `known_gap_` tests — are closed here: the burn
+window `check` reports can now be the generator's own per-SLO window, resolved
+through the generator's seam rather than re-derived, and an embedder's
+`SliPluginRegistry` finally reaches `check`. Each `known_gap_` test is deleted
+in the commit that closed it, as its own failure message mandated. Additive
+only: `check_spec` / `check_slo` keep their signatures and a default `check`
+invocation's wire queries and output are byte-identical to 1.8.0.
 
 ### Added
 
