@@ -42,6 +42,32 @@ From 1.0.0, slokit follows the semver guarantees documented in
     `known_gap_check_burn_window_ignores_the_generators_period_scaled_base_window`
     characterisation test is deleted, as its own failure message mandates.
 
+- **An embedder's SLI-plugin registry now reaches `check`** (v1.9.0 PR 2, the
+  registry seam). `Spec::validate_with`, `SloSpec::to_sli_with` and
+  `GenerateOptions::plugins` all took a custom `SliPluginRegistry`, but
+  `check` had no registry parameter at all: `check_slo` resolved SLIs with
+  the hardcoded built-ins and `check_spec` validated with the built-ins
+  first, so a spec that `validate_with` and `generate_rules_with` both accept
+  could not be checked at all — an inconsistency that cost exactly the
+  embedders the `_with` family exists for.
+
+  - `check::CheckOptions` gains `plugins: Arc<SliPluginRegistry>` (additive;
+    the struct is `#[non_exhaustive]` and `Default` keeps the built-ins, so
+    `check_spec` / `check_slo` / existing `check_spec_with` callers behave
+    exactly as before). Validation inside `check_spec_with` runs on that same
+    registry (`validate_with`), never the built-ins, so acceptance and SLI
+    resolution cannot disagree.
+  - Proven end to end on the wire by
+    `tests/check_generate_agreement.rs::embedder_registry_reaches_check_end_to_end`
+    (a registry-only plugin's expansion is what `check` actually queries,
+    under both fixed and `--rules-window`-style resolution), with
+    `check_validates_on_the_given_registry_not_the_builtins` pinning both
+    rejection directions before any query is sent. The
+    `known_gap_check_cannot_see_a_custom_plugin_registry` characterisation
+    test is deleted, as its own failure message mandates.
+  - Not surfaced in the CLI: `slokit check` keeps resolving against the
+    built-ins, since a plugin registry only exists in-process.
+
 ## [1.8.0] - 2026-08-08
 
 **Import dialect parity.** Both constructs whose answer depended on which

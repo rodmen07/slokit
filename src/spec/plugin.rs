@@ -67,8 +67,10 @@
 //! [`Spec::validate`](super::Spec::validate) with an unknown-plugin-id error;
 //! pass the custom registry via the `_with` entry points
 //! ([`Spec::validate_with`](super::Spec::validate_with),
-//! [`SloSpec::to_sli_with`](super::SloSpec::to_sli_with), and
-//! [`GenerateOptions::plugins`](crate::generate::GenerateOptions)).
+//! [`SloSpec::to_sli_with`](super::SloSpec::to_sli_with),
+//! [`GenerateOptions::plugins`](crate::generate::GenerateOptions), and — with
+//! the `check` feature — `check::CheckOptions::plugins`, so live checking
+//! reaches the same specs the other entry points accept).
 
 use std::collections::BTreeMap;
 use std::fmt;

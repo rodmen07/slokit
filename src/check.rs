@@ -5,6 +5,7 @@
 //! current error budget and burn rate. This is the runtime companion to the
 //! offline rule [generator](crate::generate).
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
@@ -13,6 +14,7 @@ use crate::burn_rate::{BurnRate, MwmbrConfig};
 use crate::error::{Result, SlokitError};
 use crate::generate::GenerateOptions;
 use crate::spec::alert_windows::AlertWindowsSet;
+use crate::spec::plugin::SliPluginRegistry;
 use crate::spec::{SloSpec, Spec, DEFAULT_PERIOD};
 use crate::window::Window;
 
@@ -264,7 +266,7 @@ pub enum BurnWindow {
 ///
 /// The struct is `#[non_exhaustive]`, mirroring
 /// [`GenerateOptions`](crate::generate::GenerateOptions): options are
-/// expected to keep growing (the SLI-plugin registry is next). Start from
+/// expected to keep growing. Start from
 /// [`CheckOptions::default`] — which reproduces the behavior of
 /// [`check_spec`] / [`check_slo`] exactly — and set the fields you need:
 ///
@@ -295,6 +297,15 @@ pub struct CheckOptions {
     /// default), with the same precedence they have in `generate`. Ignored
     /// under [`BurnWindow::Fixed`].
     pub alert_windows: AlertWindowsSet,
+    /// The registry used to resolve `sli.plugin` SLIs (defaults to slokit's
+    /// built-in plugins), mirroring
+    /// [`GenerateOptions::plugins`](crate::generate::GenerateOptions).
+    /// Validation inside [`check_spec_with`] runs against this same registry,
+    /// so a spec that [`Spec::validate_with`] and
+    /// [`generate_rules_with`](crate::generate::generate_rules_with) accept
+    /// is checkable too. Wrapped in an [`Arc`] because `CheckOptions` is
+    /// `Clone` and a boxed-trait registry is not.
+    pub plugins: Arc<SliPluginRegistry>,
 }
 
 impl Default for CheckOptions {
@@ -305,6 +316,7 @@ impl Default for CheckOptions {
             mwmbr: MwmbrConfig::sre_default(),
             period_aware: true,
             alert_windows: AlertWindowsSet::new(),
+            plugins: Arc::new(SliPluginRegistry::with_builtins()),
         }
     }
 }
@@ -326,6 +338,7 @@ fn current_window_for(slo_spec: &SloSpec, period: Window, opts: &CheckOptions) -
                 mwmbr: opts.mwmbr.clone(),
                 period_aware: opts.period_aware,
                 alert_windows: opts.alert_windows.clone(),
+                plugins: opts.plugins.clone(),
                 ..GenerateOptions::default()
             };
             let mwmbr = crate::generate::resolve_mwmbr(slo_spec.custom_mwmbr()?, period, &gen_opts);
@@ -359,7 +372,7 @@ pub fn check_slo_with(
 ) -> Result<SloStatus> {
     let slo = slo_spec.to_slo(opts.default_period)?;
     let current_window = current_window_for(slo_spec, slo.period, opts)?;
-    let sli = slo_spec.to_sli()?;
+    let sli = slo_spec.to_sli_with(&opts.plugins)?;
     let budget_ratio = slo.error_budget_ratio();
 
     let period_error_ratio = client.query_scalar(&sli.error_ratio_expr(slo.period))?;
@@ -412,13 +425,15 @@ pub fn check_spec(
 /// Check every SLO in a spec against a live Prometheus, with explicit
 /// options.
 ///
-/// The spec is validated first; the first query failure aborts the run.
+/// The spec is validated first — against [`CheckOptions::plugins`], the same
+/// registry the SLIs are then resolved with, so acceptance and resolution
+/// cannot disagree; the first query failure aborts the run.
 pub fn check_spec_with(
     client: &PrometheusClient,
     spec: &Spec,
     opts: &CheckOptions,
 ) -> Result<Vec<SloStatus>> {
-    spec.validate()?;
+    spec.validate_with(&opts.plugins)?;
     spec.slos
         .iter()
         .map(|slo| check_slo_with(client, &spec.service, slo, opts))
@@ -593,6 +608,15 @@ mod tests {
         assert_eq!(opts.burn_window, BurnWindow::Fixed(Window::hours(1)));
         assert!(opts.period_aware);
         assert!(opts.alert_windows.periods().is_empty());
+        // The default registry is the built-ins, id for id — the behavior
+        // `check_spec` / `check_slo` always had.
+        let default_ids: Vec<&str> = opts.plugins.ids().collect();
+        let builtin_ids: Vec<String> = SliPluginRegistry::with_builtins()
+            .ids()
+            .map(str::to_string)
+            .collect();
+        assert_eq!(default_ids, builtin_ids);
+        assert!(!default_ids.is_empty(), "built-ins must not be empty");
     }
 
     #[test]

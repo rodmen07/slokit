@@ -32,11 +32,17 @@
 //!    [`rules_window_check_and_generate_agree_on_the_burn_window`]. The
 //!    `known_gap_` test that pinned the old behaviour is deleted, as its own
 //!    failure message mandated.
-//! 2. `check` resolves plugin SLIs against the built-in registry only. There
-//!    is no `check_spec_with(..registry..)` route yet: `CheckOptions` carries
-//!    no registry, so an embedder whose spec `validate_with` and
-//!    `generate_rules_with` both accept cannot check it at all. Still open;
-//!    pinned by the `known_gap_` test below until v1.9.0 PR 2 closes it.
+//! 2. `check` resolved plugin SLIs against the built-in registry only:
+//!    `CheckOptions` carried no registry, so an embedder whose spec
+//!    `validate_with` and `generate_rules_with` both accept could not check
+//!    it at all. **CLOSED by v1.9.0 PR 2:** [`slokit::check::CheckOptions`]
+//!    gained `plugins`, `check_spec_with` validates against that same
+//!    registry, and the flow-through is proven end to end on the wire by
+//!    [`embedder_registry_reaches_check_end_to_end`], with
+//!    [`check_validates_on_the_given_registry_not_the_builtins`] pinning that
+//!    validation runs on the registry the caller gave. The `known_gap_` test
+//!    that pinned the old behaviour is deleted, as its own failure message
+//!    mandated.
 //!
 //! What is NOT re-tested here: the period. `check` and `generate` do agree on
 //! the resolved SLO period across the option matrix, and
@@ -911,17 +917,10 @@ fn cli_default_table_keeps_the_global_window_header() {
     drop(spy);
 }
 
-/// **KNOWN GAP (filed as a MED bug on the crates backlog, 2026-08-08).**
-/// `SloSpec::to_sli_with`, `Spec::validate_with` and `GenerateOptions::plugins`
-/// all let an embedder bring a custom SLI plugin registry. `check` has no such
-/// entry point: `check_slo` calls `SloSpec::to_sli()`, which hardcodes the
-/// built-in registry, and `check_spec` validates with the built-ins first, so a
-/// spec that `validate_with` and `generate_rules_with` both accept cannot be
-/// checked at all. `tests/plugin.rs` proves the flow-through for validate and
-/// generate; this proves `check` is the one path it does not reach.
-#[test]
-fn known_gap_check_cannot_see_a_custom_plugin_registry() {
-    const PLUGIN_SPEC: &str = r#"
+/// A spec whose one SLO resolves through an embedder-registered plugin — the
+/// registry-only spec the closed MED bug (2026-08-08, closed by v1.9.0 PR 2)
+/// was about.
+const PLUGIN_SPEC: &str = r#"
 service: checkaudit
 slos:
   - name: plugged
@@ -933,61 +932,156 @@ slos:
           metric: app:error_ratio
 "#;
 
-    struct StaticRatio;
-    impl SliPlugin for StaticRatio {
-        fn id(&self) -> &str {
-            "acme/static-ratio"
-        }
-        fn description(&self) -> &str {
-            "an embedder's ratio metric"
-        }
-        fn options(&self) -> &[OptionSpec] {
-            const OPTIONS: &[OptionSpec] = &[OptionSpec::new(
-                "metric",
-                OptionKind::String,
-                "name of the recorded error-ratio metric",
-            )
-            .required()];
-            OPTIONS
-        }
-        fn expand(&self, options: &std::collections::BTreeMap<String, String>) -> Result<Sli> {
-            Ok(Sli::Raw {
-                error_ratio_query: format!(
-                    "avg_over_time({}[{}])",
-                    options["metric"],
-                    slokit::WINDOW_TOKEN
-                ),
-            })
-        }
+/// The embedder's plugin behind [`PLUGIN_SPEC`]: expands to a raw SLI reading
+/// `avg_over_time(<metric>[window])`, so its fingerprint on the wire is
+/// unmistakably not a built-in's.
+struct StaticRatio;
+impl SliPlugin for StaticRatio {
+    fn id(&self) -> &str {
+        "acme/static-ratio"
     }
+    fn description(&self) -> &str {
+        "an embedder's ratio metric"
+    }
+    fn options(&self) -> &[OptionSpec] {
+        const OPTIONS: &[OptionSpec] = &[OptionSpec::new(
+            "metric",
+            OptionKind::String,
+            "name of the recorded error-ratio metric",
+        )
+        .required()];
+        OPTIONS
+    }
+    fn expand(&self, options: &std::collections::BTreeMap<String, String>) -> Result<Sli> {
+        Ok(Sli::Raw {
+            error_ratio_query: format!(
+                "avg_over_time({}[{}])",
+                options["metric"],
+                slokit::WINDOW_TOKEN
+            ),
+        })
+    }
+}
 
-    let spec = Spec::from_yaml(PLUGIN_SPEC).expect("spec parses");
+/// An [`SliPluginRegistry`] holding exactly [`StaticRatio`] — no built-ins, so
+/// anything it resolves provably came from the embedder.
+fn static_ratio_registry() -> SliPluginRegistry {
     let mut registry = SliPluginRegistry::empty();
     registry.register(Box::new(StaticRatio)).expect("registers");
+    registry
+}
 
-    // Two of the three public entry points take the registry.
+/// The end-to-end embedder flow the closed MED bug asked for (milestone
+/// done-when clause 4): a spec whose plugin lives only in the caller's
+/// registry is checked through the public API, and the queries on the wire
+/// are the plugin's own expansion. All three public entry points now accept
+/// the same registry-only spec; `tests/plugin.rs` proves validate and
+/// generate, this proves `check`.
+#[test]
+fn embedder_registry_reaches_check_end_to_end() {
+    let spec = Spec::from_yaml(PLUGIN_SPEC).expect("spec parses");
+    let registry = static_ratio_registry();
+
+    // The two entry points that always took the registry still agree.
     spec.validate_with(&registry)
         .expect("validate_with accepts the embedder's plugin");
-    let mut opts = GenerateOptions::default();
-    opts.plugins = Arc::new(registry);
-    generate_rules_with(&spec, &opts).expect("generate_rules_with accepts the embedder's plugin");
+    let mut gen_opts = GenerateOptions::default();
+    gen_opts.plugins = Arc::new(registry);
+    generate_rules_with(&spec, &gen_opts)
+        .expect("generate_rules_with accepts the embedder's plugin");
 
-    // `check` is the third, and it has no registry parameter to give.
+    // `check` is the third, and `CheckOptions::plugins` is its route.
     let spy = QuerySpy::spawn();
     let client = PrometheusClient::new(spy.url()).expect("client builds");
+    let mut opts = CheckOptions::default();
+    opts.plugins = gen_opts.plugins.clone();
+    let statuses = check_spec_with(&client, &spec, &opts)
+        .expect("check_spec_with resolves the embedder's plugin");
+    assert_eq!(statuses.len(), 1, "one SLO, one status");
+
+    // The wire proves the SLI came from the embedder's expansion: the period
+    // query and the default 1h current-window query, both over its metric.
+    let queries = spy.drain();
+    assert_eq!(
+        queries,
+        vec![
+            "avg_over_time(app:error_ratio[30d])".to_string(),
+            "avg_over_time(app:error_ratio[1h])".to_string(),
+        ],
+        "check must query the plugin-expanded SLI, period then current window"
+    );
+
+    // The registry composes with rules-window resolution: same spec, same
+    // registry, `BurnWindow::Rules` — the 30d SLO's current window becomes
+    // the generator's 5m base window instead of the fixed 1h.
+    opts.burn_window = BurnWindow::Rules;
+    check_spec_with(&client, &spec, &opts)
+        .expect("check_spec_with resolves the embedder's plugin under rules windows");
+    let queries = spy.drain();
+    assert_eq!(
+        queries,
+        vec![
+            "avg_over_time(app:error_ratio[30d])".to_string(),
+            "avg_over_time(app:error_ratio[5m])".to_string(),
+        ],
+        "rules-window resolution must apply to a plugin-expanded SLI too"
+    );
+}
+
+/// The validation half of the close condition (the half-close hazard the bug
+/// named): `check_spec_with` must validate against the registry the caller
+/// gave, not the built-ins — in both directions. Without the caller's
+/// registry the spec is rejected before a single query is sent, exactly as
+/// 1.8.0 behaved; with a registry that lacks the plugin it is rejected too,
+/// so validation demonstrably runs on the given registry rather than being
+/// skipped.
+#[test]
+fn check_validates_on_the_given_registry_not_the_builtins() {
+    let spec = Spec::from_yaml(PLUGIN_SPEC).expect("spec parses");
+    let spy = QuerySpy::spawn();
+    let client = PrometheusClient::new(spy.url()).expect("client builds");
+
+    // Direction 1: the registry-less entry points keep 1.8.0's behavior —
+    // built-ins only, so the embedder's plugin id is unknown.
     let err = check_spec(&client, &spec, Window::days(30), Window::hours(1))
-        .expect_err(
-            "GAP CLOSED: check_spec now resolves a custom plugin registry. Delete this test \
-             and the backlog bug it cites.",
-        )
+        .expect_err("the built-in registry must reject the embedder's plugin")
         .to_string();
     assert!(
         err.contains("unknown SLI plugin 'acme/static-ratio'"),
         "expected the built-in registry to reject the embedder's plugin, got: {err}"
     );
+
+    // Direction 2: validation demonstrably RUNS, on the GIVEN registry. The
+    // discriminating spec duplicates the SLO name — a defect ONLY whole-spec
+    // validation can see (per-SLO `to_slo` / `to_sli_with` each convert one
+    // SLO and re-check what they use, so an objective or SLI defect cannot
+    // tell "validated" from "each conversion caught it"). Its plugin IS in
+    // the caller's registry, so all three failure modes separate: validation
+    // skipped resolves both SLOs and queries the wire; validation on the
+    // built-ins reports the plugin unknown alongside the duplicate (validate
+    // collects every error); only validation on the caller's registry
+    // reports the duplicate alone, before any query.
+    let broken = format!(
+        "{PLUGIN_SPEC}  - name: plugged\n    objective: 99.9\n    sli:\n      plugin:\n        id: acme/static-ratio\n        options:\n          metric: app:error_ratio\n"
+    );
+    let broken = Spec::from_yaml(&broken).expect("broken spec still parses");
+    let mut opts = CheckOptions::default();
+    opts.plugins = Arc::new(static_ratio_registry());
+    let err = check_spec_with(&client, &broken, &opts)
+        .expect_err("validation must reject the duplicate SLO name")
+        .to_string();
+    assert!(
+        err.contains("duplicate SLO name"),
+        "expected the duplicate-name error (validation ran), got: {err}"
+    );
+    assert!(
+        !err.contains("unknown SLI plugin"),
+        "the caller's registry knows the plugin, so only the duplicate may be reported, got: {err}"
+    );
+
     assert!(
         spy.drain().is_empty(),
-        "check should fail before it queries Prometheus"
+        "both rejections must happen before any query reaches Prometheus"
     );
 }
 
