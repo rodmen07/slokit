@@ -1052,28 +1052,31 @@ fn check_validates_on_the_given_registry_not_the_builtins() {
     );
 
     // Direction 2: validation demonstrably RUNS, on the GIVEN registry. The
-    // spec's plugin is in the caller's registry (so plugin resolution alone
-    // would sail through and start querying), but its objective is not a
-    // percentage — only a validation pass can reject it, and only one run on
-    // the caller's registry rejects it for the OBJECTIVE rather than for an
-    // unknown plugin id, which is what the built-ins would say first.
-    let broken = PLUGIN_SPEC.replace("objective: 99.9", "objective: 150");
+    // discriminating spec duplicates the SLO name — a defect ONLY whole-spec
+    // validation can see (per-SLO `to_slo` / `to_sli_with` each convert one
+    // SLO and re-check what they use, so an objective or SLI defect cannot
+    // tell "validated" from "each conversion caught it"). Its plugin IS in
+    // the caller's registry, so all three failure modes separate: validation
+    // skipped resolves both SLOs and queries the wire; validation on the
+    // built-ins reports the plugin unknown alongside the duplicate (validate
+    // collects every error); only validation on the caller's registry
+    // reports the duplicate alone, before any query.
+    let broken = format!(
+        "{PLUGIN_SPEC}  - name: plugged\n    objective: 99.9\n    sli:\n      plugin:\n        id: acme/static-ratio\n        options:\n          metric: app:error_ratio\n"
+    );
     let broken = Spec::from_yaml(&broken).expect("broken spec still parses");
     let mut opts = CheckOptions::default();
     opts.plugins = Arc::new(static_ratio_registry());
     let err = check_spec_with(&client, &broken, &opts)
-        .expect_err("validation must reject the out-of-range objective")
+        .expect_err("validation must reject the duplicate SLO name")
         .to_string();
     assert!(
-        err.contains("not a percentage"),
-        "expected the objective error (validation ran, on the given registry), got: {err}"
+        err.contains("duplicate SLO name"),
+        "expected the duplicate-name error (validation ran), got: {err}"
     );
-    // Validation collects every error, so a run against the WRONG registry
-    // would report the plugin as unknown alongside the objective. Its absence
-    // is what proves the registry validated with was the caller's.
     assert!(
         !err.contains("unknown SLI plugin"),
-        "the caller's registry knows the plugin, so only the objective may be reported, got: {err}"
+        "the caller's registry knows the plugin, so only the duplicate may be reported, got: {err}"
     );
 
     assert!(
