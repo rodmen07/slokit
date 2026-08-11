@@ -13,6 +13,27 @@ on:
 permissions:
   contents: read
 
+# Third-party actions are pinned to full-length commit SHAs, with the release
+# they resolved to written in the trailing comment. A tag like `@v7` is a
+# MUTABLE ref the upstream owner can repoint at any commit, so a tag pin means
+# "run whatever that account publishes next" -- on a repo that holds
+# CRATES_IO_TOKEN and publishes to crates.io. The SHA is the only ref GitHub
+# will not silently move. Dependabot's `github-actions` ecosystem updates SHA
+# pins and rewrites the comment, so currency is not lost by pinning.
+#
+# ONE family is deliberately NOT SHA-pinned, because for it the ref name is an
+# ARGUMENT rather than a version: `dtolnay/rust-toolchain@stable` and
+# `@1.82` select the toolchain to install (the action reads its own
+# `github.action_ref`), so a SHA there would ask for a toolchain named by a
+# hex string. That family is also the one `.github/dependabot.yml` ignores,
+# for the same reason. `taiki-e/install-action` used to be in the same shape
+# via its per-tool tags (`@cargo-audit`); it is pinned here by moving the tool
+# name into `with: tool:`, which is the form its action.yml documents.
+#
+# tests/action_pinning.rs enforces all of the above: it discovers every
+# workflow file, fails on any unpinned `uses:` outside the named exemption,
+# and fails on an exemption that no workflow still uses.
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
@@ -22,14 +43,14 @@ jobs:
     name: fmt, clippy, test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       # The committed Cargo.lock must already agree with Cargo.toml. Every
       # other cargo invocation in this job would silently REPAIR a stale
@@ -64,13 +85,15 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-audit
-        uses: taiki-e/install-action@cargo-audit
+        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        with:
+          tool: cargo-audit
 
       - name: Run security audit
         # --deny warnings: without it, `cargo audit` exits 0 on `unsound` and
@@ -86,7 +109,7 @@ jobs:
     name: MSRV 1.82
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Stable cargo first: its rust-version-aware resolver (1.84+) picks
       # dependency versions that honor rust-version = "1.82". Installing 1.82
@@ -97,9 +120,11 @@ jobs:
       - name: Install MSRV toolchain
         uses: dtolnay/rust-toolchain@1.82
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
-      - uses: taiki-e/install-action@cargo-hack
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        with:
+          tool: cargo-hack
 
       # The committed Cargo.lock tracks current dependencies, some of which
       # (clap 4.6+, the ICU4X tree) need newer rustc. Resolve an
@@ -133,12 +158,12 @@ jobs:
       # Pinned Prometheus release providing promtool (3.5.x is the LTS line).
       PROMETHEUS_VERSION: 3.5.0
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Install promtool
         run: |
@@ -165,13 +190,15 @@ jobs:
     env:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
+        with:
+          tool: cargo-llvm-cov
       - name: Generate coverage
         run: cargo llvm-cov --all-features --lcov --output-path lcov.info
 
@@ -186,7 +213,7 @@ jobs:
       # is. tests/coverage_upload.rs pins all three halves of that contract.
       - name: Upload to Codecov
         if: env.CODECOV_TOKEN != ''
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: lcov.info
           fail_ci_if_error: true
