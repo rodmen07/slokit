@@ -463,7 +463,6 @@ use slokit::generate::generate_rules;
 let spec = Spec::from_path("slos.yaml")?;
 let ruleset = generate_rules(&spec)?;
 println!("{}", ruleset.to_prometheus_yaml()?);
-# Ok::<(), slokit::SlokitError>(())
 ```
 
 ### Feature flags
@@ -475,7 +474,7 @@ println!("{}", ruleset.to_prometheus_yaml()?);
 | `check` | yes     | `reqwest`, `serde_json`  | live Prometheus querying (`PrometheusClient`, `check_spec`) |
 | `dashboard` | yes | `serde_json`             | Grafana dashboard generation (`dashboard_json`) |
 
-For the lean math-only core: `slokit = { version = "0.12", default-features = false }`.
+For the lean math-only core: `slokit = { version = "1", default-features = false }`.
 
 ## The MWMBR model
 

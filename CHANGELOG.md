@@ -6,6 +6,39 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 From 1.0.0, slokit follows the semver guarantees documented in
 [docs/SEMVER.md](docs/SEMVER.md): no breaking changes in 1.x.
 
+## [Unreleased]
+
+### Fixed
+
+- **The crate-level rustdoc example on the docs.rs landing page did not
+  compile.** "Generating Prometheus rules" was fenced ```ignore, so rustdoc
+  never checked it, and it had drifted into rendering `ruleset.to_yaml()` — a
+  method `RuleSet` has never had — over a spec loaded by
+  `Spec::from_yaml(yaml_str)` from an undefined `yaml_str`. Un-ignoring it on
+  the 1.9.0 tree produced four compile errors, ending in
+  `error[E0599]: no method named to_yaml found for struct RuleSet`. It is now
+  a compiled `no_run` doctest using `Spec::from_path` and
+  `RuleSet::to_prometheus_yaml`.
+- **The README told library consumers to depend on a pre-1.0 release.** The
+  lean-core snippet read `slokit = { version = "0.12", default-features =
+  false }` while the crate was at 1.9.0 — a requirement resolving to an API
+  that predates the 1.x freeze, on the page crates.io renders as the crate's
+  front page. It now reads `version = "1"`.
+- The README's generation example carried a rustdoc hidden-line marker
+  (`# Ok::<(), slokit::SlokitError>(())`). `README.md` is rendered as plain
+  markdown, so that line was shown to the reader rather than hidden, and it
+  does not compile if pasted. Removed.
+
+### Added
+
+- `tests/doc_examples.rs`: four guards over the crate's published examples. No
+  rustdoc example under `src/` may be marked `ignore` (an ignored example is
+  an uncompiled one); every ```rust block in `README.md` must be the visible
+  body of a compiled rustdoc example under `src/`, which is what proves the
+  README's Rust compiles; no README Rust block may carry a rustdoc
+  hidden-line marker; and the README's `slokit = { version = "..." }` pin is
+  checked against `CARGO_PKG_VERSION`.
+
 ## [1.9.0] - 2026-08-10
 
 **check parity with the generated rules.** `slokit check` was the last
