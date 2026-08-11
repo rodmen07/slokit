@@ -120,10 +120,173 @@ Merged since v1.9.0 and not yet released. Kept in step with
 
 ## Next milestones
 
-Nothing is scheduled. The v1.9.0 check-parity milestone closed with this
-release prep (the window seam shipped as PR #60, the registry seam as PR #61;
-see the history table below), and the theme after it is not yet scoped — that
-is a product increment, not an implementation task.
+### v1.10.0: the spec remembers which dialect it came from
+
+**Theme.** slokit reads four input dialects, and the moment a document becomes
+a `Spec` it forgets which one produced it. Everything downstream therefore
+answers in native slokit vocabulary, to a reader who may never have written
+any: a sloth Kubernetes CRD's plugin-chain warning tells them to remove
+`slo_plugins` from a file whose key is `sloPlugins`, `metadata.annotations` is
+reported as dropped on one of the three object-envelope routes and dropped in
+silence on the other two, and a document in an unrecognised dialect is answered
+with whichever native field the parser happened to miss first. Those are three
+separate LOW bugs in the backlog with one root: the import layer knows the
+dialect and nothing carries that knowledge past the import boundary. This
+milestone gives it a seam — the same move v1.9.0 made for window resolution —
+and then spends it on the three messages.
+
+It is a read-side, message-quality minor: no generated rule changes, the spec
+format gains no key, and the public API grows only additively.
+
+**Grounding, measured at a fresh binary on 2026-08-11 rather than inherited
+from the bug texts.** Freshness proven before any conclusion was drawn, because
+this crate has produced a stale-`target/` false negative before: appending a
+garbage token made `cargo build --all-features` fail at `src/lib.rs:84`
+(`expected one of ! or ::`), so the binary under test is the tree under test.
+
+- **The spelling.** `slokit lint -i tests/fixtures/sloth_corpus/slo-plugin-k8s-getting-started.yml`
+  prints ``WARN myservice spec SLO_PLUGIN_CHAIN_DROPPED `slo_plugins` is a
+  sloth SLO plugin chain`` while line 17 of that document reads `sloPlugins:`.
+  The SLO-level finding says `` `plugins` ``, which the CRD spells `plugins`
+  too, so exactly one of the two spellings is wrong. Both are string literals
+  at `src/spec/lint.rs:192` and `:197`, and `lint` reads a `Spec`, which has no
+  field to read the dialect from.
+- **The silence.** Three documents differing in nothing but dialect
+  (`tests/fixtures/dialect_parity/object-annotations.*`, committed by v1.8.0
+  PR 2): the `openslo/v1` run prints `note: … metadata.annotations do not map
+  and were ignored`, the `openslo/v1alpha` and `sloth-crd` runs print no such
+  note, and all three exit 0 as valid.
+- **The dispatch.** `apiVersion: openslo/v2` errors with `unsupported
+  apiVersion 'openslo/v2' (expected openslo/v1 or openslo/v1alpha)` and
+  `sloth.slok.dev/v2` with its sibling message — both good. A Kubernetes
+  `apps/v1` Deployment pointed at slokit by mistake errors with `spec error:
+  document 1: missing field 'service'`. The dispatch is precise where a prefix
+  matches and mute where none does.
+- **The constraint the fix must respect, measured rather than assumed.** A
+  *valid native spec* with `apiVersion: apps/v1` prepended — the committed
+  `examples/infraportal/slos/accounts-service.yaml` — still reports `ok:
+  'accounts-service' is valid (2 SLOs)` and generates byte-identical rules
+  (18126 bytes with and without the key). So an unrecognised `apiVersion`
+  cannot become a refusal in 1.x without breaking
+  [docs/SEMVER.md](docs/SEMVER.md)'s "YAML that parses and validates under 1.a
+  also parses and validates under 1.b". That is the same wall that made the
+  plugin chain a lint rule in v1.7.0 instead of a refusal, hit a second time
+  from a different direction.
+- **Two stale claims in the same family**, found by reading the code the fix
+  touches rather than by grep: `src/spec/mod.rs:96-97` and
+  `src/spec/lint.rs:188-189` both still say the CRD dialect "refuses
+  `spec.sloPlugins` outright". v1.8.0 PR 1 (PR #52) removed that refusal, and
+  the probe above shows the CRD route linting the chain and exiting 0. PR 1
+  corrects both comments in the files it is already editing.
+
+**Decisions, each an overridable default (say "approved" to take all five):**
+
+- **D1.10-1 — provenance is two additive fields on `Spec`, mirroring the
+  `slo_plugins` precedent in that same struct.** A new
+  `#[non_exhaustive] pub enum SourceDialect { Native, OpenSloV1,
+  OpenSloV1Alpha, SlothCrd }` whose `Default` is `Native`, carried as
+  `#[serde(skip)] pub dialect: SourceDialect` (set by whichever importer
+  produced the spec, never read from or written to YAML), plus
+  `#[serde(rename = "apiVersion", default, skip_serializing)] pub api_version:
+  Option<String>` capturing the document's own top-level `apiVersion`
+  verbatim when it had one. `slo_plugins` is already exactly this shape —
+  captured to make a drop visible, never applied, never serialized back — so
+  the spec format gains no key, `schema/slokit-spec.schema.json` needs no
+  edit, and the "spec format only grows" clause is untouched. Named
+  `SourceDialect` rather than `Dialect` because `src/bin/slokit.rs:48` already
+  has a CLI-level `Dialect` with a different variant set (it counts
+  `AlertWindows`, a document kind rather than a spec dialect).
+  *Alternative recorded:* thread the dialect through `lint`'s call sites only
+  — rejected because `lint` takes a `Spec` and the library API is the surface
+  embedders use, so a CLI-local fix would leave every embedder on the wrong
+  spelling.
+  *Consequence PR 1 owes an answer to, not a free change:* `Spec` derives
+  `PartialEq`, so a new field changes what equality means. No whole-`Spec`
+  equality assertion exists today (`assert_eq!` on spec values compares fields
+  only: `tests/multi_spec.rs:50`, `tests/multidoc_input.rs:31-34`,
+  `tests/sloth_crd.rs:305`), so PR 1 states the effect and verifies it rather
+  than assuming it is free.
+- **D1.10-2 — messages become dialect-aware only where the dialect changes
+  what the reader must type.** A finding that names a KEY gets the reader's own
+  spelling; prose, codes, locations and the JSON `--output json` field names
+  stay identical across dialects, because they are the machine-readable surface
+  docs/SEMVER.md freezes. Concretely this milestone re-spells exactly one
+  message, `SLO_PLUGIN_CHAIN_DROPPED` at spec level.
+- **D1.10-3 — an unrecognised `apiVersion` is reported, never refused, while
+  the document still parses natively.** Measured above: refusing it would break
+  the 1.x parse-compatibility clause on documents that generate byte-identical
+  rules today. Refusal is recorded as a 2.0 candidate. Where the native parse
+  ALSO fails, the error names the `apiVersion` and the dialects slokit accepts
+  instead of the first missing native field — that rewords an error on a
+  document that already exited 1, so it is not an acceptance change.
+- **D1.10-4 — the report channel for that case is a new lint code,
+  `UNKNOWN_API_VERSION`, and the `lint --strict` consequence is stated rather
+  than hidden.** A new code means a document that was warning-free can now fail
+  `lint --strict`; v1.7.0 set that precedent with `SLO_PLUGIN_CHAIN_DROPPED`
+  and the CHANGELOG says so under Added. *Alternative rejected:* a stderr
+  `note:` — the note channel is importer-only (`Import` / `ImportNote`,
+  `src/spec/import.rs:21` and `:42`), and a natively parsed document has no
+  importer to carry one.
+- **D1.10-5 — single-theme minor.** The dashboard `time.from` follow-up, the
+  README feature-flag table, and the README ```sh guard all stay out, the same
+  discipline D4 set for v1.2.0 and D1.9-3 for v1.9.0.
+
+**Slices, dependency-ordered (no calendar sizing).** Four rather than three
+because each is one reviewable claim, and PRs 2 and 3 both depend on PR 1's
+fields existing:
+
+1. **PR 1 — the provenance seam, and the spelling it fixes.** `SourceDialect`
+   plus the two `Spec` fields; every importer sets the dialect and the native
+   parser captures `apiVersion`; `plugin_chain_lints` takes the spec-level
+   spelling from the dialect instead of the literal at `src/spec/lint.rs:192`;
+   `known_gap_the_crd_lint_finding_names_the_native_spelling`
+   (`tests/sloth_crd_cli.rs`) deleted in the same commit, as its own message
+   mandates; the two stale "refuses `spec.sloPlugins`" comments corrected.
+2. **PR 2 — the note the two silent routes never sent.**
+   `metadata.annotations` reported on `openslo/v1alpha` and on the sloth CRD
+   route from the same string constant the `v1` route already uses;
+   `known_gap_object_annotations_are_noted_on_v1_only` deleted; the two
+   `SilentlyIgnored` rows in `tests/dialect_parity.rs` become
+   `NotedAndIgnored` and the construct's verdict becomes `Uniform`. This slice
+   needs no new machinery and is the cheapest of the four.
+3. **PR 3 — the dialect the dispatch could not name.** The
+   `UNKNOWN_API_VERSION` lint over `Spec::api_version`, and the dialect-naming
+   parse error for the case where no native parse succeeds either. The
+   byte-identity guard of done-when 5 lands here, in the same commit as the
+   lint, because it is what proves the rule reports without refusing.
+4. **PR 4 — release prep and the cut**, the `roadmap_truth`-enforced shape,
+   then tag, release, and the registry read, under the standing delegation.
+
+**Done-when (every clause settled by a build, a test, a CI run, or a registry
+read — no existence searches):**
+
+1. `spec::SourceDialect` and both `Spec` fields exist and are additive:
+   `cargo test --all-features` green, the lean core still builds and tests
+   (`.github/workflows/ci.yml:56` and `:59`), the `MSRV 1.82` job green on all
+   three feature configurations, and a native spec round-tripped through
+   `Serialize` is byte-identical to today's output, so no YAML key appeared.
+2. One test asserts BOTH spellings together: a sloth CRD document's spec-level
+   `SLO_PLUGIN_CHAIN_DROPPED` finding names `sloPlugins` while the same
+   construct in a native document still names `slo_plugins` — with a negative
+   control that forces the dialect to `Native` on the CRD route and observes
+   exactly that test go red, perturbation count-asserted and the RED line
+   quoted.
+3. Both characterisation tests are DELETED in the commits that close them, as
+   each one's own failure message instructs, and
+   `grep -rc "fn known_gap_" tests/ src/` goes from 2 to 0.
+4. `object-annotations` in `tests/dialect_parity.rs` records `NotedAndIgnored`
+   on all three rows with verdict `Uniform`, and the three notes come from one
+   shared constant, so a reworded note cannot diverge silently — the shape
+   v1.8.0 PR 2 used for `metadata.displayName`.
+5. The compatibility constraint becomes a test rather than a promise:
+   `examples/infraportal/slos/accounts-service.yaml` with `apiVersion: apps/v1`
+   prepended still exits 0 from `validate` and generates rules byte-identical
+   to the same document without the key (18126 bytes today), while `lint` on
+   that document reports `UNKNOWN_API_VERSION`; and a document carrying an
+   unrecognised `apiVersion` that also fails the native parse errors naming
+   both the `apiVersion` and the accepted dialects, not a missing native field.
+6. Registry read, never inferred: crates.io reports `newest_version` 1.10.0
+   after the PR 4 cut.
 
 ## Later / candidates (unscheduled)
 
