@@ -10,6 +10,14 @@ on:
 permissions:
   contents: read
 
+# Third-party actions are pinned to full-length commit SHAs (the release they
+# resolved to is in the trailing comment), enforced by tests/action_pinning.rs
+# and kept current by Dependabot. This is the workflow where a mutable tag
+# would cost the most: the job has CRATES_IO_TOKEN in scope and its output is
+# an irreversible crates.io publish. `dtolnay/rust-toolchain@stable` is the
+# one exempt family -- there the ref names the TOOLCHAIN, not a version. The
+# full rationale lives in ci.yml beside the same policy.
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -20,14 +28,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Verify version matches tag
         run: |
