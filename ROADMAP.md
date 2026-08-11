@@ -103,6 +103,21 @@ committed-lockfile check via `cargo metadata --locked`, and a lean-core build
 and test), `Security audit` (`cargo audit --deny warnings`), `promtool check
 generated rules` against a pinned Prometheus release, and `coverage`.
 
+## Unreleased on main
+
+Merged since v1.9.0 and not yet released. Kept in step with
+[CHANGELOG.md](CHANGELOG.md)'s `[Unreleased]` section by
+`tests/roadmap_truth.rs::roadmap_declares_unreleased_work_exactly_when_the_changelog_has_some`.
+
+- **QA: the published examples get their first compilation.** The docs.rs
+  landing example was fenced `ignore` and had rotted into calling a method
+  `RuleSet` has never had, and the README pointed library consumers at a
+  pre-1.0 version of a crate at 1.9.0. Both are fixed, and
+  `tests/doc_examples.rs` (4 guards) now holds every README Rust example
+  byte-equal to the visible body of a compiled doctest under `src/`, refuses
+  an `ignore` fence anywhere in `src/`, and checks the README's dependency
+  pin against `CARGO_PKG_VERSION`. No library or CLI behavior changed.
+
 ## Next milestones
 
 Nothing is scheduled. The v1.9.0 check-parity milestone closed with this

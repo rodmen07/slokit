@@ -25,7 +25,7 @@
 //! let budget = slo.error_budget(1_000_000.0);
 //! assert!((budget.allowed_bad_events() - 1_000.0).abs() < 1e-6);
 //!
-//! // Observing a 1% error rate is a 10x burn against a 99.9% objective.
+//! // A sustained 1% error rate is a 10x burn against a 99.9% objective.
 //! let burn = BurnRate::from_error_ratio(0.01, &slo);
 //! assert!((burn.value() - 10.0).abs() < 1e-9);
 //! ```
@@ -34,13 +34,14 @@
 //!
 //! With the default features enabled:
 //!
-//! ```ignore
+//! ```no_run
 //! use slokit::spec::Spec;
 //! use slokit::generate::generate_rules;
 //!
-//! let spec = Spec::from_yaml(yaml_str)?;
+//! let spec = Spec::from_path("slos.yaml")?;
 //! let ruleset = generate_rules(&spec)?;
-//! println!("{}", ruleset.to_yaml()?);
+//! println!("{}", ruleset.to_prometheus_yaml()?);
+//! # Ok::<(), slokit::SlokitError>(())
 //! ```
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
