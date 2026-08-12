@@ -16,6 +16,7 @@ use std::collections::{BTreeMap, HashSet};
 use crate::burn_rate::{MwmbrConfig, Severity};
 use crate::window::Window;
 
+use super::import::{accepted_api_groups, is_known_api_group};
 use super::plugin::SliPluginRegistry;
 use super::{SloPluginChain, Spec, DEFAULT_PERIOD};
 
@@ -179,6 +180,38 @@ pub fn lint_with(spec: &Spec, plugins: &SliPluginRegistry) -> Vec<Lint> {
                 spec.version
             ),
         });
+    }
+
+    // An `apiVersion` naming no dialect slokit reads. The native format has no
+    // such key (it spells its own format version `version:`), and the native
+    // parser does not deny unknown fields, so a Kubernetes manifest or a
+    // document written for some other SLO tool parses here as a native spec —
+    // quietly, and with whatever native fields it happens to satisfy.
+    //
+    // REPORTED, never refused (ROADMAP.md D1.10-3). Refusing it would break
+    // docs/SEMVER.md's clause that a document validating under 1.a validates
+    // under 1.b: measured at the binary, a valid native spec with
+    // `apiVersion: apps/v1` prepended validates today and generates
+    // byte-identical rules, so there is a live acceptance to preserve and
+    // `tests/unknown_api_version.rs` pins it.
+    //
+    // A recognised GROUP with an unreadable VERSION (`openslo/v2`) is not this
+    // finding's business: it reaches its importer, which refuses it by name.
+    // See `super::import::KNOWN_API_GROUPS`.
+    if let Some(api_version) = spec.api_version.as_deref() {
+        if !is_known_api_group(api_version) {
+            out.push(Lint {
+                level: LintLevel::Warning,
+                code: "UNKNOWN_API_VERSION",
+                location: "spec".to_string(),
+                message: format!(
+                    "apiVersion '{api_version}' names no format slokit reads (accepted: {}); \
+                     the document was read as a native slokit spec, which declares no apiVersion, \
+                     and the key was ignored",
+                    accepted_api_groups()
+                ),
+            });
+        }
     }
 
     label_name_lints(&mut out, "spec", "labels", &spec.labels, true);

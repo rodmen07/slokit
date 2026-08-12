@@ -119,6 +119,17 @@ use crate::window::Window;
 use super::validate::is_metric_name;
 use super::{Alerting, EventsSli, LatencySli, RawSli, SliSpec, SloSpec, SourceDialect, Spec};
 
+/// The `apiVersion` group every OpenSLO document declares, whichever schema
+/// version follows the slash.
+///
+/// [`super::import::KNOWN_API_GROUPS`] composes the recognised set from this
+/// constant and its sloth counterpart, so the group the auto-detector matches
+/// on and the group an `UNKNOWN_API_VERSION` message calls accepted are the
+/// same string by construction. It used to be a bare `"openslo/"` literal
+/// inside [`is_openslo`], which is one of the two places a third copy would
+/// have gone.
+pub(super) const API_GROUP: &str = "openslo/";
+
 /// The current OpenSLO API version, and the one [`to_yaml`] exports.
 const API_VERSION: &str = "openslo/v1";
 
@@ -161,7 +172,7 @@ pub fn is_openslo(yaml: &str) -> bool {
         return value
             .get("apiVersion")
             .and_then(Value::as_str)
-            .is_some_and(|v| v.starts_with("openslo/"));
+            .is_some_and(|v| v.starts_with(API_GROUP));
     }
     false
 }

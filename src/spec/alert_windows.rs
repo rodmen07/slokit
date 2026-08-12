@@ -74,7 +74,13 @@ use crate::window::Window;
 use super::Spec;
 
 /// The `apiVersion` prefix every sloth document declares.
-const API_GROUP: &str = "sloth.slok.dev/";
+///
+/// Re-used from [`super::sloth_crd`] rather than copied: `AlertWindows` and
+/// `PrometheusServiceLevel` are two document KINDS in one `apiVersion` group,
+/// so a second literal here would be a second home for one fact — and it would
+/// be invisible to [`super::import::KNOWN_API_GROUPS`], which composes the
+/// recognised set from the per-dialect group constants.
+use super::sloth_crd::API_GROUP;
 
 /// The only `apiVersion` this reader accepts.
 const API_VERSION: &str = "sloth.slok.dev/v1";

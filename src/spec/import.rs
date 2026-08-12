@@ -72,3 +72,58 @@ impl std::fmt::Display for ImportNote {
 /// all three `object-annotations` rows and asserts it against the shipped
 /// binary, so a reword here that does not reach the contract fails there.
 pub(super) const OBJECT_ANNOTATIONS_NOTE: &str = "metadata.annotations do not map and were ignored";
+
+/// Every top-level `apiVersion` GROUP slokit recognises, composed from the
+/// dialect modules' own constants rather than restated.
+///
+/// This is the accept-set two different surfaces test a document's declared
+/// `apiVersion` against, and the reason it is DERIVED rather than written out
+/// here is that those two surfaces must never disagree:
+///
+/// - the auto-detector in `src/bin/slokit.rs` routes a document to an importer
+///   by the same prefixes ([`super::openslo::is_openslo`],
+///   [`super::sloth_crd::is_sloth_crd`],
+///   [`super::alert_windows::is_alert_windows`]);
+/// - the `UNKNOWN_API_VERSION` lint and the dialect-naming parse error report
+///   a document whose `apiVersion` matches NONE of them, and both print this
+///   set beside the offending value.
+///
+/// A hand-written copy could go stale in the direction that is invisible from
+/// a green suite: too broad, and the lint silently stops firing for a dialect
+/// nothing can actually read; too narrow, and it fires on documents slokit
+/// imports perfectly well. Reading the group constants means adding a fifth
+/// dialect updates the message for free.
+///
+/// The set holds GROUPS, not versions. `openslo/v2` is inside a recognised
+/// group and is therefore not this lint's business: it reaches the OpenSLO
+/// importer, which already refuses it by name (`unsupported apiVersion
+/// 'openslo/v2' (expected openslo/v1 or openslo/v1alpha)`). What has no
+/// reader at all is an unrecognised GROUP — `apps/v1`, a future
+/// `sloth.example/v1`, an OpenSLO successor under a new group.
+pub(super) const KNOWN_API_GROUPS: [&str; 2] =
+    [super::openslo::API_GROUP, super::sloth_crd::API_GROUP];
+
+/// Whether a document's top-level `apiVersion` names a dialect slokit reads.
+///
+/// `None` (the native format, which spells its own format version `version:`
+/// and has no `apiVersion` key at all) is not this function's question: callers
+/// only reach it once they have a declared value.
+pub(super) fn is_known_api_group(api_version: &str) -> bool {
+    KNOWN_API_GROUPS
+        .iter()
+        .any(|group| api_version.starts_with(group))
+}
+
+/// [`KNOWN_API_GROUPS`] rendered for a human-readable message, e.g.
+/// `openslo/*, sloth.slok.dev/*`.
+///
+/// Both reporting surfaces print this beside the value they rejected, never
+/// the verdict alone: a set that has drifted is invisible on a tree where
+/// nothing is wrong, and the messages are the only place it is ever observed.
+pub(super) fn accepted_api_groups() -> String {
+    KNOWN_API_GROUPS
+        .iter()
+        .map(|group| format!("{group}*"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
