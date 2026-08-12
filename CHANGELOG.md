@@ -10,6 +10,31 @@ From 1.0.0, slokit follows the semver guarantees documented in
 
 ### Added
 
+- **A new lint code, `UNKNOWN_API_VERSION`, for a document that declares an
+  `apiVersion` naming no format slokit reads.** The native spec format has no
+  `apiVersion` key — it spells its own format version `version:` — and the
+  native parser does not deny unknown fields, so a Kubernetes manifest or an
+  SLO document written for some other tool could parse as a native spec and
+  generate rules with nothing said about the mismatch. It is now reported.
+  The finding quotes the value and names the groups slokit does read
+  (`openslo/*`, `sloth.slok.dev/*`), and both come from one constant shared
+  with the auto-detector, so the set a message calls accepted cannot drift
+  from the set the dispatch routes on.
+
+  **This is a report, never a refusal**, and it is deliberate: a valid native
+  spec with a foreign `apiVersion` prepended validates and generates
+  byte-identical rules today, and [docs/SEMVER.md](docs/SEMVER.md) freezes
+  that acceptance for 1.x. `tests/unknown_api_version.rs` pins the acceptance
+  beside the report.
+
+  **Consequence, stated rather than hidden:** a new code means a document that
+  was warning-free can now fail `slokit lint --strict`, which exits non-zero
+  on any finding. v1.7.0 set that precedent with `SLO_PLUGIN_CHAIN_DROPPED`.
+  Plain `slokit lint` is unaffected (it exits 0 and prints the table), and
+  `validate`, `generate`, `check`, `dashboard` and `export` are untouched.
+  Refusing an unrecognised `apiVersion` outright is recorded as a 2.0
+  candidate.
+
 - **A spec now remembers which dialect produced it.** `spec::SourceDialect`
   (`Native`, `OpenSloV1`, `OpenSloV1Alpha`, `SlothCrd`; `#[non_exhaustive]`,
   defaulting to `Native`) plus two additive `Spec` fields: `dialect`, set by
@@ -21,6 +46,22 @@ From 1.0.0, slokit follows the semver guarantees documented in
   field now compare unequal when they came from different dialects.
 
 ### Fixed
+
+- **A document in a dialect slokit could not place failed with a field-level
+  error that named neither the dialect nor the mismatch.** Pointing `slokit
+  validate` at a Kubernetes manifest, or at an SLO document written for
+  another tool, reported ``spec error: document 1: missing field `service` ``
+  — a required field announced as absent from a document that is well-formed
+  in a format slokit was never asked to read. When a document declares an
+  `apiVersion`, the failure now names it first: an unrecognised group is
+  reported with the formats slokit does accept, and a group slokit DOES read
+  that was nonetheless parsed natively (`--input-format slokit` pinned onto a
+  sloth `PrometheusServiceLevel`, or `Spec::from_yaml` called on one) is told
+  which dialect it declared. The native parser's own error is kept in both
+  cases — it is still the answer for a native spec with a stray key — and a
+  document declaring no `apiVersion` keeps exactly the message it had. Only
+  documents that already failed are affected; nothing that parsed before
+  stops parsing.
 
 - **Two of the three dialects that accept an object envelope dropped
   `metadata.annotations` without saying so.** `openslo/v1` has reported the

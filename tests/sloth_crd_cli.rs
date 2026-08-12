@@ -16,11 +16,20 @@
 //! spec error: document 1: missing field `service`
 //! ```
 //!
-//! which named neither the dialect nor the problem. That message is not gone —
-//! it is exactly what pinning `--input-format slokit` on a CRD document still
-//! produces, and [`the_pinned_dialect_overrides_detection_in_both_directions`]
-//! asserts it, because a pin that quietly fell back to auto-detection would
-//! pass every other test in this file.
+//! which named neither the dialect nor the problem.
+//!
+//! **CORRECTED 2026-08-12 by v1.10.0 PR 3.** The three lines above used to
+//! continue: *"That message is not gone — it is exactly what pinning
+//! `--input-format slokit` on a CRD document still produces, and
+//! [`the_pinned_dialect_overrides_detection_in_both_directions`] asserts it."*
+//! That is now false, and it was the last place the pre-1.6.0 blindness
+//! survived: pinning the native parser onto a CRD still fails, and still fails
+//! with `missing field `service``, but the message now opens by naming the
+//! `apiVersion` the document declared. The test below asserts both halves —
+//! the native answer, because a pin that quietly fell back to auto-detection
+//! would pass every other test in this file, and the dialect name, because
+//! that is the reword. `tests/unknown_api_version.rs` owns the message's own
+//! contract.
 //!
 //! The library-level mapping assertions live in `tests/sloth_crd.rs`; this
 //! file only proves the capability is reachable from the installed command,
@@ -231,10 +240,26 @@ fn the_pinned_dialect_overrides_detection_in_both_directions() {
         !out.status.success(),
         "a CRD document pinned as native slokit must not validate"
     );
+    // v1.10.0 PR 3 rewords this. It used to read exactly
+    //
+    //     document 1: missing field `service`
+    //
+    // which is what the v1.6.0 grounding pass filed as a bug: a required field
+    // reported absent from a well-formed CRD, naming neither the dialect nor
+    // the mismatch. The native parser's own answer still has to survive — it
+    // is the whole point of the pin — but it is now preceded by the dialect
+    // the document actually declared, so this assertion asserts BOTH halves
+    // rather than the pre-1.10.0 string. `tests/unknown_api_version.rs` owns
+    // the message's own contract; what this file owns is that the PIN still
+    // reaches the native parser.
+    let err = stderr(&out);
     assert!(
-        stderr(&out).contains("document 1: missing field `service`"),
-        "expected the native parser's own failure, got: {}",
-        stderr(&out)
+        err.contains("missing field `service`"),
+        "expected the native parser's own failure, got: {err}"
+    );
+    assert!(
+        err.contains("sloth.slok.dev/v1") && err.contains("names a dialect slokit imports"),
+        "the pinned-native failure must now name the dialect the document declared, got: {err}"
     );
 
     let out = slokit(&[

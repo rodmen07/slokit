@@ -118,7 +118,13 @@ use super::{
 };
 
 /// The `apiVersion` prefix every sloth Kubernetes CRD document declares.
-const API_GROUP: &str = "sloth.slok.dev/";
+///
+/// Shared with [`super::alert_windows`], which reads the other document kind
+/// in this same group, and composed into
+/// [`super::import::KNOWN_API_GROUPS`] so the accepted set an
+/// `UNKNOWN_API_VERSION` message prints cannot drift from the set the
+/// auto-detector matches on.
+pub(super) const API_GROUP: &str = "sloth.slok.dev/";
 
 /// The only `apiVersion` this importer accepts.
 const API_VERSION: &str = "sloth.slok.dev/v1";

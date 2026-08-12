@@ -368,6 +368,28 @@ one matters most — those are Kubernetes *object* labels, not rule labels
 generated rule. `status` is dropped silently: it is the controller's writeback,
 never input.
 
+**An `apiVersion` slokit does not read is reported, never refused.** The native
+spec format declares no `apiVersion` (it spells its own format version
+`version:`) and the native parser ignores unknown keys, so a Kubernetes
+manifest or an SLO document written for another tool used to parse as a native
+spec — and generate rules — with nothing said about it. `slokit lint` now
+reports `UNKNOWN_API_VERSION`, quoting the value and naming the groups slokit
+does read:
+
+```text
+WARN  spec  UNKNOWN_API_VERSION  apiVersion 'apps/v1' names no format slokit
+reads (accepted: openslo/*, sloth.slok.dev/*); the document was read as a
+native slokit spec, which declares no apiVersion, and the key was ignored
+```
+
+It stays a report because refusing it would break the 1.x promise that a
+document validating under 1.a validates under 1.b: such a document validates
+and generates byte-identical rules today. Note that a new code means a
+previously warning-free document can now fail `slokit lint --strict`, the same
+way `SLO_PLUGIN_CHAIN_DROPPED` did in 1.7.0. When the document also fails the
+native parse, the error names the `apiVersion` and the accepted formats
+instead of the first missing native field.
+
 **Reported by lint, never applied**: sloth's SLO plugin chains
 (`spec.sloPlugins`, `slos[].plugins`), which slokit has no equivalent for — its
 `sli.plugin` is a different mechanism and *is* mapped. `slokit lint` reports

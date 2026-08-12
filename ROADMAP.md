@@ -141,6 +141,25 @@ Merged since v1.9.0 and not yet released. Kept in step with
   tests replace it. Done-when clauses 3 and 4 hold — `grep -rc "fn known_gap_"
   tests/ src/` is 0. No generated rule changes.
 
+- **v1.10.0 PR 3: the dialect the dispatch could not name.** An `apiVersion`
+  naming no format slokit reads is now REPORTED on both surfaces that can see
+  it: the new `UNKNOWN_API_VERSION` lint code for a document that parses
+  natively anyway, and a dialect-naming parse error for one that does not.
+  Both print the accepted groups beside the value, composed in
+  `src/spec/import.rs::KNOWN_API_GROUPS` from `openslo::API_GROUP` and
+  `sloth_crd::API_GROUP` — the same constants the auto-detector routes on, so
+  the set a message calls accepted cannot drift from the set the dispatch
+  uses. Reported, never refused (D1.10-3): `tests/unknown_api_version.rs`
+  (12 tests) pins the acceptance beside the report — the committed example
+  with `apiVersion: apps/v1` prepended still validates and still generates
+  byte-identical rules — and reads the accepted set back out of the shipped
+  message to hold it against `is_openslo` / `is_sloth_crd`. **Done-when clause
+  5 holds, both halves.** The `lint --strict` consequence D1.10-4 names is
+  stated in the CHANGELOG and has its own test. `tests/sloth_crd_cli.rs`'s
+  pinned-native assertion was updated in the same commit: the pre-1.6.0
+  `missing field `service`` message it deliberately preserved is now preceded
+  by the dialect the document declared.
+
 ## Next milestones
 
 ### v1.10.0: the spec remembers which dialect it came from
