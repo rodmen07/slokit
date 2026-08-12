@@ -279,11 +279,12 @@ The two routes' **fidelity notes** are held together by a committed contract
 rather than by intent: `tests/dialect_parity.rs` runs one matched document per
 dialect for every construct more than one importer can receive, and records
 what each does with it. Since 1.8.0 both versions report a dropped
-`metadata.displayName` in the same words (before that, only v1alpha did).
-One difference remains and the contract names it: `metadata.annotations` is
-reported as dropped on `openslo/v1` and dropped in silence on `openslo/v1alpha`
-and on the CRD route. Nothing reaches the generated rules on any route, so it
-changes what you are told, never what you get.
+`metadata.displayName` in the same words (before that, only v1alpha did), and
+since 1.10.0 all three dialects that carry an object envelope — `openslo/v1`,
+`openslo/v1alpha` and the sloth CRD — report a dropped `metadata.annotations`
+in the same words too (before that, only `openslo/v1` did). Neither key
+reaches the generated rules on any route, so both changed what you are told,
+never what you get.
 
 **Exporting.** `slokit export` is the inverse: one `kind: SLO` document per
 slokit SLO, written to stdout as a multi-document stream, or to a directory as

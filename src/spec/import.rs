@@ -51,3 +51,24 @@ impl std::fmt::Display for ImportNote {
         write!(f, "{}: {}", self.location, self.message)
     }
 }
+
+/// The note every importer emits for a dropped object-envelope
+/// `metadata.annotations`.
+///
+/// All three dialects that carry an object envelope — `openslo/v1`,
+/// `openslo/v1alpha` and the sloth Kubernetes CRD — accept the key and drop
+/// it, and nothing it holds reaches the generated rules on any route. The only
+/// thing that could ever differ between them is whether they SAY so, and in
+/// what words. `openslo/v1` has said it since 0.10.0; the other two dropped it
+/// in silence until 1.10.0.
+///
+/// It lives here, in the module all three importers already share for
+/// [`Import`] and [`ImportNote`], rather than as a literal at each emission
+/// site: three literals can be reworded one at a time, which is exactly what
+/// "both routes note the drop, in different words" looked like from a distance
+/// before 1.8.0 closed the same gap for `metadata.displayName`.
+///
+/// `tests/dialect_parity.rs` records this same string as the disposition of
+/// all three `object-annotations` rows and asserts it against the shipped
+/// binary, so a reword here that does not reach the contract fails there.
+pub(super) const OBJECT_ANNOTATIONS_NOTE: &str = "metadata.annotations do not map and were ignored";
