@@ -60,6 +60,59 @@ fn default_version() -> String {
     "prometheus/v1".to_string()
 }
 
+/// Which input dialect produced a [`Spec`].
+///
+/// slokit reads four dialects and converts every one of them into the same
+/// `Spec`, so without this the moment a document is imported it forgets what
+/// its author actually wrote. That matters for messages that tell a reader to
+/// go and edit a key: the sloth Kubernetes CRD spells the service-level plugin
+/// chain `sloPlugins` and the native format spells it `slo_plugins`, so a
+/// finding that always used the native spelling named a key the CRD author's
+/// file does not contain.
+///
+/// It is provenance, not spec data: [`Spec::dialect`] is `#[serde(skip)]`, so
+/// it is never read from or written to YAML, and nothing about generation,
+/// validation, or the generated rules depends on it. Only messages do, and
+/// only where the dialect changes what the reader must type (`ROADMAP.md`
+/// D1.10-2).
+///
+/// `#[non_exhaustive]`: a fifth dialect must not be a breaking change.
+///
+/// Named `SourceDialect` rather than `Dialect` because the CLI already has a
+/// `Dialect` with a different variant set (it counts `AlertWindows`, a
+/// document kind rather than a spec dialect).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum SourceDialect {
+    /// slokit's own spec format, the shape [`Spec::from_yaml`] parses.
+    #[default]
+    Native,
+    /// OpenSLO `openslo/v1`.
+    OpenSloV1,
+    /// OpenSLO `openslo/v1alpha`.
+    OpenSloV1Alpha,
+    /// sloth's `sloth.slok.dev/v1` `PrometheusServiceLevel` Kubernetes CRD.
+    SlothCrd,
+}
+
+impl SourceDialect {
+    /// How THIS dialect spells the service-level sloth plugin chain key.
+    ///
+    /// One home for the two spellings, so a message and the document it talks
+    /// about cannot drift: the CRD writes `sloPlugins` under `spec:`, every
+    /// other dialect that can carry the construct writes `slo_plugins`. The
+    /// per-SLO key is `plugins` in both spellings, which is why this milestone
+    /// re-spells exactly one message (`ROADMAP.md` D1.10-2).
+    pub(crate) fn spec_plugin_chain_key(self) -> &'static str {
+        match self {
+            SourceDialect::SlothCrd => "sloPlugins",
+            SourceDialect::Native | SourceDialect::OpenSloV1 | SourceDialect::OpenSloV1Alpha => {
+                "slo_plugins"
+            }
+        }
+    }
+}
+
 /// A full SLO spec for one service.
 ///
 /// The spec format is slokit's main growth axis (per-SLO `period`,
@@ -93,13 +146,37 @@ pub struct Spec {
     ///
     /// sloth runs these plugins over the generated rules; slokit has no
     /// equivalent, so a document carrying one generates rules as if it were
-    /// absent. Parsing used to discard the key silently — the CRD dialect
-    /// refuses `spec.sloPlugins` outright, so the same construct was refused
-    /// on one route and dropped on the other. It is kept here purely to make
+    /// absent. Parsing used to discard the key silently, and the CRD dialect
+    /// used to refuse `spec.sloPlugins` outright, so the same construct was
+    /// refused on one route and dropped on the other; v1.8.0 removed that
+    /// refusal and both routes now capture it here. It is kept purely to make
     /// the drop visible: the `SLO_PLUGIN_CHAIN_DROPPED` lint reads it, nothing
     /// else does, and it is never serialized back out.
     #[serde(default, skip_serializing)]
     pub slo_plugins: Option<SloPluginChain>,
+    /// Which input dialect produced this spec. See [`SourceDialect`].
+    ///
+    /// Provenance rather than spec data: `#[serde(skip)]`, so it is neither
+    /// read from nor written to YAML and a parsed native spec always reports
+    /// [`SourceDialect::Native`]. Set by whichever importer built the spec.
+    /// Note it participates in `PartialEq`, so two specs whose fields are
+    /// otherwise equal compare UNEQUAL when they came from different dialects.
+    #[serde(skip)]
+    pub dialect: SourceDialect,
+    /// The document's own top-level `apiVersion`, captured verbatim when it
+    /// had one, and **never applied**.
+    ///
+    /// The same shape as [`Spec::slo_plugins`]: captured so a reader can be
+    /// told about it, never serialized back out, and read by nothing that
+    /// affects the generated rules. The native format has no `apiVersion` key
+    /// (it spells its own format version `version:`), so a native document
+    /// carrying one is a document written for something else — a Kubernetes
+    /// manifest, or a dialect slokit does not know — which parses today
+    /// because the native parser does not deny unknown fields. On the
+    /// importer routes this is the envelope's declared version, e.g.
+    /// `openslo/v1` or `sloth.slok.dev/v1`.
+    #[serde(rename = "apiVersion", default, skip_serializing)]
+    pub api_version: Option<String>,
 }
 
 /// One SLO within a [`Spec`].
@@ -581,6 +658,8 @@ impl Spec {
             labels: BTreeMap::new(),
             slos,
             slo_plugins: None,
+            dialect: SourceDialect::Native,
+            api_version: None,
         }
     }
 

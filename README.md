@@ -370,8 +370,10 @@ never input.
 **Reported by lint, never applied**: sloth's SLO plugin chains
 (`spec.sloPlugins`, `slos[].plugins`), which slokit has no equivalent for — its
 `sli.plugin` is a different mechanism and *is* mapped. `slokit lint` reports
-`SLO_PLUGIN_CHAIN_DROPPED` naming the key and its entries, exactly as it does
-for the same construct in a native spec. Generated rules are byte-identical to
+`SLO_PLUGIN_CHAIN_DROPPED` naming the key and its entries, in the spelling
+**this** document uses: `sloPlugins` here, `slo_plugins` in a native spec, so
+the key the finding names is the one in the file you have open. (The per-SLO
+key is `plugins` in both dialects.) Generated rules are byte-identical to
 the same document with the chain deleted, so nothing is silently wrong — only
 silently absent, and the lint is what breaks the silence.
 

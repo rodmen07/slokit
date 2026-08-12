@@ -36,7 +36,7 @@
 use std::collections::BTreeMap;
 
 use slokit::generate::{generate_rules_with, GenerateOptions};
-use slokit::spec::{sloth_crd, validate_all, Spec};
+use slokit::spec::{sloth_crd, validate_all, SourceDialect, Spec};
 use slokit::Window;
 
 const K8S_GETTING_STARTED: &str = include_str!("fixtures/sloth_crd/k8s-getting-started.yaml");
@@ -567,16 +567,33 @@ fn the_home_wifi_import_generates_the_same_rules_as_its_native_twin() {
 }
 
 #[test]
-fn the_import_reconstructs_each_native_twin_exactly() {
+fn the_import_reconstructs_each_native_twin_exactly_apart_from_its_provenance() {
     // Stronger than rendering agreement, and the reason this dialect is a
     // rename-and-unwrap layer rather than a second model: the imported spec is
     // the twin, field for field, including the extensions the CRD cannot
     // express staying at their native defaults.
+    //
+    // Provenance is the one documented exception, and it is asserted rather
+    // than excused: v1.10.0 gave `Spec` two fields recording which dialect
+    // produced it, precisely so the two twins are NOT interchangeable when a
+    // message has to name a key the reader can find in their own file. The
+    // pair is therefore checked in both directions — provenance differs by
+    // exactly this much, and nothing else differs at all.
     for (crd, twin) in [
         (K8S_GETTING_STARTED, GETTING_STARTED_TWIN),
         (K8S_HOME_WIFI, HOME_WIFI_TWIN),
     ] {
         let (imported, native) = twin_pair(crd, twin);
-        assert_eq!(imported, native);
+
+        assert_eq!(imported.dialect, SourceDialect::SlothCrd);
+        assert_eq!(imported.api_version.as_deref(), Some("sloth.slok.dev/v1"));
+        assert_eq!(native.dialect, SourceDialect::Native);
+        assert_eq!(native.api_version, None);
+        assert_ne!(imported, native, "provenance is part of spec equality");
+
+        let mut without_provenance = imported.clone();
+        without_provenance.dialect = native.dialect;
+        without_provenance.api_version = native.api_version.clone();
+        assert_eq!(without_provenance, native);
     }
 }

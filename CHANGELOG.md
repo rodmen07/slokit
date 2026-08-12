@@ -8,7 +8,28 @@ From 1.0.0, slokit follows the semver guarantees documented in
 
 ## [Unreleased]
 
+### Added
+
+- **A spec now remembers which dialect produced it.** `spec::SourceDialect`
+  (`Native`, `OpenSloV1`, `OpenSloV1Alpha`, `SlothCrd`; `#[non_exhaustive]`,
+  defaulting to `Native`) plus two additive `Spec` fields: `dialect`, set by
+  whichever importer built the spec, and `api_version`, the document's own
+  top-level `apiVersion` captured verbatim when it had one. Both are
+  provenance, not spec data — neither is read from or written to YAML, the
+  spec format gains no key, and `schema/slokit-spec.schema.json` is unchanged.
+  Note `Spec` derives `PartialEq`, so two specs that agree on every other
+  field now compare unequal when they came from different dialects.
+
 ### Fixed
+
+- **A plugin-chain warning on a sloth Kubernetes CRD named a key that document
+  does not contain.** `SLO_PLUGIN_CHAIN_DROPPED` at spec level always said
+  `` `slo_plugins` ``, the native spelling, even for a CRD whose own line
+  reads `sloPlugins:` — so the fix it asked for could not be found in the file
+  the reader had open. The finding now uses the spelling of the dialect that
+  carried the construct. The per-SLO key is `plugins` in both dialects and is
+  unchanged, and nothing else about the message — its code, level, location or
+  prose — differs across dialects.
 
 - **The crate-level rustdoc example on the docs.rs landing page did not
   compile.** "Generating Prometheus rules" was fenced ```ignore, so rustdoc

@@ -118,6 +118,15 @@ Merged since v1.9.0 and not yet released. Kept in step with
   an `ignore` fence anywhere in `src/`, and checks the README's dependency
   pin against `CARGO_PKG_VERSION`. No library or CLI behavior changed.
 
+- **v1.10.0 PR 1: the provenance seam, and the spelling it fixes.**
+  `spec::SourceDialect` plus the additive `Spec::dialect` / `Spec::api_version`
+  fields, set by every importer and captured by the native parser; the
+  spec-level `SLO_PLUGIN_CHAIN_DROPPED` finding now names `sloPlugins` on a
+  sloth CRD and keeps `slo_plugins` natively. `tests/source_dialect.rs`
+  (5 tests) owns the seam, `tests/sloth_crd_cli.rs` the message. Done-when
+  clauses 1 and 2 hold; clause 3 is half done (one of the two `known_gap_`
+  tests deleted, PR 2 owes the other).
+
 ## Next milestones
 
 ### v1.10.0: the spec remembers which dialect it came from
@@ -201,11 +210,22 @@ garbage token made `cargo build --all-features` fail at `src/lib.rs:84`
   embedders use, so a CLI-local fix would leave every embedder on the wrong
   spelling.
   *Consequence PR 1 owes an answer to, not a free change:* `Spec` derives
-  `PartialEq`, so a new field changes what equality means. No whole-`Spec`
-  equality assertion exists today (`assert_eq!` on spec values compares fields
-  only: `tests/multi_spec.rs:50`, `tests/multidoc_input.rs:31-34`,
-  `tests/sloth_crd.rs:305`), so PR 1 states the effect and verifies it rather
-  than assuming it is free.
+  `PartialEq`, so a new field changes what equality means.
+  **CORRECTED 2026-08-12 by PR 1, which ran the suite instead of trusting this
+  paragraph:** the scoping pass wrote "no whole-`Spec` equality assertion
+  exists today", having found only field-wise `assert_eq!`s
+  (`tests/multi_spec.rs:50`, `tests/multidoc_input.rs:31-34`,
+  `tests/sloth_crd.rs:305`). That was **false — there are two**, and both went
+  red on the field's first build: `tests/openslo_export.rs`'s
+  `assert_round_trip` (`assert_eq!(got, &want)`, reached by 5 tests) and
+  `tests/sloth_crd.rs`'s twin reconstruction (`assert_eq!(imported, native)`).
+  Neither was a defect in the seam: a round-tripped spec really did come from
+  an OpenSLO document, and an imported CRD really is not its native twin any
+  more. Both now assert the provenance difference explicitly and compare the
+  rest, so the change is documented in the guards rather than absorbed by
+  them. The lesson for PRs 2-4 is the shape, not the count: a grep for
+  `assert_eq!(spec` cannot find an equality assertion written over two
+  variables named something else.
 - **D1.10-2 — messages become dialect-aware only where the dialect changes
   what the reader must type.** A finding that names a KEY gets the reader's own
   spelling; prose, codes, locations and the JSON `--output json` field names
