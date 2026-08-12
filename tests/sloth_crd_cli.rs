@@ -403,6 +403,11 @@ const CORPUS_CHAINED_CRD: &str = "tests/fixtures/sloth_corpus/slo-plugin-k8s-get
 /// and both "only one of the two is present" cases.
 const CORPUS_CHAINED_CRD_2: &str = "tests/fixtures/sloth_corpus/contrib-denominator-corrected.yaml";
 
+/// sloth's own NATIVE twin of [`CORPUS_CHAINED_CRD`]: the same two chains,
+/// spelled `slo_plugins` and `plugins`. The pair is what makes the spelling
+/// claim a comparison rather than an assertion about one file.
+const CORPUS_CHAINED_NATIVE: &str = "tests/fixtures/sloth_corpus/slo-plugin-getting-started.yml";
+
 fn temp_dir(tag: &str) -> PathBuf {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -547,26 +552,63 @@ fn a_crd_plugin_chain_is_reported_by_lint_rather_than_refused() {
     }
 }
 
-/// KNOWN GAP, characterising what the code does today rather than what it
-/// should do (filed as a LOW bug in the autodev slokit backlog, 2026-08-08).
+/// **Done-when clause 2 (v1.10.0).** The spec-level finding names the key with
+/// the spelling of the document that carried it: `sloPlugins` for the CRD,
+/// `slo_plugins` for its own native twin.
 ///
-/// The finding names the key with its NATIVE spelling, `slo_plugins`, even when
-/// the document that carried it is a CRD spelling it `sloPlugins`. The lint
-/// reads a `Spec`, and a `Spec` does not remember which dialect produced it, so
-/// the message tells a CRD author to go and delete a key their file does not
-/// contain. Pinned here so the day a dialect-aware message ships, this test
-/// fails and says so instead of the gap closing unnoticed.
+/// This replaces `known_gap_the_crd_lint_finding_names_the_native_spelling`,
+/// deleted in the commit that closed it, as that test's own failure message
+/// instructed. The gap it pinned: `lint` reads a `Spec`, and a `Spec` did not
+/// remember which dialect produced it, so a CRD author was told to go and
+/// delete `slo_plugins` from a file whose line 17 reads `sloPlugins:`.
+///
+/// Both halves are asserted TOGETHER and in both directions, because the fix
+/// is a swap and a one-sided test cannot tell a correct swap from a global
+/// rename: making every dialect say `sloPlugins` would satisfy the CRD half
+/// alone. The SLO-level key stays `plugins` on both routes — the CRD spells
+/// that one the same way — so it is asserted here too, which is what keeps
+/// this from being a licence to re-spell every message.
 #[test]
-fn known_gap_the_crd_lint_finding_names_the_native_spelling() {
-    let out = slokit(&["lint", "-i", CORPUS_CHAINED_CRD]);
-    let text = format!("{}{}", stdout(&out), stderr(&out));
+fn the_spec_level_chain_finding_names_the_spelling_of_the_dialect_that_carried_it() {
+    let crd = combined_lint(CORPUS_CHAINED_CRD);
     assert!(
-        text.contains("`slo_plugins`"),
-        "expected the native spelling in the finding:\n{text}"
+        crd.contains("`sloPlugins`"),
+        "the CRD finding must name the key the CRD document actually has:\n{crd}"
     );
     assert!(
-        !text.contains("`sloPlugins`"),
-        "the finding now names the CRD spelling — the known gap is CLOSED, so \
-         delete this test and the backlog item it pins:\n{text}"
+        !crd.contains("`slo_plugins`"),
+        "the CRD finding still names the native spelling:\n{crd}"
     );
+
+    let native = combined_lint(CORPUS_CHAINED_NATIVE);
+    assert!(
+        native.contains("`slo_plugins`"),
+        "the native finding must keep the native spelling:\n{native}"
+    );
+    assert!(
+        !native.contains("`sloPlugins`"),
+        "the native finding now names the CRD spelling — the fix re-spelled \
+         every dialect instead of each one:\n{native}"
+    );
+
+    // The per-SLO key is `plugins` in both dialects, so both documents say so
+    // and neither grows a second spelling.
+    for (source, text) in [(CORPUS_CHAINED_CRD, &crd), (CORPUS_CHAINED_NATIVE, &native)] {
+        assert!(
+            text.contains("`plugins`"),
+            "{source}: the SLO-level finding is spelled `plugins` in every \
+             dialect:\n{text}"
+        );
+        assert_eq!(
+            text.matches("SLO_PLUGIN_CHAIN_DROPPED").count(),
+            2,
+            "{source}: one finding per chain the document carries:\n{text}"
+        );
+    }
+}
+
+/// `slokit lint -i <source>`, stdout and stderr joined.
+fn combined_lint(source: &str) -> String {
+    let out = slokit(&["lint", "-i", source]);
+    format!("{}{}", stdout(&out), stderr(&out))
 }

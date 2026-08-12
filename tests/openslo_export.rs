@@ -13,7 +13,9 @@
 use std::collections::BTreeMap;
 
 use slokit::generate::generate_rules;
-use slokit::spec::{openslo, Alerting, EventsSli, LatencySli, SliSpec, SloSpec, Spec};
+use slokit::spec::{
+    openslo, Alerting, EventsSli, LatencySli, SliSpec, SloSpec, SourceDialect, Spec,
+};
 
 const SLOKIT_SAMPLE: &str = include_str!("fixtures/sample.yaml");
 
@@ -66,13 +68,34 @@ fn default_version() -> String {
 ///
 /// - service-level labels move onto every SLO (SLO labels win on a key clash),
 /// - alerting metadata is dropped (OpenSLO models alerting separately),
-/// - the slokit dialect tag returns to its default.
+/// - the slokit dialect tag returns to its default,
+/// - **provenance becomes OpenSLO's**, because that is literally true of the
+///   returned spec: it was produced by the `openslo/v1` importer reading the
+///   document `to_yaml` wrote, so [`Spec::dialect`] is
+///   [`SourceDialect::OpenSloV1`] and [`Spec::api_version`] is that document's
+///   `apiVersion`. Provenance describes where a spec came from, and a
+///   round-tripped spec came from an OpenSLO document.
 ///
 /// Everything else must survive untouched, which is what makes
 /// [`assert_round_trip`] a real property rather than a spot check.
-fn expected_after_round_trip(spec: &Spec) -> Spec {
+///
+/// The `apiVersion` is read back off the exported YAML rather than written as
+/// a literal here, so this suite cannot agree with a wrong export: if
+/// `to_yaml` ever emitted a different version, the expectation would follow it
+/// and the assertion below would still be comparing the importer's answer to
+/// the document the exporter actually wrote.
+fn expected_after_round_trip(spec: &Spec, exported: &str) -> Spec {
     let mut out = spec.clone();
     out.version = default_version();
+    out.dialect = SourceDialect::OpenSloV1;
+    out.api_version = Some(
+        exported
+            .lines()
+            .find_map(|l| l.strip_prefix("apiVersion: "))
+            .expect("the exported OpenSLO document declares an apiVersion")
+            .trim()
+            .to_string(),
+    );
     for slo in &mut out.slos {
         let mut labels = spec.labels.clone();
         labels.extend(slo.labels.clone());
@@ -96,7 +119,7 @@ fn assert_round_trip(label: &str, spec: &Spec) {
         "{label}: one service in, one spec out"
     );
     let got = &import.specs[0];
-    let want = expected_after_round_trip(spec);
+    let want = expected_after_round_trip(spec, &yaml);
 
     assert_eq!(
         got.slos.len(),

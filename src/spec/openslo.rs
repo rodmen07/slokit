@@ -117,7 +117,7 @@ use crate::sli::WINDOW_TOKEN;
 use crate::window::Window;
 
 use super::validate::is_metric_name;
-use super::{Alerting, EventsSli, LatencySli, RawSli, SliSpec, SloSpec, Spec};
+use super::{Alerting, EventsSli, LatencySli, RawSli, SliSpec, SloSpec, SourceDialect, Spec};
 
 /// The current OpenSLO API version, and the one [`to_yaml`] exports.
 const API_VERSION: &str = "openslo/v1";
@@ -235,12 +235,24 @@ pub fn from_yaml(yaml: &str) -> Result<Import> {
             (ApiVersion::V1, "SLO") => {
                 saw_slo = true;
                 let (service, slos) = convert_slo(*n, env, &slis, &mut notes)?;
-                merge_into_specs(&mut specs, service, slos);
+                merge_into_specs(
+                    &mut specs,
+                    service,
+                    slos,
+                    SourceDialect::OpenSloV1,
+                    &env.api_version,
+                );
             }
             (ApiVersion::V1Alpha, "SLO") => {
                 saw_slo = true;
                 let (service, slos) = v1alpha::convert_slo(*n, env, &mut notes)?;
-                merge_into_specs(&mut specs, service, slos);
+                merge_into_specs(
+                    &mut specs,
+                    service,
+                    slos,
+                    SourceDialect::OpenSloV1Alpha,
+                    &env.api_version,
+                );
             }
             // Already indexed above.
             (ApiVersion::V1, "SLI") => {}
@@ -273,7 +285,20 @@ pub fn from_path(path: impl AsRef<Path>) -> Result<Import> {
 /// Append converted SLOs to the [`Spec`] for their service, creating it on
 /// first sight. SLO documents that share a `spec.service` merge into one spec
 /// regardless of which OpenSLO version each declared.
-fn merge_into_specs(specs: &mut Vec<Spec>, service: String, slos: Vec<SloSpec>) {
+///
+/// Provenance is therefore FIRST-DOCUMENT-WINS: a stream mixing `openslo/v1`
+/// and `openslo/v1alpha` documents for one service produces one spec, and one
+/// spec can only name one dialect, so it names the one that created it.
+/// Pinned by
+/// `tests/openslo.rs::a_mixed_version_stream_records_the_dialect_that_created_the_spec`
+/// so the rule is a decision rather than an accident.
+fn merge_into_specs(
+    specs: &mut Vec<Spec>,
+    service: String,
+    slos: Vec<SloSpec>,
+    dialect: SourceDialect,
+    api_version: &str,
+) {
     match specs.iter_mut().find(|s| s.service == service) {
         Some(spec) => spec.slos.extend(slos),
         None => specs.push(Spec {
@@ -282,6 +307,8 @@ fn merge_into_specs(specs: &mut Vec<Spec>, service: String, slos: Vec<SloSpec>) 
             labels: BTreeMap::new(),
             slos,
             slo_plugins: None,
+            dialect,
+            api_version: Some(api_version.to_string()),
         }),
     }
 }

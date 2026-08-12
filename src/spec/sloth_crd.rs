@@ -50,6 +50,13 @@
 //! key and its entries. Nothing else reads them and they are never serialized
 //! back out. (`sli.plugin` is a different mechanism and *is* mapped.)
 //!
+//! The finding names `sloPlugins`, the spelling in the document the reader has
+//! open, because this importer records its provenance: it sets
+//! [`Spec::dialect`] to [`SourceDialect::SlothCrd`] and captures the
+//! document's `apiVersion` into [`Spec::api_version`]. Both are provenance
+//! rather than spec data — never serialized, and read by nothing that affects
+//! the generated rules, so the byte-identity property above is untouched.
+//!
 //! Until 1.8.0 both keys were a hard error here, on the stated grounds that a
 //! chain "would rewrite the generated rules". That is true of *sloth's*
 //! generator and false of slokit's, which has no plugin-chain stage to rewrite
@@ -102,7 +109,8 @@ use crate::error::{Result, SlokitError};
 
 use super::import::{Import, ImportNote};
 use super::{
-    AlertMeta, Alerting, EventsSli, PluginSli, RawSli, SliSpec, SloPluginChain, SloSpec, Spec,
+    AlertMeta, Alerting, EventsSli, PluginSli, RawSli, SliSpec, SloPluginChain, SloSpec,
+    SourceDialect, Spec,
 };
 
 /// The `apiVersion` prefix every sloth Kubernetes CRD document declares.
@@ -259,8 +267,12 @@ fn convert(doc_no: usize, doc: &Document, notes: &mut Vec<ImportNote>) -> Result
     let mut spec = Spec::new(service, slos);
     spec.labels = doc.spec.labels.clone();
     // Captured, never applied: the `SLO_PLUGIN_CHAIN_DROPPED` lint is the only
-    // reader, exactly as on the native route.
+    // reader, exactly as on the native route. What the lint now also reads is
+    // the dialect, so the finding names `sloPlugins` — the spelling in the
+    // file the reader is being told to edit — instead of the native one.
     spec.slo_plugins = doc.spec.slo_plugins.clone();
+    spec.dialect = SourceDialect::SlothCrd;
+    spec.api_version = Some(doc.api_version.clone());
     Ok(spec)
 }
 

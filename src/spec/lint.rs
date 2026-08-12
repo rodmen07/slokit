@@ -184,12 +184,23 @@ pub fn lint_with(spec: &Spec, plugins: &SliPluginRegistry) -> Vec<Lint> {
     label_name_lints(&mut out, "spec", "labels", &spec.labels, true);
 
     // A sloth SLO plugin chain: parsed, never applied, and until 1.7.0 not
-    // reported either. The CRD dialect refuses `spec.sloPlugins` by name
-    // because dropping it is silent data loss, so leaving the native spelling
-    // silent made slokit refuse a construct on one route and discard it on the
-    // other. Refusing it natively is not available under the 1.x compatibility
-    // promise (docs/SEMVER.md), so it is reported here instead.
-    plugin_chain_lints(&mut out, "spec", "slo_plugins", spec.slo_plugins.as_ref());
+    // reported either. The CRD dialect used to refuse `spec.sloPlugins` by
+    // name because dropping it is silent data loss, so leaving the native
+    // spelling silent made slokit refuse a construct on one route and discard
+    // it on the other; v1.8.0 removed that refusal and both routes now report
+    // the drop here. Refusing it natively is not available under the 1.x
+    // compatibility promise (docs/SEMVER.md).
+    //
+    // The KEY is the reader's own spelling, taken from the dialect that
+    // produced the spec: a CRD author is told to look at `sloPlugins`, which
+    // is what their file says. The per-SLO key below is `plugins` in every
+    // dialect, so it stays a literal (ROADMAP.md D1.10-2).
+    plugin_chain_lints(
+        &mut out,
+        "spec",
+        spec.dialect.spec_plugin_chain_key(),
+        spec.slo_plugins.as_ref(),
+    );
 
     for slo in &spec.slos {
         let loc = format!("slo '{}'", slo.name);
