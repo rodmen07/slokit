@@ -383,6 +383,64 @@ fn kubernetes_object_metadata_is_reported_rather_than_silently_dropped() {
     }
 }
 
+/// [`BASE`] with an object-level `metadata.annotations` block spliced in.
+fn with_object_annotations(block: &str) -> String {
+    let with = format!("  name: base\n  annotations:{block}");
+    let out = BASE.replace("  name: base\n", &format!("{with}\n"));
+    assert_ne!(out, BASE, "the annotations block was not spliced in");
+    out
+}
+
+/// v1.10.0 PR 2: the CRD route reports a dropped `metadata.annotations`, which
+/// before this release it could not do — `ObjectMeta` had no such field, so
+/// serde discarded the key before the importer saw it.
+///
+/// The value is deliberately a non-string scalar. That is the case the new
+/// field's TYPE is chosen for: `annotations` was an unknown key until now, so
+/// whatever it held was ignored, and docs/SEMVER.md freezes acceptance across
+/// 1.x. A `BTreeMap<String, String>` here would turn this document into a
+/// parse error — a message-quality change silently narrowing what imports.
+#[test]
+fn object_annotations_with_a_non_string_value_still_import_and_are_reported() {
+    let yaml = with_object_annotations("\n    retries: 3");
+    let import = sloth_crd::from_yaml(&yaml).expect("a non-string annotation value still imports");
+    assert_eq!(import.specs.len(), 1);
+    let notes = notes(&yaml);
+    assert!(
+        notes.iter().any(|n| n.contains("metadata.annotations")),
+        "{notes:?}"
+    );
+}
+
+/// The other half of the acceptance claim, and the one no realistic Kubernetes
+/// document exercises: `annotations` that is not a mapping at all. It was
+/// accepted (and ignored) before 1.10.0, so it must still be accepted.
+#[test]
+fn an_object_annotations_block_that_is_not_a_mapping_still_imports() {
+    let yaml = with_object_annotations(" not-even-a-mapping");
+    let import = sloth_crd::from_yaml(&yaml).expect("a scalar annotations block still imports");
+    assert_eq!(import.specs.len(), 1);
+    let notes = notes(&yaml);
+    assert!(
+        notes.iter().any(|n| n.contains("metadata.annotations")),
+        "something is there and is being dropped, so it is reported: {notes:?}"
+    );
+}
+
+/// The off-state, which `tests/dialect_parity.rs` cannot reach: a document
+/// whose `annotations` key is PRESENT but empty must not be reported. Without
+/// this, `has_annotations` could return `true` unconditionally and every
+/// assertion above would still pass.
+#[test]
+fn an_empty_object_annotations_block_is_not_reported() {
+    let yaml = with_object_annotations(" {}");
+    let notes = notes(&yaml);
+    assert!(
+        !notes.iter().any(|n| n.contains("metadata.annotations")),
+        "nothing was dropped, so nothing should be reported: {notes:?}"
+    );
+}
+
 #[test]
 fn a_document_of_another_kind_is_ignored_with_a_note_but_an_all_ignored_stream_errors() {
     let other =
