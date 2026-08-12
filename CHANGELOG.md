@@ -22,6 +22,21 @@ From 1.0.0, slokit follows the semver guarantees documented in
 
 ### Fixed
 
+- **Two of the three dialects that accept an object envelope dropped
+  `metadata.annotations` without saying so.** `openslo/v1` has reported the
+  drop since 0.10.0; `openslo/v1alpha` and the sloth Kubernetes CRD said
+  nothing, so the same key in the same position produced a note or silence
+  depending only on which dialect the document was written in. Both now report
+  it, in the v1 route's existing words, which are unchanged. The silence had
+  two different causes: the v1alpha route shares v1's envelope and had parsed
+  the key since 1.5.0 without mentioning it, while the CRD importer's
+  `metadata` had no `annotations` field at all, so the key was discarded
+  before any code could see it. Nothing about the generated rules changes on
+  any route — annotations reached them on none of the three — and nothing that
+  imported before stops importing: the CRD field is typed as a raw YAML value
+  precisely so a document whose annotations hold a non-string scalar keeps
+  parsing.
+
 - **A plugin-chain warning on a sloth Kubernetes CRD named a key that document
   does not contain.** `SLO_PLUGIN_CHAIN_DROPPED` at spec level always said
   `` `slo_plugins` ``, the native spelling, even for a CRD whose own line

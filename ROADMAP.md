@@ -127,6 +127,20 @@ Merged since v1.9.0 and not yet released. Kept in step with
   clauses 1 and 2 hold; clause 3 is half done (one of the two `known_gap_`
   tests deleted, PR 2 owes the other).
 
+- **v1.10.0 PR 2: the note the two silent routes never sent.**
+  `metadata.annotations` is now reported as dropped on `openslo/v1alpha` and
+  on the sloth CRD route, not only on `openslo/v1`, from one
+  `OBJECT_ANNOTATIONS_NOTE` constant in `src/spec/import.rs` that all three
+  emission sites read. The two routes were silent for different reasons: the
+  v1alpha path shares v1's envelope and had parsed the key since 1.5.0
+  without mentioning it, while the CRD's `ObjectMeta` had no such field, so
+  serde discarded the key before any code saw it. In
+  `tests/dialect_parity.rs` the `object-annotations` construct's three rows
+  are now `NotedAndIgnored` and its verdict is `Uniform`;
+  `known_gap_object_annotations_are_noted_on_v1_only` is deleted and four
+  tests replace it. Done-when clauses 3 and 4 hold — `grep -rc "fn known_gap_"
+  tests/ src/` is 0. No generated rule changes.
+
 ## Next milestones
 
 ### v1.10.0: the spec remembers which dialect it came from

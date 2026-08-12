@@ -141,6 +141,11 @@ enum ApiVersion {
 /// been.
 pub use super::import::{Import, ImportNote};
 
+/// The `metadata.annotations` note, shared with the v1alpha route below and
+/// with the CRD importer. Imported rather than re-exported: it is internal
+/// wording, not API.
+use super::import::OBJECT_ANNOTATIONS_NOTE;
+
 /// Cheap format detection for auto-detecting CLI input: true when the first
 /// non-empty YAML document has a top-level `apiVersion` starting with
 /// `openslo/`. Returns false on unparseable YAML (the caller's normal spec
@@ -541,12 +546,11 @@ fn convert_slo(
             "metadata.displayName does not map and was ignored (slokit SLOs carry a name and a description)",
         );
     }
+    // Said here since 0.10.0 and, since 1.10.0, on the other two envelope
+    // dialects too — from [`OBJECT_ANNOTATIONS_NOTE`], so the three cannot
+    // drift into three wordings for one drop.
     if !env.metadata.annotations.is_empty() {
-        note(
-            notes,
-            &loc,
-            "metadata.annotations do not map and were ignored",
-        );
+        note(notes, &loc, OBJECT_ANNOTATIONS_NOTE);
     }
     let labels = convert_labels(&env.metadata, &loc, notes);
 

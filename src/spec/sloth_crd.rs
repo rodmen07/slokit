@@ -36,10 +36,14 @@
 //!
 //! # Ignored with a note (lint-style)
 //!
-//! - `metadata.name`, `metadata.namespace` and `metadata.labels`. The last one
+//! - `metadata.name`, `metadata.namespace` and `metadata.labels`. The third
 //!   matters most: those are Kubernetes *object* labels, not rule labels
 //!   (`spec.labels` is the rule labels), so honoring them would silently add
 //!   labels to every generated rule.
+//! - `metadata.annotations`, since 1.10.0, in the same words both OpenSLO
+//!   routes use (`OBJECT_ANNOTATIONS_NOTE` in `super::import`). Before that
+//!   this importer's `ObjectMeta` had no such field at all, so serde dropped
+//!   the key before any code here could see it.
 //! - `status`, silently: it is the controller's own writeback, never input.
 //!
 //! # Captured, applied to nothing, reported by lint
@@ -107,7 +111,7 @@ use serde_norway::{Deserializer as YamlDeserializer, Value};
 
 use crate::error::{Result, SlokitError};
 
-use super::import::{Import, ImportNote};
+use super::import::{Import, ImportNote, OBJECT_ANNOTATIONS_NOTE};
 use super::{
     AlertMeta, Alerting, EventsSli, PluginSli, RawSli, SliSpec, SloPluginChain, SloSpec,
     SourceDialect, Spec,
@@ -257,6 +261,13 @@ fn convert(doc_no: usize, doc: &Document, notes: &mut Vec<ImportNote>) -> Result
                  spec.labels is what labels the generated rules"
             ),
         );
+    }
+    // Silent until 1.10.0, and silent for a different reason than the v1alpha
+    // route's: there the shared envelope parsed the key and nothing mentioned
+    // it, here `ObjectMeta` had no field at all, so serde dropped it before
+    // any code could see it. Same note as both OpenSLO routes.
+    if has_annotations(&doc.metadata.annotations) {
+        note(notes, &loc, OBJECT_ANNOTATIONS_NOTE);
     }
 
     let mut slos = Vec::with_capacity(doc.spec.slos.len());
@@ -418,6 +429,32 @@ struct ObjectMeta {
     namespace: Option<String>,
     #[serde(default)]
     labels: BTreeMap<String, String>,
+    /// Kubernetes object annotations, captured only so their drop can be
+    /// reported (see [`has_annotations`]).
+    ///
+    /// Typed as a raw [`Value`] rather than the `BTreeMap<String, String>`
+    /// `labels` uses, deliberately: this was an UNKNOWN key until 1.10.0, so
+    /// serde ignored whatever it held, and docs/SEMVER.md freezes acceptance
+    /// in 1.x — a document whose annotations carry a non-string scalar (or
+    /// are not a mapping at all) imported before and must still import now.
+    /// A typed map would turn every one of those into a parse error, which is
+    /// the one thing a message-quality change must not do.
+    #[serde(default)]
+    annotations: Value,
+}
+
+/// Whether an object envelope's `metadata.annotations` holds anything to
+/// report, without narrowing what the envelope accepts (see
+/// [`ObjectMeta::annotations`]).
+fn has_annotations(annotations: &Value) -> bool {
+    match annotations {
+        Value::Null => false,
+        Value::Mapping(map) => !map.is_empty(),
+        // Not valid Kubernetes object metadata, but it parsed before 1.10.0
+        // and still does. Something is there and it is being dropped, which is
+        // exactly what the note says.
+        _ => true,
+    }
 }
 
 #[derive(Debug, Deserialize)]

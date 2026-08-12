@@ -118,6 +118,15 @@ enum Disposition {
     /// construct at all. This is a defect shape, not a design: it is recorded
     /// so the next one is a row that disagrees with its siblings rather than
     /// an absence nobody can see.
+    ///
+    /// No row uses it as of v1.10.0, and that is the point rather than an
+    /// oversight: `object-annotations` was the last silent drop and this
+    /// milestone closed it. The variant stays because it is the NAME for the
+    /// shape — deleting it would leave the next silent drop with nothing to
+    /// be recorded as, which is the state (an absence nobody can see) the
+    /// contract exists to end. `Refused` and the rest are constructed, so the
+    /// allow is scoped to this variant alone.
+    #[allow(dead_code)]
     SilentlyIgnored,
     /// Accepted and dropped, reported by `slokit lint` under this code rather
     /// than by an import note.
@@ -175,6 +184,15 @@ struct Construct {
 /// from a distance.
 const DISPLAY_NAME_NOTE: &str =
     "metadata.displayName does not map and was ignored (slokit SLOs carry a name and a description)";
+
+/// The note all three object-envelope dialects emit for a dropped
+/// `metadata.annotations`, recorded once here for the same reason
+/// [`DISPLAY_NAME_NOTE`] is: three rows carrying three literals can be
+/// reworded one at a time. Since v1.10.0 the three emission sites read one
+/// constant too (`OBJECT_ANNOTATIONS_NOTE`, `src/spec/import.rs`), so this
+/// string is the independent expectation that constant is checked against —
+/// deriving it from the same source would make the check unfalsifiable.
+const OBJECT_ANNOTATIONS_NOTE: &str = "metadata.annotations do not map and were ignored";
 
 /// The unknown-SLI-plugin refusal, shared by the two dialects that can express
 /// an `sli.plugin`.
@@ -253,30 +271,31 @@ const CONSTRUCTS: &[Construct] = &[
             Row {
                 dialect: OpensloV1,
                 fixture: "object-annotations.openslo-v1.yaml",
-                disposition: NotedAndIgnored("metadata.annotations do not map and were ignored"),
+                // The only route that ever said it: since 0.10.0.
+                disposition: NotedAndIgnored(OBJECT_ANNOTATIONS_NOTE),
             },
             Row {
                 dialect: OpensloV1alpha,
                 fixture: "object-annotations.openslo-v1alpha.yaml",
-                // FOUND BY THIS CONTRACT ON ITS FIRST RUN, and filed rather
-                // than fixed: it is the mirror image of `display-name` above
-                // (there v1 was the silent one), in a milestone whose slice
-                // named only the display name. `Metadata` is shared by both
-                // OpenSLO routes, so v1alpha parses annotations it never
-                // mentions. See `known_gap_object_annotations_are_noted_on_v1_only`.
-                disposition: SilentlyIgnored,
+                // FOUND BY THIS CONTRACT ON ITS FIRST RUN and filed rather
+                // than fixed, because v1.8.0's slice named only the display
+                // name; closed in v1.10.0. It was the mirror image of
+                // `display-name` above — there v1 was the silent one — and
+                // silent for the same mechanical reason: `Metadata` is shared
+                // by both OpenSLO routes, so v1alpha parsed annotations it
+                // never mentioned.
+                disposition: NotedAndIgnored(OBJECT_ANNOTATIONS_NOTE),
             },
             Row {
                 dialect: SlothCrd,
                 fixture: "object-annotations.sloth-crd.yaml",
-                disposition: SilentlyIgnored,
+                // Silent until v1.10.0 for a DIFFERENT reason than v1alpha's:
+                // `ObjectMeta` carried no `annotations` field, so serde
+                // dropped the key before the importer could see it.
+                disposition: NotedAndIgnored(OBJECT_ANNOTATIONS_NOTE),
             },
         ],
-        verdict: Divergent(
-            "openslo/v1 says the annotations were dropped; openslo/v1alpha and the CRD drop \
-             them without a word. Nothing reaches the rules on any route, so this is a \
-             message-quality gap, not an output difference — filed as a LOW bug, pinned here.",
-        ),
+        verdict: Uniform,
     },
     Construct {
         id: "slo-plugin-chain",
@@ -802,42 +821,135 @@ fn both_openslo_dialects_word_the_display_name_note_identically() {
 }
 
 // ---------------------------------------------------------------------------
-// Known gap, filed and not fixed
+// The object-annotations note (v1.10.0 done-when clause 4)
 // ---------------------------------------------------------------------------
+//
+// This section replaces `known_gap_object_annotations_are_noted_on_v1_only`,
+// deleted in the commit that closed the gap as that test's own failure message
+// instructed. It pinned the WRONG behaviour: annotations reported on
+// `openslo/v1` and dropped in silence on the other two envelope dialects.
+//
+// One test per route rather than one loop over both, because a runner aborts a
+// test at its first failed assertion: a shared loop would let the v1alpha red
+// stand in for the CRD's and report nothing at all about it, and the CRD is
+// the route whose fix is the larger one (it had no field for the key).
 
-/// Pins the WRONG behaviour of a defect this contract found on its first run
-/// and this PR deliberately did not fix: `metadata.annotations` is reported on
-/// the `openslo/v1` route and dropped in silence on `openslo/v1alpha` and the
-/// CRD — the mirror image of the display-name divergence above, in a slice
-/// scoped to the display name only.
-///
-/// Filed as a LOW bug in `backlogs/slokit.md`. When it is fixed, this test
-/// fails by name, the two `SilentlyIgnored` rows become `NotedAndIgnored`, and
-/// the construct's verdict becomes `Uniform`.
+/// The behaviour this PR adds to `openslo/v1alpha`, asserted on the document
+/// that got nothing.
 #[test]
-fn known_gap_object_annotations_are_noted_on_v1_only() {
-    let noted = slokit(&[
-        "validate",
-        "-i",
-        &fixture_arg("object-annotations.openslo-v1.yaml"),
-    ]);
+fn the_openslo_v1alpha_route_emits_the_object_annotations_note() {
+    let fixture = "object-annotations.openslo-v1alpha.yaml";
+    let out = slokit(&["validate", "-i", &fixture_arg(fixture)]);
     assert!(
-        import_notes(&noted, "object-annotations.openslo-v1.yaml")
-            .iter()
-            .any(|n| n.contains("metadata.annotations")),
-        "openslo/v1 has reported dropped annotations since 0.10.0"
+        out.status.success(),
+        "dropped annotations are advisory, not fatal: {}",
+        combined(&out).trim()
     );
+    let notes = import_notes(&out, fixture);
+    assert!(
+        notes.iter().any(|n| n.contains(OBJECT_ANNOTATIONS_NOTE)),
+        "expected {OBJECT_ANNOTATIONS_NOTE:?} among {notes:?}"
+    );
+}
 
+/// The same for the sloth CRD route, where the fix was larger: `ObjectMeta`
+/// had no `annotations` field at all, so serde discarded the key before the
+/// importer could have said anything about it.
+#[test]
+fn the_sloth_crd_route_emits_the_object_annotations_note() {
+    let fixture = "object-annotations.sloth-crd.yaml";
+    let out = slokit(&["validate", "-i", &fixture_arg(fixture)]);
+    assert!(
+        out.status.success(),
+        "dropped annotations are advisory, not fatal: {}",
+        combined(&out).trim()
+    );
+    let notes = import_notes(&out, fixture);
+    assert!(
+        notes.iter().any(|n| n.contains(OBJECT_ANNOTATIONS_NOTE)),
+        "expected {OBJECT_ANNOTATIONS_NOTE:?} among {notes:?}"
+    );
+}
+
+/// The other half of the difference: a document with no annotations must not
+/// gain a note about them. Without this, three unconditional notes would
+/// satisfy both tests above and the two rows they back.
+///
+/// The `base.*` documents are the right inputs precisely because the identity
+/// assertion at the top of this file already proves they describe the same
+/// SLO, so "no annotations" is the only thing they have in common here.
+/// Failures are collected rather than asserted in the loop: with four inputs,
+/// aborting on the first would hide the other three.
+#[test]
+fn no_dialect_mentions_annotations_on_a_document_that_has_none() {
+    let mut wrong = Vec::new();
+    for dialect in DIALECTS {
+        let fixture = dialect.base_fixture();
+        let out = slokit(&["validate", "-i", &fixture_arg(fixture)]);
+        if !out.status.success() {
+            wrong.push(format!(
+                "{}: base document did not validate: {}",
+                dialect.label(),
+                combined(&out).trim()
+            ));
+            continue;
+        }
+        let notes = import_notes(&out, fixture);
+        if notes.iter().any(|n| n.contains("metadata.annotations")) {
+            wrong.push(format!(
+                "{}: {fixture} sets no annotations, so nothing should mention any: {notes:?}",
+                dialect.label()
+            ));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "a note about dropped annotations fired without any:\n  {}",
+        wrong.join("\n  ")
+    );
+}
+
+/// The parity claim itself, and the reason the emission sites read one
+/// `OBJECT_ANNOTATIONS_NOTE` constant (`src/spec/import.rs`) instead of three
+/// literals: three routes that all "note the annotations" in different words
+/// still send a reader to three different answers.
+///
+/// The expectation this compares against is the constant at the top of THIS
+/// file, which no production code reads, so the check stays falsifiable — a
+/// guard deriving both sides from `src/spec/import.rs` would move both at once
+/// and pass on any reword.
+#[test]
+fn all_three_envelope_dialects_word_the_object_annotations_note_identically() {
+    let mut seen = Vec::new();
     for fixture in [
+        "object-annotations.openslo-v1.yaml",
         "object-annotations.openslo-v1alpha.yaml",
         "object-annotations.sloth-crd.yaml",
     ] {
         let out = slokit(&["validate", "-i", &fixture_arg(fixture)]);
         let notes = import_notes(&out, fixture);
-        assert!(
-            !notes.iter().any(|n| n.contains("metadata.annotations")),
-            "{fixture} now reports its dropped annotations — the gap is closed, so update this \
-             test, the two SilentlyIgnored rows, and the object-annotations verdict: {notes:?}"
+        let note = notes
+            .iter()
+            .find(|n| n.contains("metadata.annotations"))
+            .unwrap_or_else(|| panic!("{fixture} printed no annotations note: {notes:?}"))
+            .clone();
+        seen.push((fixture, note));
+    }
+    for (fixture, note) in &seen {
+        // `ImportNote` renders as `<location>: <message>`, and the LOCATION
+        // legitimately differs here — the CRD reports against
+        // `PrometheusServiceLevel 'parity'` and the OpenSLO routes against
+        // `slo 'requests-availability'` — so the equality is over the message
+        // alone. (Splitting at the first `": "` is exact for these three
+        // locations, each of which is a bare word plus a quoted name.)
+        let message = note
+            .split_once(": ")
+            .map_or(note.as_str(), |(_location, message)| message);
+        assert_eq!(
+            message, OBJECT_ANNOTATIONS_NOTE,
+            "{fixture} words the dropped annotations as {message:?}, not as the recorded \
+             {OBJECT_ANNOTATIONS_NOTE:?} — three routes explaining one drop in three ways is \
+             the divergence this constant exists to prevent"
         );
     }
 }

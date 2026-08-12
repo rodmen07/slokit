@@ -21,7 +21,7 @@
 //! | the target | `spec.objectives[i].target` only | `target` or `targetPercent` |
 //! | `metadata.displayName` | noted and ignored | noted and ignored (since 1.8.0; before that, silently) |
 //! | `metadata.labels` | noted and ignored: not part of this schema | imported as the SLO labels |
-//! | `metadata.annotations` | not part of this schema | noted and ignored |
+//! | `metadata.annotations` | noted and ignored: not part of this schema (since 1.10.0; before that, silently) | noted and ignored |
 //!
 //! v1alpha has no `ratioMetric.bad`, no `raw`/`rawType`, no `indicatorRef` and
 //! no standalone `kind: SLI` documents, so those v1 paths simply do not exist
@@ -47,6 +47,11 @@
 //! - `metadata.labels`, which are not part of the v1alpha schema at all: they
 //!   are reported rather than silently honored, so a document written against
 //!   the wrong version does not quietly gain labels.
+//! - `metadata.annotations`, likewise not part of the v1alpha schema, in the
+//!   words the v1 route and the CRD route use (`OBJECT_ANNOTATIONS_NOTE` in
+//!   `super::super::import`). Silent here until 1.10.0: the envelope is shared
+//!   with v1, so this route parsed the key from the day it was added and never
+//!   mentioned it.
 //! - `spec.objectives[i].timeSliceTarget` (a time-slice budgeting field).
 //! - Objective `op`/`value` on `ratioMetrics` objectives (they only apply to
 //!   thresholds).
@@ -86,7 +91,7 @@ use crate::window::Window;
 use super::super::{Alerting, EventsSli, SliSpec, SloSpec};
 use super::{
     err, error_query_from_good, latency_from_threshold_query, note, objective_suffix, windowize,
-    Envelope, ImportNote,
+    Envelope, ImportNote, OBJECT_ANNOTATIONS_NOTE,
 };
 
 /// Convert one `apiVersion: openslo/v1alpha`, `kind: SLO` document into its
@@ -133,6 +138,14 @@ pub(super) fn convert_slo(
             &loc,
             "metadata.displayName does not map and was ignored (slokit SLOs carry a name and a description)",
         );
+    }
+    // [`Envelope`] is shared with the v1 route, so this path has parsed
+    // `metadata.annotations` since v1alpha was added in 1.5.0 and said nothing
+    // about dropping them until 1.10.0 — the mirror image of the
+    // `metadata.displayName` gap 1.8.0 closed in the other direction. Same
+    // constant as the v1 route and the CRD route.
+    if !env.metadata.annotations.is_empty() {
+        note(notes, &loc, OBJECT_ANNOTATIONS_NOTE);
     }
     if !env.metadata.labels.is_empty() {
         note(
