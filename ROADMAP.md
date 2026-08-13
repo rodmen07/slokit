@@ -21,7 +21,11 @@ The remaining release-prep half-finish, a `Cargo.lock` left at the old version,
 is checked in CI instead of here, and the reason is recorded in that test file:
 an assertion that reads `Cargo.lock` cannot fail, because cargo repairs a stale
 lockfile while building the very test binary that would report it. The step
-that does fail is `cargo metadata --locked` in `.github/workflows/ci.yml`.
+that does fail is `cargo metadata --locked`, which runs in BOTH
+`.github/workflows/ci.yml` and `.github/workflows/publish.yml` — the release
+path repairs a stale lockfile just as silently as a PR would, except that
+there the repaired file is packaged into the `.crate` and shipped.
+`tests/release_lockfile.rs` holds every release-path cargo step to `--locked`.
 
 Item labeling used throughout:
 
