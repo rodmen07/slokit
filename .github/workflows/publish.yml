@@ -17,6 +17,22 @@ permissions:
 # an irreversible crates.io publish. `dtolnay/rust-toolchain@stable` is the
 # one exempt family -- there the ref names the TOOLCHAIN, not a version. The
 # full rationale lives in ci.yml beside the same policy.
+#
+# Every cargo step below that resolves dependencies carries `--locked`, for
+# the same reason and with more at stake. `cargo publish` does NOT imply it:
+# measured on cargo 1.96.0 against a deliberately stale lockfile, `cargo
+# package --no-verify` exited 0, logged `Updating crates.io index`, and
+# REWROTE Cargo.lock, while the identical command with `--locked` exited 101
+# with "cannot update the lock file ... because --locked was passed". So
+# without the flag this job re-resolves against the live index at publish
+# time and ships an artifact built, tested and packaged against a dependency
+# graph no CI run ever saw -- and because `cargo package --list` includes
+# `Cargo.lock`, that unverified graph is exactly what `cargo install --locked
+# slokit` hands a user. `cargo fmt` is the one step without the flag: rustfmt
+# reads sources and never resolves dependencies.
+#
+# tests/release_lockfile.rs enforces this across every release-triggered
+# workflow, discovered by trigger rather than by filename.
 
 env:
   CARGO_TERM_COLOR: always
@@ -46,17 +62,24 @@ jobs:
             exit 1
           fi
 
+      # Fail in seconds, before the expensive gates and long before anything
+      # is uploaded, if the committed lockfile disagrees with Cargo.toml.
+      # `--locked` on the steps below would catch it too, but only after
+      # clippy and the full suite have already run.
+      - name: Verify Cargo.lock is up to date
+        run: cargo metadata --locked --format-version 1 > /dev/null
+
       - name: Format
         run: cargo fmt --all --check
 
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
       - name: Test (all features)
-        run: cargo test --all-features
+        run: cargo test --locked --all-features
 
       - name: Test lean core (no default features)
-        run: cargo test --no-default-features --lib
+        run: cargo test --locked --no-default-features --lib
 
       - name: Publish to crates.io
         env:
@@ -68,7 +91,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
         run: |
           set +e
-          output=$(cargo publish 2>&1)
+          output=$(cargo publish --locked 2>&1)
           status=$?
           echo "$output"
           if [ "$status" -eq 0 ]; then
