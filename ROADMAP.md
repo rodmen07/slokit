@@ -113,6 +113,13 @@ Merged since v1.9.0 and not yet released. Kept in step with
 [CHANGELOG.md](CHANGELOG.md)'s `[Unreleased]` section by
 `tests/roadmap_truth.rs::roadmap_declares_unreleased_work_exactly_when_the_changelog_has_some`.
 
+- **QA: the dashboard's default time range follows the resolved period.** The
+  emitted `time.from` was the literal `now-30d` whatever the SLO period, the
+  LOW bug the 2026-08-07 dashboard-drift pass filed and deliberately kept out
+  of PR #38. It now follows the longest period any SLO in the spec resolves
+  to (byte-identical at the 30d default), pinned by four tests in
+  `tests/dashboard.rs`.
+
 - **QA: the published examples get their first compilation.** The docs.rs
   landing example was fenced `ignore` and had rotted into calling a method
   `RuleSet` has never had, and the README pointed library consumers at a

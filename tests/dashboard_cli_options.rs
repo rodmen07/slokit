@@ -207,10 +207,25 @@ fn the_flags_change_the_emitted_dashboard_rather_than_being_parsed_and_discarded
         default, scaled,
         "--period 7d left the dashboard byte-identical, so the flag does nothing"
     );
+    // `--no-period-scaling` reverts the burn windows to the verbatim 30d
+    // table, but the TIME RANGE still follows the resolved 7d period: the flag
+    // is about window scaling, not about how much history the dashboard opens
+    // on. So the two documents must differ in `time` and in nothing else --
+    // which is a sharper claim than the byte-equality this assertion made
+    // while the range was hardcoded to `now-30d`.
+    let mut default_doc: Value = serde_json::from_str(&default).expect("default parses");
+    let mut verbatim_doc: Value = serde_json::from_str(&verbatim).expect("verbatim parses");
     assert_eq!(
-        default, verbatim,
-        "--period 7d --no-period-scaling must reproduce the verbatim 30d table, \
-         which is exactly the default dashboard for this spec"
+        verbatim_doc["time"]["from"], "now-7d",
+        "--period 7d --no-period-scaling must still open on the resolved 7d period"
+    );
+    default_doc["time"] = Value::Null;
+    verbatim_doc["time"] = Value::Null;
+    assert_eq!(
+        default_doc, verbatim_doc,
+        "outside the time range, --period 7d --no-period-scaling must reproduce \
+         the verbatim 30d table, which is exactly the default dashboard for this \
+         spec"
     );
 
     let default_series = referenced(&default);

@@ -6,7 +6,9 @@
 //! panel per enabled alert condition with a threshold line at that condition's
 //! burn-rate factor (see [`burn`]). It declares a `datasource` template
 //! variable so it imports cleanly into any Grafana with a Prometheus data
-//! source.
+//! source, and its default time range follows the longest period any SLO in
+//! the spec resolves to (see [`default_time_range`]), so the dashboard opens
+//! showing every SLO's whole period.
 
 mod burn;
 
@@ -43,6 +45,29 @@ fn sli_panel_window(mwmbr: &MwmbrConfig) -> Window {
         .unwrap_or(Window::minutes(5))
 }
 
+/// The dashboard's default time range: the longest period any SLO in the spec
+/// resolves to under `opts`, so the dashboard opens showing every SLO's whole
+/// period.
+///
+/// "The whole period" is not a new opinion but the semantic the dashboard
+/// already had at the default period: the range was the literal `now-30d`,
+/// which equals the period for every default-period SLO and only diverged for
+/// SLOs declaring their own (`period: 7d` opened on four times its period,
+/// `period: 90d` on a third of its own error budget's span). The error-budget
+/// stat is a period-scoped number and the burn thresholds gate the period's
+/// budget, so the period is the span those panels are about. Viewers change
+/// the range in Grafana at will; this is only where the dashboard opens.
+fn default_time_range(spec: &Spec, opts: &GenerateOptions) -> Window {
+    spec.slos
+        .iter()
+        .map(|slo| {
+            slo.resolve_period(opts.default_period)
+                .unwrap_or(opts.default_period)
+        })
+        .max()
+        .unwrap_or(opts.default_period)
+}
+
 /// Build the Grafana dashboard as a [`serde_json::Value`], using default
 /// generation options.
 ///
@@ -68,6 +93,7 @@ pub fn dashboard_value_with(spec: &Spec, opts: &GenerateOptions) -> Value {
     let mut panels = Vec::new();
     let mut id: i64 = 1;
     let mut y: i64 = 0;
+    let time_range = default_time_range(spec, opts);
 
     for slo in &spec.slos {
         let sloth_id = slo.sloth_id(&spec.service);
@@ -129,7 +155,7 @@ pub fn dashboard_value_with(spec: &Spec, opts: &GenerateOptions) -> Value {
         "editable": true,
         "timezone": "",
         "refresh": "1m",
-        "time": { "from": "now-30d", "to": "now" },
+        "time": { "from": format!("now-{}", time_range.prometheus()), "to": "now" },
         "templating": { "list": [datasource_var()] },
         "panels": panels,
     })
