@@ -47,6 +47,15 @@ From 1.0.0, slokit follows the semver guarantees documented in
 
 ### Fixed
 
+- **The dashboard's default time range was hardcoded to `now-30d` regardless
+  of the SLO period.** A 7d SLO's dashboard opened on a window four times its
+  own period, and a 90d one on a third of its error budget's span. The range
+  now follows the longest period any SLO in the spec resolves to — the same
+  resolution the rule generator uses, through `--period` and the SLO's own
+  `period` key alike — which at the 30d default is exactly the `now-30d` the
+  dashboard has always emitted, so default-period output is byte-identical.
+  Pinned by four tests in `tests/dashboard.rs`.
+
 - **A document in a dialect slokit could not place failed with a field-level
   error that named neither the dialect nor the mismatch.** Pointing `slokit
   validate` at a Kubernetes manifest, or at an SLO document written for
