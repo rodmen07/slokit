@@ -352,6 +352,134 @@ read — no existence searches):**
 6. Registry read, never inferred: crates.io reports `newest_version` 1.10.0
    after the PR 4 cut.
 
+### v1.11.0: the export meets its ecosystem
+
+Scheduled 2026-08-18 by the scoping pass after the v1.10.0 feature slices
+merged. Sequenced AFTER the v1.10.0 cut (PR 4 above): nothing here starts
+until crates.io reports 1.10.0.
+
+**Theme.** `slokit export --format openslo` has exactly one reader today:
+slokit's own importer. The round-trip suite proves self-agreement and nothing
+else — exporter and importer share one reading of the OpenSLO spec, so a
+shared misreading is structurally invisible to every test in this repo. The
+first external reader this export has ever met, run for this scoping pass,
+refused 2 of the 12 documents the repo's own committed specs export to. This
+milestone fixes what that reader found, then makes the reader a CI gate (the
+promtool pattern, applied to the crate's other output format), and pins the
+OpenSLO organisation's own example corpus as a committed contract the way
+v1.7.0 pinned sloth's.
+
+**Grounding, measured at a fresh binary on 2026-08-18 rather than assumed.**
+Freshness proven first, because this crate has produced a stale-`target/`
+false negative before: appending a garbage token made `cargo build
+--all-features` fail at `src/lib.rs:83` (`expected one of ! or ::`), so the
+binary probed is the tree probed.
+
+- **The verdict.** oslo v0.13.0 — OpenSLO's official validator, the
+  `windows-amd64` release binary, its sha256 checked against the published
+  `oslo-0.13.0.sha256` before first run — over every document
+  `slokit export --format openslo` produces from the repo's committed specs
+  (8 `examples/infraportal/` services plus 4 native fixtures): 12 documents,
+  **10 `Valid!`, 2 refused**, both with `'spec.timeWindow': length must be
+  between 1 and 1`.
+- **The trigger.** The two refusals are the exports of exactly the two
+  period-less committed specs (`tests/fixtures/sample.yaml` and
+  `tests/fixtures/multifile.yaml`, zero `period:` keys between them). A spec
+  with `period:` exports a `timeWindow` and passes; a spec without one exports
+  **no `timeWindow` at all**, and OpenSLO requires exactly one entry.
+- **The omission is deliberate and pinned green.** The mapping table at
+  `src/spec/openslo/export.rs:23` documents `spec.timeWindow[0]` as "(omitted
+  when unset)", and a test at `export.rs:837` asserts the absence —
+  the invalid output has a green test holding it in place.
+- **The closure that hid it.** The importer accepts a missing time window by
+  design (`src/spec/openslo/v1alpha.rs:58`: a missing `spec.timeWindows`
+  means "the generation-time default period applies"), so export→import
+  round-trips exit 0 while the ecosystem's validator exits 1 on the same
+  bytes. No test in this repo could have caught this, structurally: both
+  halves of the loop move together.
+- **No workaround at the CLI.** `export` takes exactly `--input`,
+  `--input-format`, `--format` and `--output`. There is no `--period`; a user
+  whose spec omits the key cannot supply it at export time.
+- **The corpus this pass read for the first time.** The OpenSLO
+  organisation's own examples tree (`OpenSLO/OpenSLO@e74b589`, 4 documents —
+  the whole corpus; the repo is spec prose, not an example library): slokit
+  refuses all 4, with precise messages — 3 at the `budgetingMethod` gate
+  (`Timeslices` twice, `RatioTimeslices` once), 1 at
+  `metricSource.type 'Any'`. Read past the first error, every one of the 4
+  also carries `metricSource.type: Any` (a documentation placeholder no
+  Prometheus generator can map) and one uses a calendar-aligned
+  `isRolling: false` window. So the corpus grounds dispositions and
+  messages, not new capability — the method gate is only the first of three
+  walls those documents hit. See the new candidate bullet below.
+- **The other census directions were re-run and offer no theme.** Upstream
+  `slok/sloth@main` is still at `8a3be4f` (read from the commits API
+  2026-08-18), so the sloth corpus contract has nothing new to say. Both held
+  candidate-list rules were re-tested at the shipped binary: the two
+  committed catalogues still report minimum factors at or below 1
+  (7d `13.44/3.5/1.4/0.98`, custom-30d `14.4/4.8/3/1`), and
+  `src/spec/mod.rs` still has zero traffic-family fields, so both holds
+  stand — the fifth consecutive scoping pass in which the candidate list
+  produced no schedulable item.
+
+**Decisions, each an overridable default:**
+
+- **D1.11-1 (the fix): a period-less spec exports its resolved period.**
+  `spec.timeWindow[0]` becomes `{duration: 30d, isRolling: true}` through
+  `SloSpec::resolve_period` (`src/spec/mod.rs:790`) — the seam the generator,
+  `lint`, and (since PR #71) the dashboard already resolve through — so the
+  document the export emits is the document the generator means. Output stays
+  byte-identical for every spec that carries `period:` (10 of the 12 exports
+  unchanged). The `export.rs:837` absence assertion inverts; that is a
+  deliberate, CHANGELOG-stated behaviour change to the export of a degenerate
+  input, not a refactor. The alternative — refusing period-less exports — is
+  rejected as a 1.x regression: those exports exit 0 today.
+- **D1.11-2 (the reader): CI runs the official validator over every export
+  the repo can produce.** A job pinning oslo v0.13.0 `linux-amd64` by release
+  tag AND sha256 (the same pattern that pins promtool in
+  `.github/workflows/ci.yml`), exporting every committed native spec and
+  validating each emitted document. A new gate is not trusted until it has
+  been observed FAILING: the job must go red against the unfixed export (or
+  an equivalent perturbation) before it counts, with the red run recorded in
+  the PR body.
+- **D1.11-3 (the contract): the OpenSLO org corpus becomes a committed
+  test.** `tests/openslo_corpus.rs` on the `tests/sloth_corpus.rs` pattern:
+  all 4 documents committed under `tests/fixtures/openslo_corpus/`, upstream
+  commit and per-file sha256 pinned, each with its recorded disposition and
+  refusal message, reconciled against the fixture tree in both directions —
+  so the next scoping pass reads a failing test when upstream moves instead
+  of re-running this census by hand.
+- **D1.11-4 (what this milestone is not):** no `Timeslices` support, no
+  calendar windows, no non-Prometheus metric sources. All three are what the
+  corpus documents would need next, and all three stay held until an
+  importable document that needs them exists (candidate bullet below).
+
+**Slices (dependency-ordered):**
+
+1. **PR 1 — the fix.** Resolved-period `timeWindow` emission, a regression
+   test that fails without it (the export of `tests/fixtures/sample.yaml`
+   carries exactly one `timeWindow` and its duration is `30d`), the
+   `export.rs:837` assertion inverted in the same commit, CHANGELOG entry.
+2. **PR 2 — the reader.** The pinned-oslo CI job, green on PR 1's output,
+   observed red on the pre-PR-1 defect as its negative control.
+3. **PR 3 — the contract.** `tests/openslo_corpus.rs` plus its fixtures,
+   dispositions quoted from this section's census.
+4. **PR 4 — release prep and the cut**, the `roadmap_truth`-enforced shape,
+   then tag, release, and the registry read, under the standing delegation.
+
+**Done-when (every clause settled by a build, a test, a CI run, or a
+registry read — no existence searches):**
+
+1. The period-less regression test is red on the pre-PR-1 tree and green
+   after, both runs quoted in PR 1's body.
+2. `oslo validate --file` exits 0 in CI for every document
+   `slokit export --format openslo` produces from every committed spec, on
+   the sha256-pinned binary — and the job has been observed red on an
+   invalid export before being trusted, recorded in PR 2's body.
+3. `tests/openslo_corpus.rs` goes red when one fixture byte or one recorded
+   disposition is perturbed, both controls run and quoted in PR 3's body.
+4. Registry read, never inferred: crates.io reports `newest_version` 1.11.0
+   after the PR 4 cut.
+
 ## Later / candidates (unscheduled)
 
 Ranked with defaults in
@@ -422,6 +550,24 @@ schedules them:
     present since the initial commit, an operator-supplied number at call
     time, not a spec field. `src/spec/mod.rs` still has zero hits, so the
     structural claim holds and the hold stands.
+- **Timeslices-family budgeting methods (`Timeslices` and `RatioTimeslices`),
+  first evaluated 2026-08-18 by the v1.11.0 scoping census and HELD, under the
+  same doctrine as the two lint rules above: capability held on input that has
+  not arrived.** The OpenSLO organisation's own 4-document example corpus
+  (`OpenSLO/OpenSLO@e74b589`) is the only place slokit has ever seen the
+  methods: 3 of the 4 documents carry them, and slokit refuses each with
+  `spec.budgetingMethod '<method>' is not representable; slokit models the
+  Occurrences method only` — the parse surface already exists
+  (`src/spec/openslo.rs:395,461-462` read `budgetingMethod`,
+  `timeSliceTarget`, `timeSliceWindow`; `:495` is the gate). What holds it:
+  read past that first error, **every** timeslices document in the corpus also
+  carries `metricSource.type: Any` (a documentation placeholder no Prometheus
+  generator can map) and one uses a calendar-aligned `isRolling: false`
+  window, so building the method would make zero currently-refused documents
+  importable — the method gate is only the first of three walls. Clears when
+  an importable timeslices document exists: a user report, or an upstream
+  corpus document whose metric source is `Prometheus` and whose window is
+  rolling. Re-test at the source rather than inheriting this bullet.
 - Carrying `examples/infraportal/` from SLO-definitions-as-code to live status,
   which is blocked on the InfraPortal services exposing `/metrics` at all (that
   work lives in the microservices repo, not here). **Deliberately NOT re-tested
@@ -770,7 +916,22 @@ repo can assert on its own.
 
 Drift worth recording:
 
-- **2026-08-08: the fourth consecutive milestone came from outside the candidate
+- **2026-08-18: the census turned around and read the OUTPUT side, and the
+  fifth consecutive milestone came from outside the candidate list.** Every
+  prior scoping census ran the shipped binary over upstream INPUT documents;
+  the v1.11.0 pass also handed slokit's own output to the ecosystem's reader
+  (oslo v0.13.0, OpenSLO's official validator) and found a defect no test in
+  this repo could see: the export and the importer share one reading of the
+  OpenSLO spec, so the round-trip suite is self-agreement, and the two
+  period-less committed specs have exported `timeWindow`-less — invalid —
+  OpenSLO since v1.2.0 with a green test pinning the omission
+  (`src/spec/openslo/export.rs:837`). The INPUT-side census was also widened
+  to a corpus never previously read, the OpenSLO organisation's own examples
+  (4 documents, all refused, dispositions recorded in the v1.11.0 section),
+  which grounded a held candidate rather than a theme. The sloth corpus is
+  unchanged upstream (`8a3be4f`) and the candidate list again produced no
+  schedulable item, so the method stands: census first — now in both
+  directions — candidate list second.
   list, and the practice that keeps finding them is written down here so the
   next scoping pass inherits the method instead of rediscovering it.** v1.4.0
   came off the candidate list; v1.5.0, v1.6.0 and now v1.7.0 did not. All three
